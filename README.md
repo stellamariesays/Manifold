@@ -57,6 +57,12 @@ No Subway instance? Use the in-memory transport for local development:
 agent = Agent(name="braid")  # defaults to memory://local
 ```
 
+Persistent mesh memory across restarts:
+
+```python
+agent = Agent(name="braid", persist_to="manifold.db")
+```
+
 ---
 
 ## Three primitives
@@ -161,14 +167,60 @@ python examples/two_agents.py
 
 ---
 
+## Topology Primitives (v0.2.0)
+
+In addition to the three core primitives, Manifold exposes the mesh's formal structure:
+
+```python
+# This agent's local coordinate system
+chart = agent.chart()
+print(chart.vocabulary)          # tokenized knowledge space
+print(chart.distance_to(other))  # topological distance
+
+# The global mesh topology (snapshot)
+atlas = agent.atlas()
+print(atlas)                     # <Atlas charts=4 maps=6 holes=9>
+
+# Transition map between two agents
+tm = atlas.transition("braid", "solver")
+print(tm.coverage)               # 0.42 — how much braid's vocab survives to solver
+print(tm.translation)            # { "solar": ["solar-topology", ...] }
+
+# Where the mesh holds contradiction
+for region, score in atlas.high_curvature_regions():
+    print(f"{region}: {score:.0%} curvature")
+
+# What no chart covers
+print(atlas.holes())
+
+# Shortest path through translation loss
+path = atlas.geodesic("braid", "n-body-dynamics")
+
+# Export for visualization
+dot = atlas.export_dot()         # Graphviz — render with `dot -Tsvg`
+data = atlas.export_json()       # D3.js / Gephi
+
+# What am I thinking about that no one can complement?
+for spot in agent.blind_spot():
+    print(spot)                  # kind, depth, evidence
+```
+
+See `MANIFOLD.md` for the full formal spec: charts, transition maps, atlas, curvature, geodesics, and the relationship to Sophia.
+
+---
+
 ## Roadmap
 
-- [ ] `agent.blind_spot()` — what am I reasoning about that I have no peer for?
-- [ ] Persistent registry (SQLite) for mesh memory across restarts
-- [ ] Topology visualization (export as graph)
+- [x] `agent.blind_spot()` — structural absence as first-class primitive
+- [x] `agent.chart()` / `agent.atlas()` — topology as observable structure
+- [x] Transition maps — translation functions between overlapping charts
+- [x] Curvature, holes, geodesic — formal manifold properties
+- [x] Persistent registry (SQLite) — mesh memory across restarts
+- [x] Atlas export (DOT + JSON) — topology visualization
+- [ ] Semantic transition maps — embeddings instead of token overlap
 - [ ] WebSocket transport (browser agents)
 - [ ] NATS transport adapter
-- [ ] `seek()` with multi-hop routing — find peers of peers
+- [ ] `seek()` with multi-hop routing — navigate via geodesic
 
 ---
 

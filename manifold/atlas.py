@@ -305,6 +305,98 @@ class Atlas:
                     len(agreement) / len(direct_map.overlap), 4
                 )
 
+    # ── Export ────────────────────────────────────────────────────────────
+
+    def export_json(self) -> dict:
+        """
+        Export the atlas as a JSON-serializable graph.
+
+        Suitable for D3.js, Gephi, or any graph visualization tool.
+        Nodes are agents (charts). Edges are transition maps.
+        Holes and high-curvature regions included as metadata.
+        """
+        nodes = []
+        for chart in self._charts.values():
+            nodes.append({
+                "id": chart.agent_name,
+                "domain": sorted(chart.domain),
+                "vocabulary": sorted(chart.vocabulary),
+                "focus": chart.focus,
+                "vocab_size": len(chart.vocabulary),
+            })
+
+        edges = []
+        for (src, tgt), tm in self._maps.items():
+            edges.append({
+                "source": src,
+                "target": tgt,
+                "coverage": tm.coverage,
+                "overlap": sorted(tm.overlap),
+                "overlap_size": len(tm.overlap),
+                "consistency": tm.consistency,
+                "translation": {k: v for k, v in list(tm.translation.items())[:5]},
+            })
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "holes": self.holes(),
+            "curvature": [
+                {"region": r, "score": s}
+                for r, s in self.high_curvature_regions(top_n=10)
+            ],
+            "summary": {
+                "charts": len(self._charts),
+                "maps": len(self._maps),
+                "holes": len(self.holes()),
+            },
+        }
+
+    def export_dot(self) -> str:
+        """
+        Export the atlas as a Graphviz DOT string.
+
+        Render with: `dot -Tsvg atlas.dot -o atlas.svg`
+        Edge weight = coverage. Holes shown as dashed nodes.
+        """
+        lines = ["digraph manifold {", '  graph [rankdir=LR fontname="Helvetica"];',
+                 '  node [shape=box style=filled fillcolor="#f0f4ff" fontname="Helvetica"];',
+                 '  edge [fontname="Helvetica" fontsize=9];', ""]
+
+        hole_set = set(self.holes())
+
+        # Nodes
+        for chart in self._charts.values():
+            focus_label = f"\\nfocus: {chart.focus}" if chart.focus else ""
+            label = f"{chart.agent_name}\\n({len(chart.vocabulary)} terms){focus_label}"
+            lines.append(f'  "{chart.agent_name}" [label="{label}"];')
+
+        # Hole nodes (from referenced-but-missing vocabulary)
+        for hole in hole_set:
+            lines.append(
+                f'  "{hole}" [label="{hole}\\n(hole)" '
+                f'fillcolor="#fff0f0" style="filled,dashed"];'
+            )
+
+        lines.append("")
+
+        # Edges (transition maps)
+        for (src, tgt), tm in self._maps.items():
+            pct = int(tm.coverage * 100)
+            con_label = (
+                f" c={int(tm.consistency*100)}%" if tm.consistency is not None else ""
+            )
+            label = f"{pct}%{con_label}"
+            # Thicker edge = higher coverage
+            penwidth = max(0.5, tm.coverage * 4)
+            lines.append(
+                f'  "{src}" -> "{tgt}" '
+                f'[label="{label}" penwidth={penwidth:.1f}];'
+            )
+
+        lines.append("}")
+        return "\n".join(lines)
+
     def __repr__(self) -> str:
         return (
             f"<Atlas charts={len(self._charts)} "
