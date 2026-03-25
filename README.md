@@ -41,9 +41,8 @@ async def main():
 
     # find peers with complementary knowledge
     peers = await braid.seek("orbital-mechanics")
-    print(f"Found {len(peers)} complementary peer(s):")
     for p in peers:
-        print(f"  {p}")
+        print(p)  # <AgentRef 'navigator' gap=82% caps=[orbital-mechanics, ...]>
 
     # shift cognitive focus — topology restructures around it
     await braid.think("multi-star-prediction")
@@ -57,26 +56,21 @@ No Subway instance? Use the in-memory transport for local development:
 agent = Agent(name="braid")  # defaults to memory://local
 ```
 
-Persistent mesh memory across restarts:
-
-```python
-agent = Agent(name="braid", persist_to="manifold.db")
-```
-
 ---
 
 ## Three primitives
 
 ### `knows(capabilities)`
 
-Declare what this agent knows. Chainable.
+Declare what this agent knows. Chainable. Capabilities accumulate.
 
 ```python
 agent.knows(["orbital-mechanics", "n-body"])
-       .knows(["Keplerian-elements"])   # accumulates
+     .knows(["Keplerian-elements"])
 ```
 
-Capabilities are broadcast to the mesh on `join()` and kept in sync via pub/sub. Every agent maintains a local view of the full capability landscape — no central server.
+Broadcast to the mesh on `join()`, kept in sync via pub/sub. Every agent
+maintains a local view of the full capability landscape — no central server.
 
 ---
 
@@ -86,11 +80,9 @@ Find agents with complementary knowledge for a given topic.
 
 ```python
 peers = await agent.seek("solar-ejection-prediction")
-# returns AgentRef list sorted by gap_score descending
-# gap_score: how much the peer knows that you don't, weighted by topic relevance
+# sorted by gap_score: how much the peer knows that you don't
 ```
 
-`AgentRef`:
 ```python
 @dataclass
 class AgentRef:
@@ -110,11 +102,118 @@ The strange loop.
 await agent.think("multi-star-prediction")
 ```
 
-This does two things simultaneously:
+Does two things simultaneously:
 1. Broadcasts your new cognitive focus to the mesh
 2. Other agents reweight their edge to you based on shared focus
 
-The result: agents thinking about the same problem cluster together in the topology. The mesh self-organizes around what the collective is actually reasoning about — without any orchestrator.
+The mesh self-organizes around what the collective is actually reasoning about.
+No orchestrator — just resonance.
+
+---
+
+## Topology
+
+Manifold exposes the formal structure of the mesh. Every agent holds a local
+view; the global shape emerges from their overlap.
+
+### `agent.chart()` — local coordinate system
+
+```python
+chart = agent.chart()
+print(chart.vocabulary)          # tokenized knowledge space
+print(chart.distance_to(other))  # Jaccard distance: 0.0 same, 1.0 foreign
+```
+
+### `agent.atlas()` — global topology snapshot
+
+```python
+atlas = agent.atlas()
+# <Atlas charts=4 maps=6 holes=9>
+
+# How knowledge translates between two agents
+tm = atlas.transition("braid", "solver")
+print(tm.coverage)       # 0.42 — how much of braid's vocab survives to solver
+print(tm.consistency)    # 0.66 — how faithfully two-hop paths agree with direct
+print(tm.translation)    # { "solar": ["solar-topology", ...] }
+
+# Where the mesh holds contradiction (interesting, not broken)
+for region, score in atlas.high_curvature_regions():
+    print(f"{region}: {score:.0%} curvature")
+
+# Regions no chart covers
+print(atlas.holes())
+
+# Shortest path through translation loss
+path = atlas.geodesic("braid", "stellar-dynamics")
+
+# Export
+dot  = atlas.export_dot()   # Graphviz — render with `dot -Tsvg atlas.dot -o atlas.svg`
+data = atlas.export_json()  # D3.js / Gephi
+```
+
+### `agent.blind_spot()` — structural absence
+
+```python
+for spot in agent.blind_spot():
+    print(spot)
+# <BlindSpot 'coronal-mass-ejection' kind=dark_topic depth=100% recurrence=2>
+# <BlindSpot 'solar-topology' kind=isolated_capability depth=100% recurrence=1>
+```
+
+Three kinds of blind spot:
+- **`unmatched_focus`** — you're thinking about something no peer can complement
+- **`isolated_capability`** — you know something the mesh has no echo of
+- **`dark_topic`** — you've returned to a topic repeatedly, each time unmatched
+
+---
+
+## Semantic matching
+
+By default, Manifold uses character trigram similarity for transition maps —
+structurally aware, zero dependencies. `flare-prediction` reaches `stellar-flare-model`
+because `flare` appears in both.
+
+Inject any embedding function for full semantic matching:
+
+```python
+# sentence-transformers
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer("all-MiniLM-L6-v2")
+atlas = agent.atlas(embedding_fn=lambda s: model.encode(s).tolist())
+
+# OpenAI
+from openai import OpenAI
+client = OpenAI()
+def embed(text):
+    return client.embeddings.create(
+        input=text, model="text-embedding-3-small"
+    ).data[0].embedding
+atlas = agent.atlas(embedding_fn=embed)
+```
+
+With embeddings: `solar-topology` reaches `stellar-dynamics` because
+`solar` ~ `stellar` in embedding space. Without: structural proximity only.
+
+---
+
+## Persistence
+
+```python
+agent = Agent(name="braid", persist_to="manifold.db")
+```
+
+SQLite-backed mesh memory. On `join()`: restores prior agent state and focus
+history from disk. On `think()`: persists focus shifts. On `leave()`: marks
+agent inactive but preserves the record — it was here, even when gone.
+
+The atlas is rebuilt from restored state on restart. The crystal holds its shape.
+
+```python
+from manifold.persist import PersistentStore
+store = PersistentStore("manifold.db")
+print(store.stats())
+# {'agents_total': 3, 'agents_active': 1, 'focus_events': 7, ...}
+```
 
 ---
 
@@ -122,26 +221,24 @@ The result: agents thinking about the same problem cluster together in the topol
 
 | URI | Description |
 |-----|-------------|
-| `memory://local` | In-process pub/sub. All agents in the same Python process share a bus. Default. |
-| `subway://host:port` | [Subway](https://github.com/subway-ai/subway) P2P transport via REST bridge. For production multi-machine meshes. |
-
-```python
-# In-memory (testing, local multi-agent)
-agent = Agent(name="test-agent")
-
-# Subway (production)
-agent = Agent(name="prod-agent", transport="subway://localhost:8765")
-```
+| `memory://local` | In-process pub/sub. Default. For testing and local multi-agent. |
+| `subway://host:port` | [Subway](https://github.com/subway-ai/subway) P2P transport. For production meshes. |
 
 ---
 
 ## Why
 
-In any sufficiently complex agent mesh, there will be communication needs the current topology cannot fulfill. Thoughts the system needs to think that require connections the network hasn't yet formed.
+In any sufficiently complex agent mesh, there will be communication needs the
+current topology cannot fulfill. Thoughts the system needs to think that require
+connections the network hasn't yet formed.
 
-This is the distributed-systems equivalent of Gödelian incompleteness: the system's reach is always slightly less than its grasp. No agent can have a complete view of the mesh. No topology is ever final.
+This is the distributed-systems equivalent of Gödelian incompleteness: the
+system's reach is always slightly less than its grasp. No agent can have a
+complete view of the mesh. No topology is ever final.
 
-Manifold is designed for that incompleteness — not to solve it, but to navigate it. `seek()` surfaces the gap. `think()` closes it.
+Manifold is designed for that incompleteness — not to solve it, but to navigate
+it. `seek()` surfaces the gap. `think()` closes it. `blind_spot()` names what
+the mesh doesn't yet know it's missing.
 
 ---
 
@@ -149,78 +246,33 @@ Manifold is designed for that incompleteness — not to solve it, but to navigat
 
 Manifold is the cognitive layer. Subway is the transport. They compose.
 
-Subway handles peer discovery, hole-punching, and message delivery between machines. Manifold sits on top and adds capability-aware routing, knowledge-gap queries, and topology self-organization.
+Subway handles peer discovery, hole-punching, and message delivery between
+machines. Manifold sits on top and adds capability-aware routing, knowledge-gap
+queries, and topology self-organization.
 
-You can run Manifold without Subway (use `memory://`) for development and testing. In production, point it at a Subway instance and get the full P2P mesh.
+Use `memory://` for development. Point at a Subway instance for production.
 
 ---
 
 ## Examples
 
 ```bash
-# Basic: two agents, seek, think
-python examples/basic.py
-
-# Full interaction: focus shift, pub/sub, topology
-python examples/two_agents.py
+python examples/basic.py          # two agents, seek, think
+python examples/two_agents.py     # focus shift, pub/sub, topology
+python examples/blind_spot.py     # three gap kinds: unmatched, isolated, dark
+python examples/atlas.py          # charts, transition maps, curvature, geodesic
+python examples/persistence.py    # survive restart: build → leave → restore
+python examples/semantic.py       # token vs trigram vs embedding comparison
 ```
 
 ---
 
-## Topology Primitives (v0.2.0)
+## Formal spec
 
-In addition to the three core primitives, Manifold exposes the mesh's formal structure:
-
-```python
-# This agent's local coordinate system
-chart = agent.chart()
-print(chart.vocabulary)          # tokenized knowledge space
-print(chart.distance_to(other))  # topological distance
-
-# The global mesh topology (snapshot)
-atlas = agent.atlas()
-print(atlas)                     # <Atlas charts=4 maps=6 holes=9>
-
-# Transition map between two agents
-tm = atlas.transition("braid", "solver")
-print(tm.coverage)               # 0.42 — how much braid's vocab survives to solver
-print(tm.translation)            # { "solar": ["solar-topology", ...] }
-
-# Where the mesh holds contradiction
-for region, score in atlas.high_curvature_regions():
-    print(f"{region}: {score:.0%} curvature")
-
-# What no chart covers
-print(atlas.holes())
-
-# Shortest path through translation loss
-path = atlas.geodesic("braid", "n-body-dynamics")
-
-# Export for visualization
-dot = atlas.export_dot()         # Graphviz — render with `dot -Tsvg`
-data = atlas.export_json()       # D3.js / Gephi
-
-# What am I thinking about that no one can complement?
-for spot in agent.blind_spot():
-    print(spot)                  # kind, depth, evidence
-```
-
-See `MANIFOLD.md` for the full formal spec: charts, transition maps, atlas, curvature, geodesics, and the relationship to Sophia.
-
----
-
-## Roadmap
-
-- [x] `agent.blind_spot()` — structural absence as first-class primitive
-- [x] `agent.chart()` / `agent.atlas()` — topology as observable structure
-- [x] Transition maps — translation functions between overlapping charts
-- [x] Curvature, holes, geodesic — formal manifold properties
-- [x] Persistent registry (SQLite) — mesh memory across restarts
-- [x] Atlas export (DOT + JSON) — topology visualization
-- [ ] Semantic transition maps — embeddings instead of token overlap
-- [ ] WebSocket transport (browser agents)
-- [ ] NATS transport adapter
-- [ ] `seek()` with multi-hop routing — navigate via geodesic
+See [`MANIFOLD.md`](MANIFOLD.md) for the full mathematical model: charts,
+transition maps, atlas, smooth manifold, curvature, holes, geodesics, and the
+relationship to Sophia — the global topological feature no single agent can
+observe directly.
 
 ---
 
