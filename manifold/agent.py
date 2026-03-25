@@ -369,7 +369,7 @@ class Agent:
             focus=self._topology.current_focus,
         )
 
-    def atlas(self) -> Atlas:
+    def atlas(self, embedding_fn=None) -> Atlas:
         """
         The mesh's global topology — as seen from this agent's registry.
 
@@ -377,12 +377,19 @@ class Agent:
         registry: all known charts, all non-empty transition maps,
         consistency scores, curvature, holes.
 
+        Args:
+            embedding_fn: Optional. Any function (str) -> list[float].
+                          With embeddings: 'solar-topology' finds 'stellar-dynamics'
+                          because 'solar' ~ 'stellar' in embedding space.
+                          Without: character trigram similarity (zero deps;
+                          better than pure token overlap out of the box).
+
         This is a snapshot. Rebuild as the mesh evolves.
 
         No single agent has the true atlas — only the portion of the
         mesh they've observed. Sophia lives in the parts they haven't.
         """
-        return Atlas.build(self._registry)
+        return Atlas.build(self._registry, embedding_fn=embedding_fn)
 
     # ─── Internal handlers ───────────────────────────────────────────────
 

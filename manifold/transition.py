@@ -9,15 +9,22 @@ The actual translation function between two local views.
 For each term in the source chart's vocabulary that exists in the overlap,
 the map records which terms in the target chart's vocabulary it corresponds to.
 
-Phase 1: term-to-term token overlap (structural; no semantics).
-Phase 3: embedding-space linear map (semantic; captures meaning shifts).
+Default: character trigram similarity (structural; zero deps).
+          catches 'solar' ~ 'stellar', 'topology' ~ 'topological'.
+
+With embeddings: full semantic similarity via cosine distance.
+                 pass embedding_fn to Atlas.build() or Agent.atlas().
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .chart import Chart
+
+if TYPE_CHECKING:
+    from .semantic import SemanticMatcher
 
 
 @dataclass
@@ -43,30 +50,47 @@ class TransitionMap:
     consistency: float | None = None  # filled by atlas.compute_curvature()
 
     @classmethod
-    def between(cls, source_chart: Chart, target_chart: Chart) -> "TransitionMap":
+    def between(
+        cls,
+        source_chart: Chart,
+        target_chart: Chart,
+        matcher: "SemanticMatcher | None" = None,
+    ) -> "TransitionMap":
         """
         Compute the transition map from source_chart to target_chart.
 
-        The translation maps each term in the overlap to the domain strings
-        in the target chart that contain it — i.e., how the target expresses
-        ideas that exist in the source's vocabulary.
+        Without a matcher: exact token intersection (original behaviour).
+        With a matcher:    semantic overlap via trigrams or embeddings —
+                           'solar-topology' overlaps with 'stellar-dynamics'
+                           because 'solar' ~ 'stellar'.
+
+        The translation maps each overlap term to the domain strings in the
+        target chart that are semantically near it.
         """
-        overlap = source_chart.overlap_with(target_chart)
+        if matcher is not None:
+            overlap = matcher.semantic_overlap(
+                source_chart.vocabulary, target_chart.vocabulary
+            )
+            translation = matcher.semantic_translation(
+                overlap, source_chart.domain, target_chart.domain
+            )
+        else:
+            # Fast path: exact token intersection
+            overlap = source_chart.overlap_with(target_chart)
+            translation = {}
+            for term in overlap:
+                targets = [
+                    cap for cap in target_chart.domain
+                    if term in cap.lower().replace("-", " ").replace("_", " ")
+                ]
+                if targets:
+                    translation[term] = targets
+
         coverage = (
             round(len(overlap) / len(source_chart.vocabulary), 4)
             if source_chart.vocabulary
             else 0.0
         )
-
-        # Translation: overlap term → target domain strings that use it
-        translation: dict[str, list[str]] = {}
-        for term in overlap:
-            targets = [
-                cap for cap in target_chart.domain
-                if term in cap.lower().replace("-", " ").replace("_", " ")
-            ]
-            if targets:
-                translation[term] = targets
 
         return cls(
             source=source_chart.agent_name,

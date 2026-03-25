@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 
 from .chart import Chart, _tokenize
 from .transition import TransitionMap
+from .semantic import SemanticMatcher, EmbeddingFn
 
 if TYPE_CHECKING:
     from .registry import CapabilityRegistry
@@ -46,19 +47,47 @@ class Atlas:
     The atlas is a view, not a live object. Rebuild when the mesh changes.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, matcher: SemanticMatcher | None = None) -> None:
         self._charts: dict[str, Chart] = {}
         self._maps: dict[tuple[str, str], TransitionMap] = {}
+        self._matcher = matcher
 
     @classmethod
-    def build(cls, registry: "CapabilityRegistry") -> "Atlas":
+    def build(
+        cls,
+        registry: "CapabilityRegistry",
+        embedding_fn: "EmbeddingFn | None" = None,
+    ) -> "Atlas":
         """
         Build an atlas from the current state of the capability registry.
 
         Constructs charts for every known agent, then computes all pairwise
-        transition maps, discarding empty ones (no vocabulary overlap).
+        transition maps.
+
+        Args:
+            registry:     Current local view of the mesh.
+            embedding_fn: Optional. Any function (str) -> list[float].
+                          When provided, transition maps use cosine similarity
+                          instead of token overlap — 'solar-topology' reaches
+                          'stellar-dynamics' because 'solar' ~ 'stellar'.
+                          Without it: character trigram similarity (zero deps,
+                          structurally aware, better than pure token matching).
+
+        Examples::
+
+            # Built-in trigram similarity (default, zero deps)
+            atlas = agent.atlas()
+
+            # sentence-transformers
+            from sentence_transformers import SentenceTransformer
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            atlas = agent.atlas(embedding_fn=model.encode)
+
+            # OpenAI
+            atlas = agent.atlas(embedding_fn=my_openai_embed_fn)
         """
-        atlas = cls()
+        matcher = SemanticMatcher(embedding_fn)
+        atlas = cls(matcher=matcher)
 
         records = registry.all_agents()
 
@@ -78,8 +107,8 @@ class Atlas:
                 src = atlas._charts[src_name]
                 tgt = atlas._charts[tgt_name]
 
-                fwd = TransitionMap.between(src, tgt)
-                rev = TransitionMap.between(tgt, src)
+                fwd = TransitionMap.between(src, tgt, matcher=matcher)
+                rev = TransitionMap.between(tgt, src, matcher=matcher)
 
                 if not fwd.is_empty():
                     atlas._maps[(src_name, tgt_name)] = fwd
