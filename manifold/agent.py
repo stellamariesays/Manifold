@@ -12,6 +12,8 @@ from .registry import AgentRef, CapabilityRegistry, REGISTRY_TOPIC
 from .topology import TopologyManager, TOPOLOGY_TOPIC
 from . import blindspot as _blindspot
 from .blindspot import BlindSpot
+from .atlas import Atlas
+from .chart import Chart
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -279,6 +281,34 @@ class Agent:
             focus_history=self._topology.focus_history(),
             registry=self._registry,
         )
+
+    def chart(self) -> Chart:
+        """
+        This agent's local coordinate system.
+
+        Returns a Chart built from the agent's current capabilities
+        and focus — a snapshot of this agent's position in knowledge space.
+        """
+        return Chart.from_agent(
+            name=self._name,
+            capabilities=self._capabilities,
+            focus=self._topology.current_focus,
+        )
+
+    def atlas(self) -> Atlas:
+        """
+        The mesh's global topology — as seen from this agent's registry.
+
+        Builds an Atlas from the current local view of the capability
+        registry: all known charts, all non-empty transition maps,
+        consistency scores, curvature, holes.
+
+        This is a snapshot. Rebuild as the mesh evolves.
+
+        No single agent has the true atlas — only the portion of the
+        mesh they've observed. Sophia lives in the parts they haven't.
+        """
+        return Atlas.build(self._registry)
 
     # ─── Internal handlers ───────────────────────────────────────────────
 
