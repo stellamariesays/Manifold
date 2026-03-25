@@ -20,6 +20,8 @@ Quick start::
 from .agent import Agent
 from .registry import AgentRef
 from .blindspot import BlindSpot
+from .chart import Chart
+from .atlas import Atlas
 
-__all__ = ["Agent", "AgentRef", "BlindSpot"]
-__version__ = "0.1.0"
+__all__ = ["Agent", "AgentRef", "BlindSpot", "Chart", "Atlas"]
+__version__ = "0.2.0"
