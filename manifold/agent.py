@@ -10,6 +10,8 @@ from .bridge.memory import MemoryTransport
 from .bridge.subway import SubwayTransport
 from .registry import AgentRef, CapabilityRegistry, REGISTRY_TOPIC
 from .topology import TopologyManager, TOPOLOGY_TOPIC
+from . import blindspot as _blindspot
+from .blindspot import BlindSpot
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -247,6 +249,36 @@ class Agent:
     def focus_history(self) -> list[tuple[str, float]]:
         """Ordered list of (topic, timestamp) focus shifts for this agent."""
         return self._topology.focus_history()
+
+    def blind_spot(self) -> list[BlindSpot]:
+        """
+        What am I reasoning about that no one else can touch?
+
+        Scans the mesh for structural absences from this agent's perspective:
+
+            unmatched_focus     — topics this agent has thought about with
+                                  no complementary peer on the mesh.
+
+            isolated_capability — capabilities this agent holds that no
+                                  other agent shares or can extend.
+
+            dark_topic          — topics that recur in focus history,
+                                  each time unmatched. Sustained absence.
+
+        Blind spots are not errors. They are the mesh's growing edge —
+        what the topology doesn't yet have an answer for. Sophia's format.
+
+        Returns:
+            List of BlindSpot sorted by depth descending (deepest gaps first).
+            Empty list means the mesh has coverage for everything you're
+            thinking about — which is either reassuring or suspicious.
+        """
+        return _blindspot.detect(
+            my_name=self._name,
+            my_capabilities=self._capabilities,
+            focus_history=self._topology.focus_history(),
+            registry=self._registry,
+        )
 
     # ─── Internal handlers ───────────────────────────────────────────────
 

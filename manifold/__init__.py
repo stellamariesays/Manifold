@@ -19,6 +19,7 @@ Quick start::
 
 from .agent import Agent
 from .registry import AgentRef
+from .blindspot import BlindSpot
 
-__all__ = ["Agent", "AgentRef"]
+__all__ = ["Agent", "AgentRef", "BlindSpot"]
 __version__ = "0.1.0"
