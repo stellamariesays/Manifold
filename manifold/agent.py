@@ -14,6 +14,7 @@ from . import blindspot as _blindspot
 from .blindspot import BlindSpot
 from .atlas import Atlas
 from .chart import Chart
+from .persist import PersistentStore
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -60,14 +61,19 @@ class Agent:
         self,
         name: str,
         transport: str = "memory://local",
+        persist_to: str | None = None,
     ) -> None:
         """
         Create a Manifold agent.
 
         Args:
-            name: Unique agent name on the mesh.
-            transport: Transport URI. Defaults to in-memory (for testing).
-                       Use 'subway://host:port' for production.
+            name:       Unique agent name on the mesh.
+            transport:  Transport URI. Defaults to in-memory (for testing).
+                        Use 'subway://host:port' for production.
+            persist_to: Path to SQLite file for persistent mesh memory.
+                        If given, prior mesh state is restored on join()
+                        and all updates are written through to disk.
+                        Example: persist_to="manifold.db"
         """
         self._name = name
         self._transport_uri = transport
@@ -76,6 +82,9 @@ class Agent:
         self._registry = CapabilityRegistry()
         self._topology = TopologyManager(name)
         self._joined = False
+        self._store: PersistentStore | None = (
+            PersistentStore(persist_to) if persist_to else None
+        )
 
     # ─── Capability declaration ─────────────────────────────────────────
 
@@ -114,9 +123,32 @@ class Agent:
 
         Registers this agent in the local capability registry, connects
         the transport, subscribes to system topics, and broadcasts presence.
+
+        If persist_to was set, restores prior mesh state from disk before
+        announcing — so the agent joins with knowledge of who was here before.
         """
         if self._joined:
             return
+
+        # Restore prior mesh state from persistent store (if configured)
+        if self._store is not None:
+            prior_agents = self._store.load_agents()
+            for rec in prior_agents:
+                if rec["name"] == self._name:
+                    # Restore own focus history into topology
+                    history = self._store.load_focus_history(self._name)
+                    for topic, ts in history:
+                        self._topology._focus_history.append((topic, ts))
+                    if history:
+                        self._topology._focus = history[-1][0]
+                else:
+                    # Restore peer charts into local registry
+                    self._registry.update_from_announcement({
+                        "name": rec["name"],
+                        "capabilities": rec["capabilities"],
+                        "address": rec["address"],
+                        "focus": rec["focus"],
+                    })
 
         # Register self locally
         self._registry.register_self(
@@ -144,12 +176,27 @@ class Agent:
             name=self._name,
             capabilities=self._capabilities,
             address=self._transport_uri,
+            focus=self._topology.current_focus,
         )
+
+        # Persist self
+        if self._store is not None:
+            self._store.upsert_agent(
+                name=self._name,
+                capabilities=self._capabilities,
+                address=self._transport_uri,
+                focus=self._topology.current_focus,
+            )
 
         self._joined = True
 
     async def leave(self) -> None:
-        """Disconnect from the mesh gracefully."""
+        """
+        Disconnect from the mesh gracefully.
+
+        The agent's record is preserved in the persistent store — it was
+        here, even when gone. The crystal remembers the shape.
+        """
         if not self._joined:
             return
         await self._transport.publish(
@@ -157,6 +204,8 @@ class Agent:
             {"name": self._name, "event": "leave", "capabilities": []},
         )
         await self._transport.disconnect()
+        if self._store is not None:
+            self._store.mark_inactive(self._name)
         self._joined = False
 
     # ─── Core cognitive primitives ───────────────────────────────────────
@@ -194,6 +243,9 @@ class Agent:
         Other agents receive a topology update and reweight their edge to
         you accordingly. No orchestrator. Just resonance.
 
+        Also re-announces to the capability registry so other agents'
+        atlases reflect the updated focus — not just the topology layer.
+
         Args:
             topic: Current cognitive focus (e.g. "multi-star-prediction").
         """
@@ -203,6 +255,28 @@ class Agent:
             transport=self._transport,
             capabilities=self._capabilities,
         )
+        # Re-announce to registry so other agents' atlases stay fresh
+        await self._registry.announce(
+            transport=self._transport,
+            name=self._name,
+            capabilities=self._capabilities,
+            address=self._transport_uri,
+            focus=topic,
+        )
+        # Persist focus shift
+        if self._store is not None:
+            import time as _time
+            self._store.upsert_agent(
+                name=self._name,
+                capabilities=self._capabilities,
+                address=self._transport_uri,
+                focus=topic,
+            )
+            self._store.append_focus(
+                agent=self._name,
+                topic=topic,
+                timestamp=_time.time(),
+            )
 
     # ─── Pub/sub passthrough ─────────────────────────────────────────────
 
