@@ -15,6 +15,7 @@ from .blindspot import BlindSpot
 from .atlas import Atlas
 from .chart import Chart
 from .persist import PersistentStore
+from .trust import Claim, Grade, Stake, TrustLedger
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -85,6 +86,7 @@ class Agent:
         self._store: PersistentStore | None = (
             PersistentStore(persist_to) if persist_to else None
         )
+        self._ledger = TrustLedger()
 
     # ─── Capability declaration ─────────────────────────────────────────
 
@@ -410,6 +412,134 @@ class Agent:
             raise RuntimeError(
                 "Agent is not connected. Call `await agent.join()` first."
             )
+
+    # ─── Trust layer ─────────────────────────────────────────────────────
+
+    def claim(
+        self,
+        task: str,
+        domain: str,
+        stake: float = 0.0,
+        task_id: str = "",
+    ) -> Claim:
+        """
+        Claim that this agent can do a task, optionally backed by a stake.
+
+        A stake is a commitment: if the task fails (grade below the slash
+        threshold), the amount is forfeited. Without a stake, the claim
+        is costless — and carries less information.
+
+        Args:
+            task:    Human-readable task description.
+            domain:  Capability domain (e.g. "orbit-calculation").
+            stake:   Numeric amount to put at risk. Default 0 (no stake).
+            task_id: Optional identifier tying this claim to a task request.
+
+        Returns:
+            A Claim — pass this to the requesting agent's select() call.
+        """
+        s = None
+        if stake > 0:
+            s = Stake(agent=self._name, domain=domain, amount=stake, task_id=task_id)
+            self._ledger.record_stake(s)
+        return Claim(agent=self._name, task=task, domain=domain, stake=s)
+
+    def grade(
+        self,
+        agent: str,
+        domain: str,
+        score: float,
+        task_id: str = "",
+        slash_threshold: float = 0.5,
+    ) -> Grade:
+        """
+        File a grade for an agent after a completed task.
+
+        score 1.0 = perfect delivery. score 0.0 = total failure / slash.
+        Grades below slash_threshold forfeit any stake the agent placed.
+
+        The grade is recorded in this agent's trust ledger and becomes
+        available as a referral to agents that trust this one.
+
+        Args:
+            agent:           Name of the agent being graded.
+            domain:          The capability domain the task was in.
+            score:           0.0–1.0 outcome score.
+            task_id:         Optional: ties back to the original Claim.
+            slash_threshold: Below this score, stake is forfeited.
+
+        Returns:
+            The Grade (immutable record of the outcome).
+        """
+        g = Grade(
+            agent=agent,
+            domain=domain,
+            score=score,
+            task_id=task_id,
+            slash_threshold=slash_threshold,
+        )
+        self._ledger.record(g)
+        # Forfeit any open stake from this task
+        rec = self._ledger._records.get(agent, {}).get(domain)
+        if rec and g.slashed:
+            for s in [
+                Stake(agent=agent, domain=domain, amount=rec.stake_total, task_id=task_id)
+            ]:
+                if s.amount > 0:
+                    self._ledger.forfeit_stake(s)
+        return g
+
+    def select(
+        self,
+        claims: list[Claim],
+        domain: str | None = None,
+        referrals: list["Agent"] | None = None,
+        referral_weight: float = 0.5,
+    ) -> list[tuple[Claim, float]]:
+        """
+        Rank competing claims and return the best agent for a task.
+
+        Uses two signals in order of availability:
+
+        1. Grades — direct interaction history in this ledger, plus
+           grades imported from trusted referrals (scaled by referral_weight).
+        2. Stake — when no grade history exists, stake size is the proxy.
+           An unstaked claim from an unknown agent scores below 0.5.
+
+        Args:
+            claims:           All claims received for the task.
+            domain:           Domain to score against. If None, uses each
+                              claim's own domain field.
+            referrals:        Other Agent instances to borrow grades from.
+                              Typically agents you trust who have worked
+                              with the claimants before.
+            referral_weight:  How much to weight borrowed grades (0–1).
+                              Default 0.5 — a referral is worth half
+                              a first-hand grade.
+
+        Returns:
+            List of (Claim, score) sorted best-first. First entry is the
+            recommended agent.
+        """
+        ledger = TrustLedger()
+
+        # Seed with own grades
+        for agent_name, domain_map in self._ledger._records.items():
+            for dom, rec in domain_map.items():
+                for g in rec.grades:
+                    ledger.record(g)
+
+        # Import referral grades (trust-weighted)
+        if referrals:
+            for ref_agent in referrals:
+                ledger.absorb(ref_agent._ledger, trust_weight=referral_weight)
+
+        return ledger.rank(claims, domain=domain)
+
+    @property
+    def ledger(self) -> TrustLedger:
+        """This agent's trust ledger (grades filed + stakes tracked)."""
+        return self._ledger
 
     def __repr__(self) -> str:
         caps = ", ".join(self._capabilities[:3])
