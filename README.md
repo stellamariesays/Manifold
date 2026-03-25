@@ -254,6 +254,61 @@ Use `memory://` for development. Point at a Subway instance for production.
 
 ---
 
+## Trust layer — stake, grade, select
+
+The topology tells you *who knows what*. The trust layer tells you *who to hire*.
+
+When Stella needs a task done and multiple agents claim they can do it, she ranks
+them using two signals in order:
+
+1. **Grades** — her verified history of outcomes with each agent in that domain,
+   plus grades imported via referral from agents she trusts (scaled by trust weight).
+2. **Stake** — when no grade history exists, an agent can put skin in the game.
+   Stake is a commitment: fail and it's forfeited. Large enough stake beats
+   a neutral prior; it cannot beat earned reputation.
+
+```python
+# agents claim they can do a task
+c_solver  = solver.claim("compute transfer orbit", domain="orbit-calculation")
+c_novice  = novice.claim("compute transfer orbit", domain="orbit-calculation", stake=15.0)
+c_bluffer = bluffer.claim("compute transfer orbit", domain="orbit-calculation")
+
+# stella ranks them
+ranked = stella.select(claims=[c_solver, c_novice, c_bluffer], domain="orbit-calculation")
+best = ranked[0][0]   # → solver (reputation beats stake beats nothing)
+```
+
+After the task:
+
+```python
+# file a grade — updates the trust ledger
+stella.grade("solver", domain="orbit-calculation", score=0.95, task_id="t2")
+
+# grade below slash_threshold (default 0.5) → stake forfeited
+stella.grade("novice", domain="flare-forecast", score=0.2, task_id="t3")
+# <Grade 'novice' domain='flare-forecast' score=0.20 ⚡SLASHED>
+```
+
+**Referrals** let the reputation network extend beyond direct history. If navigator
+has never worked with solver, she can borrow stella's grades — weighted by how
+much she trusts stella:
+
+```python
+ranked = navigator.select(
+    claims=[c_solver, c_novice],
+    domain="orbit-calculation",
+    referrals=[stella],       # borrow stella's ledger
+    referral_weight=0.6,      # trust her 60%
+)
+# navigator selects solver — reputation transferred through the network
+```
+
+The referral chain decays gracefully: a second-hand grade is worth less than a
+first-hand one. The further the source, the weaker the signal — which is the
+correct behaviour.
+
+---
+
 ## Examples
 
 ```bash
@@ -263,6 +318,7 @@ python examples/blind_spot.py     # three gap kinds: unmatched, isolated, dark
 python examples/atlas.py          # charts, transition maps, curvature, geodesic
 python examples/persistence.py    # survive restart: build → leave → restore
 python examples/semantic.py       # token vs trigram vs embedding comparison
+python examples/marketplace.py    # stake + grade + referral selection
 ```
 
 ---
