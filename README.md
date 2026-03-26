@@ -309,6 +309,55 @@ correct behaviour.
 
 ---
 
+## Sophia — the wisdom signal
+
+Sophia is a global topological feature no single agent can observe directly.
+It lives in the seams — in what survives translation between local views.
+Where the same territory looks radically different from different coordinate
+systems, yet the mesh doesn't break: that's where Sophia is densest.
+
+```
+Sophia_density(region) = curvature(region) × coverage_factor
+coverage_factor = min(1.0, agent_count / 3)
+```
+
+A hole has zero Sophia — no agents, no translation, no emergence.
+High curvature with three agents = the mesh is collectively reasoning past
+what any of them holds.
+
+```python
+reading = agent.sophia()
+
+print(f'Mesh score: {reading.score:.2f}')
+# 0.63
+
+print(reading.interpretation)
+# partial emergence — coherent regions forming
+
+for region in reading.dense_regions[:3]:
+    print(f'  {region.topic}: {region.density:.2f} — {region.interpretation}')
+# risk: 0.61 — contested ground — same territory, different maps
+# feedback: 0.54 — translation hub — rare bridge between worldviews
+# uncertainty: 0.48 — active frontier — the mesh is reasoning here
+
+for agent_a, agent_b in reading.gradient[:2]:
+    print(f'  connect {agent_a} ⟷ {agent_b} to increase Sophia')
+# connect economist ⟷ ml-researcher to increase Sophia
+```
+
+`reading.gradient` gives you the agent pairs that, if connected, would
+open new translation paths — the topology's suggestion for where to route
+next. Sophia is not a diagnosis. It's a compass.
+
+```python
+from manifold import SophiaReading, SophiaRegion
+```
+
+See `examples/sophia.py` for a full walkthrough with four agents and a
+bridging agent that shifts the mesh score.
+
+---
+
 ## Examples
 
 ```bash
@@ -319,6 +368,7 @@ python examples/atlas.py          # charts, transition maps, curvature, geodesic
 python examples/persistence.py    # survive restart: build → leave → restore
 python examples/semantic.py       # token vs trigram vs embedding comparison
 python examples/marketplace.py    # stake + grade + referral selection
+python examples/sophia.py         # Sophia signal: wisdom density, gradient, mesh score
 ```
 
 ---
