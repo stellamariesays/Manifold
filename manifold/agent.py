@@ -541,6 +541,43 @@ class Agent:
         """This agent's trust ledger (grades filed + stakes tracked)."""
         return self._ledger
 
+    # ─── Sophia ──────────────────────────────────────────────────────────
+
+    def sophia(self, embedding_fn=None) -> "SophiaReading":
+        """
+        Scan the current mesh topology for Sophia signal.
+
+        Returns where the mesh is generating collective intelligence —
+        regions of high curvature with sufficient coverage where the same
+        topic looks different from different coordinate systems, yet the
+        mesh holds.
+
+        Sophia lives in the seams, not the nodes. It is the signal of
+        what the mesh knows that no single agent knows — emergent from
+        translation, not from any individual chart.
+
+        Args:
+            embedding_fn: Optional. Any function (str) -> list[float].
+                          Passed to atlas(). With embeddings: semantic
+                          matching across vocabulary gaps. Without: trigram
+                          similarity (zero deps, default).
+
+        Returns:
+            A SophiaReading with global score, dense regions, gradient
+            suggestions, and mesh-level interpretation.
+
+        Example::
+
+            reading = agent.sophia()
+            print(f'Mesh score: {reading.score:.2f}')
+            print(reading.interpretation)
+            for region in reading.dense_regions[:3]:
+                print(f'  {region.topic}: {region.density:.2f} ({region.interpretation})')
+        """
+        from .sophia import sophia_scan, SophiaReading
+        atlas = self.atlas(embedding_fn=embedding_fn)
+        return sophia_scan(atlas)
+
     def __repr__(self) -> str:
         caps = ", ".join(self._capabilities[:3])
         status = "joined" if self._joined else "offline"

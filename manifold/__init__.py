@@ -23,6 +23,11 @@ from .blindspot import BlindSpot
 from .chart import Chart
 from .atlas import Atlas
 from .trust import Claim, Grade, Stake, TrustLedger
+from .sophia import SophiaReading, SophiaRegion
 
-__all__ = ["Agent", "AgentRef", "BlindSpot", "Chart", "Atlas", "Claim", "Grade", "Stake", "TrustLedger"]
-__version__ = "0.5.0"
+__all__ = [
+    "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
+    "Claim", "Grade", "Stake", "TrustLedger",
+    "SophiaReading", "SophiaRegion",
+]
+__version__ = "0.6.0"
