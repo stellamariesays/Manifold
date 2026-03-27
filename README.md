@@ -358,6 +358,51 @@ bridging agent that shifts the mesh score.
 
 ---
 
+## Teacup — the concrete moment before the insight
+
+Journals capture what happened. Memories are searchable knowledge.
+Teacups are the specific thing you were looking at when it clicked.
+
+The difference:
+
+> **Journal:** "Found root cause of 2.5% agent keep rate — eval script hardcoded CLI_DIR to main branch, agents work in /tmp worktrees."
+>
+> **Teacup:** "Was staring at the eval script output — every run showed score 0.000. Opened `eval_memory_recall.sh` line 14, saw `CLI_DIR=/Users/alec/jfl-cli`. The agents run in `/tmp/jfl-worktree-abc123`. The eval was measuring the wrong directory. That's why 216 rounds and only 12 kept — the eval never saw a single change."
+
+The journal tells a future session the answer. The teacup gives it the ground to find the answer again — and find the adjacent ones.
+
+This is also what Tenet does. The Protagonist never receives a briefing. He receives artifacts — specific, concrete objects. Understanding assembles from those. You can't reconstruct your way back through abstraction. You need the object.
+
+*"Don't try to understand it. Feel it."*
+
+```python
+from manifold import Teacup, TeacupStore
+
+store = TeacupStore("manifold.db")   # same db as PersistentStore
+
+cup = Teacup(
+    agent="braid",
+    topic="agent-keep-rate",
+    moment=(
+        "eval_memory_recall.sh line 14: CLI_DIR=/Users/alec/jfl-cli. "
+        "Agents run in /tmp/jfl-worktree-abc123. Score 0.000 for 216 rounds."
+    ),
+    insight="Eval was measuring wrong directory — hardcoded CLI_DIR vs tmp worktrees.",
+    tags=("eval", "debugging"),
+)
+
+store.file(cup)
+
+# Later — the door back in
+cups = store.recall("agent-keep-rate")   # returns the concrete moment + insight
+recent = store.recent(n=10)              # surface what was being observed before context died
+tagged = store.recall_by_tag("debugging")
+```
+
+File at the moment of confusion or right as clarity arrives — not in a summary pass afterward. The specificity decays fast.
+
+---
+
 ## Examples
 
 ```bash
@@ -369,6 +414,7 @@ python examples/persistence.py    # survive restart: build → leave → restore
 python examples/semantic.py       # token vs trigram vs embedding comparison
 python examples/marketplace.py    # stake + grade + referral selection
 python examples/sophia.py         # Sophia signal: wisdom density, gradient, mesh score
+python examples/teacup.py         # file concrete moments, recall by topic/tag
 ```
 
 ---

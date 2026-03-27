@@ -24,10 +24,12 @@ from .chart import Chart
 from .atlas import Atlas
 from .trust import Claim, Grade, Stake, TrustLedger
 from .sophia import SophiaReading, SophiaRegion
+from .teacup import Teacup, TeacupStore
 
 __all__ = [
     "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
     "Claim", "Grade", "Stake", "TrustLedger",
     "SophiaReading", "SophiaRegion",
+    "Teacup", "TeacupStore",
 ]
-__version__ = "0.6.0"
+__version__ = "0.7.0"
