@@ -8,7 +8,7 @@ Quick start::
 
     from manifold import Agent
 
-    agent = Agent(name="braid", transport="subway://localhost:8765")
+    agent = Agent(name="braid")
     agent.knows(["solar-topology", "AR-classification"])
 
     await agent.join()
