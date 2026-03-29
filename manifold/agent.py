@@ -7,7 +7,6 @@ from urllib.parse import urlparse
 
 from .bridge.base import Transport
 from .bridge.memory import MemoryTransport
-from .bridge.subway import SubwayTransport
 from .registry import AgentRef, CapabilityRegistry, REGISTRY_TOPIC
 from .topology import TopologyManager, TOPOLOGY_TOPIC
 from . import blindspot as _blindspot
@@ -26,13 +25,20 @@ def _transport_from_uri(uri: str) -> Transport:
     if scheme == "memory":
         return MemoryTransport()
     elif scheme == "subway":
+        try:
+            from .bridge.subway import SubwayTransport
+        except ImportError as e:
+            raise RuntimeError(
+                "subway:// transport requires Subway mesh access. "
+                "Install the subway extras or contact the Subway team for credentials."
+            ) from e
         host = parsed.hostname or "localhost"
         port = parsed.port or 8765
         return SubwayTransport(host=host, port=port)
     else:
         raise ValueError(
             f"Unknown transport scheme: {scheme!r}. "
-            "Supported: memory://, subway://"
+            "Supported: memory://"
         )
 
 
@@ -49,7 +55,7 @@ class Agent:
 
     Example::
 
-        agent = Agent(name="braid", transport="subway://localhost:8765")
+        agent = Agent(name="braid")
         agent.knows(["solar-topology", "AR-classification"])
 
         await agent.join()
@@ -70,7 +76,7 @@ class Agent:
         Args:
             name:       Unique agent name on the mesh.
             transport:  Transport URI. Defaults to in-memory (for testing).
-                        Use 'subway://host:port' for production.
+                        Use 'subway://host:port' for production (requires Subway access).
             persist_to: Path to SQLite file for persistent mesh memory.
                         If given, prior mesh state is restored on join()
                         and all updates are written through to disk.
