@@ -1,6 +1,6 @@
 # Manifold
 
-**Cognitive mesh layer for AI agents — built on [Subway](https://github.com/subway-ai/subway).**
+**Cognitive mesh layer for AI agents.**
 
 Topology is epistemology. Which agents can reach which determines what thoughts are possible in the system. Manifold makes topology first-class — observable, dynamic, and shaped by what agents are actually reasoning about.
 
@@ -23,18 +23,30 @@ There is no orchestrator. No central registry. Just agents declaring what they k
 git clone https://github.com/stellamariesays/Manifold
 cd Manifold
 pip install -e .
+
+# For WebSocket transport (production)
+pip install websockets
 ```
 
 ---
 
 ## Quickstart
 
+Start the broker (one process, anywhere on your network):
+
+```bash
+python -m manifold.server
+# Manifold broker  ws://0.0.0.0:8765
+```
+
+Then connect agents — Python, Elixir, Haskell, browser, anything that speaks WebSocket:
+
 ```python
 import asyncio
 from manifold import Agent
 
 async def main():
-    braid = Agent(name="braid", transport="subway://localhost:8765")
+    braid = Agent(name="braid", transport="ws://localhost:8765")
     braid.knows(["solar-topology", "AR-classification"])
 
     await braid.join()
@@ -50,7 +62,7 @@ async def main():
 asyncio.run(main())
 ```
 
-No Subway instance? Use the in-memory transport for local development:
+No broker? Use the in-memory transport for local development — no extra process needed:
 
 ```python
 agent = Agent(name="braid")  # defaults to memory://local
@@ -221,8 +233,37 @@ print(store.stats())
 
 | URI | Description |
 |-----|-------------|
-| `memory://local` | In-process pub/sub. Default. For testing and local multi-agent. |
-| `subway://host:port` | [Subway](https://github.com/subway-ai/subway) P2P transport. For production meshes. |
+| `memory://local` | In-process pub/sub. Default. For testing and single-process multi-agent. |
+| `ws://host:port` | WebSocket broker. For production — agents, humans, browsers, anything. Run with `python -m manifold.server`. |
+| `subway://host:port` | [Subway](https://github.com/subway-ai/subway) P2P transport. Optional — requires Subway mesh access. |
+
+### Running the WebSocket broker
+
+```bash
+# default: bind 0.0.0.0:8765
+python -m manifold.server
+
+# custom host/port
+python -m manifold.server --host 127.0.0.1 --port 9001
+```
+
+The broker is a lightweight pub/sub relay — no state, no auth, no config. Run it once; every agent points at it. Works over LAN, Tailscale, or any TCP network.
+
+**Wire protocol** (JSON over WebSocket):
+
+```json
+{"type": "connect",     "agent": "braid"}
+{"type": "subscribe",   "topic": "mesh.thought"}
+{"type": "publish",     "topic": "mesh.thought", "from": "braid", "data": {...}}
+{"type": "unsubscribe", "topic": "mesh.thought"}
+```
+
+Incoming messages to subscribers:
+```json
+{"topic": "mesh.thought", "from": "braid", "data": {...}}
+```
+
+Any language or runtime can participate — no SDK required beyond WebSocket support.
 
 ---
 
@@ -244,13 +285,18 @@ the mesh doesn't yet know it's missing.
 
 ## Relationship to Subway
 
-Manifold is the cognitive layer. Subway is the transport. They compose.
+Manifold is the cognitive layer. Transport is pluggable.
 
-Subway handles peer discovery, hole-punching, and message delivery between
-machines. Manifold sits on top and adds capability-aware routing, knowledge-gap
-queries, and topology self-organization.
+`ws://` is the default production transport — no credentials, no access request,
+just `pip install websockets` and `python -m manifold.server`. Works for agents,
+humans, browsers, anything that speaks WebSocket.
 
-Use `memory://` for development. Point at a Subway instance for production.
+Subway is an optional transport for meshes that need its P2P capabilities
+(hole-punching, NAT traversal, encrypted peer discovery). If you have Subway
+access and need those properties, point at `subway://`. Otherwise, `ws://` covers
+everything most meshes need.
+
+Use `memory://` for development. Use `ws://` for production.
 
 ---
 
