@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from .bridge.base import Transport
 from .bridge.memory import MemoryTransport
+from .bridge.websocket import WebSocketTransport
 from .registry import AgentRef, CapabilityRegistry, REGISTRY_TOPIC
 from .topology import TopologyManager, TOPOLOGY_TOPIC
 from . import blindspot as _blindspot
@@ -24,6 +25,8 @@ def _transport_from_uri(uri: str) -> Transport:
 
     if scheme == "memory":
         return MemoryTransport()
+    elif scheme == "ws":
+        return WebSocketTransport.from_uri(uri)
     elif scheme == "subway":
         try:
             from .bridge.subway import SubwayTransport
@@ -38,7 +41,7 @@ def _transport_from_uri(uri: str) -> Transport:
     else:
         raise ValueError(
             f"Unknown transport scheme: {scheme!r}. "
-            "Supported: memory://"
+            "Supported: memory://, ws://"
         )
 
 
@@ -76,7 +79,7 @@ class Agent:
         Args:
             name:       Unique agent name on the mesh.
             transport:  Transport URI. Defaults to in-memory (for testing).
-                        Use 'subway://host:port' for production (requires Subway access).
+                        Use 'ws://host:port' for production (run: python -m manifold.server).
             persist_to: Path to SQLite file for persistent mesh memory.
                         If given, prior mesh state is restored on join()
                         and all updates are written through to disk.
