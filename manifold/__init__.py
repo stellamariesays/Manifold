@@ -24,6 +24,9 @@ from .chart import Chart
 from .atlas import Atlas
 from .trust import Claim, Grade, Stake, TrustLedger
 from .sophia import SophiaReading, SophiaRegion
+from .bleed import BleedReading, bleed_rate
+from .substrate import SubstrateCoupling, substrate_coupling
+from .bottleneck import BottleneckReading, bottleneck_topology
 from .teacup import Teacup, TeacupStore
 from .fog import FogMap, FogDelta, FogSeam, Gap, GapKind
 
@@ -31,6 +34,9 @@ __all__ = [
     "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
     "Claim", "Grade", "Stake", "TrustLedger",
     "SophiaReading", "SophiaRegion",
+    "BleedReading", "bleed_rate",
+    "SubstrateCoupling", "substrate_coupling",
+    "BottleneckReading", "bottleneck_topology",
     "Teacup", "TeacupStore",
     "FogMap", "FogDelta", "FogSeam", "Gap", "GapKind",
 ]
