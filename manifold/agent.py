@@ -541,6 +541,67 @@ class Agent:
         """This agent's trust ledger (grades filed + stakes tracked)."""
         return self._ledger
 
+    # ─── FOG ─────────────────────────────────────────────────────────────
+
+    def fog(self, embedding_fn=None) -> "FogMap":
+        """
+        Build this agent's epistemic fog map.
+
+        Derives the FogMap from two Manifold signals:
+
+        - **blind_spot()** → ``KNOWN_UNKNOWN`` gaps: topics this agent has
+          focused on with no complementary peer.
+        - **atlas().holes()** → ``INFERRED_UNKNOWN`` gaps: regions of the mesh
+          no chart covers — system-wide absence, not just this agent's.
+
+        Returns:
+            A FogMap snapshot of what this agent doesn't know.
+
+        Example::
+
+            fog_map = agent.fog()
+            print(fog_map)
+            # FogMap(agent='braid', gaps=5)
+            for gap in fog_map.gaps.values():
+                print(f"  {gap.key} ({gap.kind.value})")
+        """
+        from .fog import build_fog
+        atlas = self.atlas(embedding_fn=embedding_fn)
+        return build_fog(
+            agent_name=self._name,
+            blind_spots=self.blind_spot(),
+            atlas_holes=atlas.holes(),
+        )
+
+    def fog_seam(self, other: "FogMap", embedding_fn=None) -> "FogSeam":
+        """
+        Measure the epistemic seam between this agent and another fog map.
+
+        High seam tension = asymmetric blind spots = transfer potential.
+        Zero tension = same fog = pure arbitrage territory.
+
+        This is the epistemic inverse of the Sophia gradient: where to
+        route next based on what agents *don't* know, not what they do.
+
+        Args:
+            other:        A FogMap from another agent (call agent.fog() to build one).
+            embedding_fn: Optional. Passed to atlas() when building this agent's fog.
+
+        Returns:
+            A FogSeam with tension score and transfer analysis.
+
+        Example::
+
+            fog_a = agent_a.fog()
+            fog_b = agent_b.fog()
+            seam  = agent_a.fog_seam(fog_b)
+            print(seam.summary())
+            # FogSeam(braid↔solver) tension=0.72 — high-potential seam
+        """
+        from .fog import measure
+        my_fog = self.fog(embedding_fn=embedding_fn)
+        return measure(my_fog, other)
+
     # ─── Sophia ──────────────────────────────────────────────────────────
 
     def sophia(self, embedding_fn=None) -> "SophiaReading":

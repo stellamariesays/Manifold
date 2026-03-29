@@ -25,11 +25,13 @@ from .atlas import Atlas
 from .trust import Claim, Grade, Stake, TrustLedger
 from .sophia import SophiaReading, SophiaRegion
 from .teacup import Teacup, TeacupStore
+from .fog import FogMap, FogDelta, FogSeam, Gap, GapKind
 
 __all__ = [
     "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
     "Claim", "Grade", "Stake", "TrustLedger",
     "SophiaReading", "SophiaRegion",
     "Teacup", "TeacupStore",
+    "FogMap", "FogDelta", "FogSeam", "Gap", "GapKind",
 ]
-__version__ = "0.7.0"
+__version__ = "0.8.0"
