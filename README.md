@@ -358,6 +358,84 @@ bridging agent that shifts the mesh score.
 
 ---
 
+## FOG — epistemic fog mapping
+
+Sophia measures where the mesh holds collective intelligence. FOG maps the inverse: the shape of what agents *don't* know.
+
+Two signals, already present in Manifold, are combined:
+
+- **`blind_spot()`** → `KNOWN_UNKNOWN` gaps: topics the agent has focused on, no peer can complement.
+- **`atlas().holes()`** → `INFERRED_UNKNOWN` gaps: regions no chart covers — system-level absence.
+
+```python
+fog_map = agent.fog()
+print(fog_map)
+# FogMap(agent='braid', gaps=5)
+
+for gap in fog_map.gaps.values():
+    print(f"  {gap.key} [{gap.kind.value}]")
+# multi-star-prediction [known_unknown]
+# coronal-mass-ejection [inferred_unknown]
+```
+
+### FogSeam — asymmetric blindness
+
+The seam between two fog maps tells you where agents are *differently* ignorant. That asymmetry is transfer potential. High seam tension = one agent is dark on what the other can see.
+
+```python
+seam = agent_a.fog_seam(agent_b.fog())
+print(seam.summary())
+# FogSeam(braid↔solver) tension=0.72 A-only=4 B-only=3 shared=1 — high-potential seam
+
+# Gaps that need external signal — neither agent can fill from the other
+print(seam.system_gaps)
+```
+
+`seam.tension` is the epistemic inverse of the Sophia gradient: where to route next based on what agents *don't* know, not what they do.
+
+### FogDelta — arbitrage vs genuine lift
+
+```python
+from manifold.fog import diff
+from manifold.fog.detect.arbitrage import system_fog_change
+
+fog_before = agent.fog()
+# ... agent learns something ...
+fog_after = agent.fog()
+
+delta = diff(fog_before, fog_after)
+print(delta.summary())
+# [braid] lift — net=-2 (fog clearing)
+# [braid] arbitrage — +3 -3 net=0 (ignorance redistributed, not reduced)
+```
+
+`is_arbitrage`: gaps moved between agents, total dark unchanged. The system looks more informed. It isn't.
+
+`is_lift`: fog actually shrank. New signal entered.
+
+### Standalone usage
+
+```python
+from manifold.fog import FogMap, GapKind, measure
+
+a = FogMap("braid")
+a.add("multi-star-prediction", GapKind.KNOWN_UNKNOWN, domain="solar")
+
+b = FogMap("solver")
+b.add("flare-induced-correction", GapKind.KNOWN_UNKNOWN, domain="orbital")
+
+seam = measure(a, b)
+print(seam.tension)   # 1.0 — totally asymmetric, high transfer potential
+```
+
+```python
+from manifold import FogMap, FogDelta, FogSeam, Gap, GapKind
+```
+
+See `examples/fog.py` for a full walkthrough with three agents, seam analysis, delta detection, and arbitrage identification.
+
+---
+
 ## Teacup — the concrete moment before the insight
 
 Journals capture what happened. Memories are searchable knowledge.
@@ -414,6 +492,7 @@ python examples/persistence.py    # survive restart: build → leave → restore
 python examples/semantic.py       # token vs trigram vs embedding comparison
 python examples/marketplace.py    # stake + grade + referral selection
 python examples/sophia.py         # Sophia signal: wisdom density, gradient, mesh score
+python examples/fog.py            # FOG: epistemic fog maps, seams, delta, arbitrage detection
 python examples/teacup.py         # file concrete moments, recall by topic/tag
 ```
 
