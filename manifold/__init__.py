@@ -30,6 +30,7 @@ from .bottleneck import BottleneckReading, bottleneck_topology
 from .teacup import Teacup, TeacupStore
 from .fog import FogMap, FogDelta, FogSeam, Gap, GapKind
 from .glossolalia import GlossolaliaReading, GlossolaliaProbe
+from .mri import MRISnapshot, capture, generate_html
 
 __all__ = [
     "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
@@ -41,5 +42,6 @@ __all__ = [
     "Teacup", "TeacupStore",
     "FogMap", "FogDelta", "FogSeam", "Gap", "GapKind",
     "GlossolaliaReading", "GlossolaliaProbe",
+    "MRISnapshot", "capture", "generate_html",
 ]
-__version__ = "0.8.0"
+__version__ = "0.8.1"
