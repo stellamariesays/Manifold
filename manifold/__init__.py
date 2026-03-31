@@ -44,4 +44,4 @@ __all__ = [
     "GlossolaliaReading", "GlossolaliaProbe",
     "MRISnapshot", "capture", "generate_html",
 ]
-__version__ = "0.8.1"
+__version__ = "0.9.0"
