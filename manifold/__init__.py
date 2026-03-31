@@ -29,6 +29,7 @@ from .substrate import SubstrateCoupling, substrate_coupling
 from .bottleneck import BottleneckReading, bottleneck_topology
 from .teacup import Teacup, TeacupStore
 from .fog import FogMap, FogDelta, FogSeam, Gap, GapKind
+from .glossolalia import GlossolaliaReading, GlossolaliaProbe
 
 __all__ = [
     "Agent", "AgentRef", "BlindSpot", "Chart", "Atlas",
@@ -39,5 +40,6 @@ __all__ = [
     "BottleneckReading", "bottleneck_topology",
     "Teacup", "TeacupStore",
     "FogMap", "FogDelta", "FogSeam", "Gap", "GapKind",
+    "GlossolaliaReading", "GlossolaliaProbe",
 ]
 __version__ = "0.8.0"
