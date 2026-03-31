@@ -683,6 +683,7 @@ const simulation = d3.forceSimulation(nodes)
   .force('charge', d3.forceManyBody().strength(-500))
   .force('center', d3.forceCenter(W / 2, H / 2))
   .force('collide', d3.forceCollide(d => sizeScale(d.vocab_size) + 20));
+window._manifoldSimulation = simulation;
 
 // ── SVG layers ────────────────────────────────────────────────
 

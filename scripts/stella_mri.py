@@ -9,11 +9,20 @@ Run from repo root::
     python3 scripts/stella_mri.py
 """
 
+import json
+import sys
 from pathlib import Path
 
 from manifold.atlas import Atlas
 from manifold.registry import CapabilityRegistry
 from manifold.mri import capture, generate_html
+
+# numinous may be installed as editable from sibling dir
+_NUMINOUS = Path(__file__).parent.parent.parent / "numinous"
+if str(_NUMINOUS) not in sys.path:
+    sys.path.insert(0, str(_NUMINOUS))
+
+from numinous.reach import reach_scan
 
 OUTPUT = Path(__file__).parent / "stella_mri.html"
 
@@ -368,6 +377,203 @@ CHAT_PANEL = """
 """
 
 
+def _build_void_data(atlas: Atlas) -> list[dict]:
+    """Get void data from reach_scan + atlas holes."""
+    voids = []
+    seen = set()
+
+    # Reach candidates (generative territory)
+    reading = reach_scan(atlas, top_n=12)
+    for r in reading.candidate_regions:
+        if r.term not in seen:
+            voids.append({
+                "term": r.term,
+                "pressure": round(r.strength, 3),
+                "implied_by": r.implied_by[:3],
+                "source": "reach",
+            })
+            seen.add(r.term)
+
+    # Structural holes (atlas gaps)
+    for term in atlas.holes():
+        if term not in seen:
+            adjacent = [c.agent_name for c in atlas.charts()
+                        if term.split("-")[0] in " ".join(c.vocabulary)]
+            voids.append({
+                "term": term,
+                "pressure": min(1.0, len(adjacent) * 0.15),
+                "implied_by": adjacent[:3],
+                "source": "hole",
+            })
+            seen.add(term)
+
+    return voids
+
+
+def _hemispheres_js(voids: list[dict]) -> str:
+    void_json = json.dumps(voids)
+    return f"""
+<style>
+.void-circle {{ animation: void-pulse 3s ease-in-out infinite; }}
+@keyframes void-pulse {{
+  0%, 100% {{ opacity: 0.5; r: attr(r); }}
+  50% {{ opacity: 0.9; }}
+}}
+.seam-line {{ pointer-events: none; }}
+#hemisphere-labels {{ pointer-events: none; }}
+</style>
+<script>
+(function() {{
+  var VOIDS = {void_json};
+
+  // Wait for the main D3 sim to be ready
+  var attempts = 0;
+  function init() {{
+    var svgEl = document.getElementById('main-svg');
+    if (!svgEl || typeof d3 === 'undefined') {{
+      if (++attempts < 40) setTimeout(init, 150);
+      return;
+    }}
+    var W = window.innerWidth, H = window.innerHeight;
+    var seamX = W * 0.57;
+    var svg = d3.select('#main-svg');
+
+    // ── Seam line ──────────────────────────────────────────────
+    svg.append('line')
+      .attr('class', 'seam-line')
+      .attr('x1', seamX).attr('y1', 60)
+      .attr('x2', seamX).attr('y2', H - 20)
+      .attr('stroke', '#1a0a2e')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '3,5');
+
+    // Seam glow
+    svg.append('line')
+      .attr('class', 'seam-line')
+      .attr('x1', seamX).attr('y1', 60)
+      .attr('x2', seamX).attr('y2', H - 20)
+      .attr('stroke', '#2a0a4e')
+      .attr('stroke-width', 6)
+      .attr('stroke-opacity', 0.2)
+      .attr('filter', 'blur(4px)');
+
+    // ── Hemisphere labels ──────────────────────────────────────
+    var labels = svg.append('g').attr('id', 'hemisphere-labels');
+    labels.append('text')
+      .attr('x', seamX * 0.5).attr('y', 22)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#1a2a4a').attr('font-size', '10px')
+      .attr('font-family', 'Courier New').attr('letter-spacing', '3px')
+      .text('LEFT HEMISPHERE — MANIFOLD');
+    labels.append('text')
+      .attr('x', seamX + (W * 0.28 * 0.5)).attr('y', 22)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#1a0a2e').attr('font-size', '10px')
+      .attr('font-family', 'Courier New').attr('letter-spacing', '3px')
+      .text('RIGHT HEMISPHERE — NUMINOUS');
+
+    // Pull existing manifold nodes left of seam
+    if (window._manifoldSimulation) {{
+      window._manifoldSimulation
+        .force('xbias', d3.forceX(seamX * 0.42).strength(0.04))
+        .alpha(0.2).restart();
+    }}
+
+    // ── Void nodes (right hemisphere) ─────────────────────────
+    if (!VOIDS.length) return;
+
+    var voidNodes = VOIDS.map(function(v, i) {{
+      return Object.assign({{
+        x: seamX + 60 + Math.random() * (W * 0.25),
+        y: 80 + Math.random() * (H - 140),
+        vx: 0, vy: 0
+      }}, v);
+    }});
+
+    var radiusScale = function(p) {{ return 10 + p * 28; }};
+
+    var voidSim = d3.forceSimulation(voidNodes)
+      .force('charge', d3.forceManyBody().strength(-120))
+      .force('center', d3.forceCenter(seamX + (W * 0.14), H * 0.5))
+      .force('collide', d3.forceCollide(function(d) {{ return radiusScale(d.pressure) + 8; }}))
+      .force('xbound', d3.forceX(seamX + (W * 0.14)).strength(0.08))
+      .force('ybound', d3.forceY(H * 0.5).strength(0.03));
+
+    // Void circles
+    var voidG = svg.append('g').attr('id', 'numinous-layer');
+
+    var circles = voidG.selectAll('circle.void-circle')
+      .data(voidNodes).join('circle')
+      .attr('class', 'void-circle')
+      .attr('r', function(d) {{ return radiusScale(d.pressure); }})
+      .attr('fill', '#06030f')
+      .attr('stroke', function(d) {{
+        return d.source === 'reach' ? '#2a0a4a' : '#1a0520';
+      }})
+      .attr('stroke-width', 1.5)
+      .attr('opacity', 0.75)
+      .on('mouseover', function(event, d) {{
+        d3.select(this).attr('stroke', '#6a2a9a').attr('stroke-width', 2.5);
+        tip.style('opacity', 1)
+          .html('<b>' + d.term + '</b><br>pressure: ' + d.pressure.toFixed(3)
+            + '<br>implied by: ' + (d.implied_by || []).join(', ')
+            + '<br><em>' + d.source + '</em>');
+      }})
+      .on('mousemove', function(event) {{
+        tip.style('left', (event.pageX + 12) + 'px')
+           .style('top',  (event.pageY - 28) + 'px');
+      }})
+      .on('mouseout', function(event, d) {{
+        d3.select(this).attr('stroke', d.source === 'reach' ? '#2a0a4a' : '#1a0520')
+          .attr('stroke-width', 1.5);
+        tip.style('opacity', 0);
+      }});
+
+    // Void labels
+    var voidLabels = voidG.selectAll('text.void-label')
+      .data(voidNodes).join('text')
+      .attr('class', 'void-label')
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#3a1a5a')
+      .attr('font-size', '9px')
+      .attr('font-family', 'Courier New');
+
+    voidSim.on('tick', function() {{
+      // Clamp to right hemisphere
+      voidNodes.forEach(function(d) {{
+        d.x = Math.max(seamX + radiusScale(d.pressure) + 4,
+                Math.min(W * 0.86, d.x));
+        d.y = Math.max(radiusScale(d.pressure) + 30,
+                Math.min(H - radiusScale(d.pressure) - 10, d.y));
+      }});
+      circles
+        .attr('cx', function(d) {{ return d.x; }})
+        .attr('cy', function(d) {{ return d.y; }});
+      voidLabels
+        .attr('x', function(d) {{ return d.x; }})
+        .attr('y', function(d) {{ return d.y + radiusScale(d.pressure) + 13; }})
+        .text(function(d) {{ return d.term; }});
+    }});
+
+    // Tooltip (reuse existing if present)
+    var tip = d3.select('body').select('.tooltip');
+    if (tip.empty()) {{
+      tip = d3.select('body').append('div').attr('class', 'tooltip')
+        .style('position', 'absolute').style('background', '#0f0f18')
+        .style('border', '1px solid #1a1a2e').style('color', '#aaa')
+        .style('font-size', '11px').style('font-family', 'Courier New')
+        .style('padding', '8px 10px').style('border-radius', '3px')
+        .style('pointer-events', 'none').style('opacity', 0)
+        .style('z-index', '999');
+    }}
+  }}
+
+  setTimeout(init, 500);
+}})();
+</script>
+"""
+
+
 def main() -> None:
     reg = _make_registry()
     atlas = Atlas.build(reg)
@@ -379,10 +585,15 @@ def main() -> None:
         coordination_pressure=0.0,
     )
 
+    voids = _build_void_data(atlas)
+
     base_html = generate_html(snapshot)
-    augmented = base_html.replace("</body>", CHAT_PANEL + "\n</body>")
+    augmented = base_html.replace(
+        "</body>",
+        _hemispheres_js(voids) + "\n" + CHAT_PANEL + "\n</body>"
+    )
     OUTPUT.write_text(augmented, encoding="utf-8")
-    print(f"Stella MRI generated → {OUTPUT}")
+    print(f"Stella MRI generated → {OUTPUT} ({len(voids)} voids)")
 
 
 if __name__ == "__main__":
