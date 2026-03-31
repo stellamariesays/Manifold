@@ -241,6 +241,7 @@ def run(store_path: Path, open_voids: bool = True, json_output: bool = False) ->
     elapsed_ms = round((time.monotonic() - t0) * 1000)
 
     result = {
+        "agents": [c.agent_name for c in atlas.charts()],
         "agent_count": len(atlas.charts()),
         "map_count": sum(1 for _ in atlas._maps),
         "hole_count": len(atlas.holes()),
