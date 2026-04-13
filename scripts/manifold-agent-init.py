@@ -156,6 +156,24 @@ _AGENTS = [
         "address": "mem://wake",
         "focus": "model-training",
     },
+    {
+        "name": "btc-signals",
+        "capabilities": [
+            "btc-breakout-detection",
+            "technical-analysis",
+            "signal-composition",
+            "alert-design",
+            "stingray-integration",
+            "volume-analysis",
+            "indicator-fusion",
+            "cross-asset-correlation",
+            "volatility-analysis",
+            "topology-routing",
+            "backtest-strategy",
+        ],
+        "address": "mem://btc-signals",
+        "focus": "crypto-signals",
+    },
 ]
 
 
@@ -237,7 +255,7 @@ def run(store_path: Path, open_voids: bool = True, json_output: bool = False) ->
     voids_opened = []
     if open_voids and _NUMINOUS_AVAILABLE and implied_regions:
         try:
-            voids_opened = open_from_atlas(atlas)
+            voids_opened = open_from_atlas(atlas, top_n=8, include_holes=False)
         except Exception as exc:
             voids_opened = [{"error": str(exc)}]
 
