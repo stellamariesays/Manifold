@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -7,3 +8,27 @@ build/
 venv/
 .env
 *.egg
+.pytest_cache/
+
+# TypeScript/Node
+node_modules/
+*.tsbuildinfo
+federation/dist/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.pyc
+*.pyo
+*.pyd
+.Python

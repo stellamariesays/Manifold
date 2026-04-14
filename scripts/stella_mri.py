@@ -152,6 +152,43 @@ def _make_registry() -> CapabilityRegistry:
         address="mem://wake",
     )
 
+    # btc-signals — crypto breakout detection
+    reg.register_self(
+        name="btc-signals",
+        capabilities=[
+            "btc-breakout-detection",
+            "technical-analysis",
+            "signal-composition",
+            "alert-design",
+            "stingray-integration",
+            "volume-analysis",
+            "indicator-fusion",
+            "cross-asset-correlation",
+            "volatility-analysis",
+            "topology-routing",
+            "backtest-strategy",
+        ],
+        address="mem://btc-signals",
+    )
+
+    # deploy — deployment automation
+    reg.register_self(
+        name="deploy",
+        capabilities=[
+            "artifact-detection",
+            "prerequisite-validation",
+            "deployment-execution",
+            "state-tracking",
+            "failure-recovery",
+            "multi-project-orchestration",
+            "surge-deployment",
+            "api-deployment",
+            "ssh-deployment",
+            "manifest-generation",
+        ],
+        address="mem://deploy",
+    )
+
     return reg
 
 
