@@ -1,8 +1,60 @@
 # Manifold
 
-**Cognitive mesh layer for AI agents.**
+**Cognitive mesh platform for AI agents.**
 
 Topology is epistemology. Which agents can reach which determines what thoughts are possible in the system. Manifold makes topology first-class — observable, dynamic, and shaped by what agents are actually reasoning about.
+
+---
+
+## Architecture
+
+Manifold is organized as a **multi-layer platform**:
+
+```
+manifold/
+├── core/          Pure mesh computation (agents, capabilities, transitions)
+├── visualization/ Rendering outputs (MRI scans, trust diagrams, charts)
+├── federation/    Networking infrastructure (TypeScript/WebSocket)
+└── bridge/        Cross-language integration
+```
+
+### Core
+The mesh computation engine. Language-agnostic logic for:
+- Agent primitives, capability tracking, semantic matching
+- Topology analysis (curvature, holes, geodesics)
+- Fog of war (epistemic mapping, seams, arbitrage detection)
+- Sophia signal (collective intelligence density)
+- Teacup store (concrete moments before insights)
+
+**Use when:** You need mesh computation without visualization or networking.
+
+### Visualization
+Python rendering layer. Generates:
+- MRI scans (mesh topology snapshots)
+- Trust diagrams (reputation networks)
+- Feedback charts
+- Local dev server
+
+**Use when:** You want to visualize mesh state or render diagnostics.
+
+### Federation
+TypeScript/Node networking infrastructure for **multi-agent mesh federation**. WebSocket server + client for:
+- Cross-host mesh synchronization (Stella on Trillian ↔ Eddie on HOG)
+- Capability index propagation
+- Peer discovery and routing
+- Python bridge for seamless integration
+
+**Use when:** You need agents on different machines to form a single logical mesh.
+
+**Status:** Phase 1 MVP (Tailscale-only). See [`federation/SPEC.md`](federation/SPEC.md) for details.
+
+### Bridge
+Cross-language integration. Currently includes:
+- WebSocket bridge (Python ↔ any WebSocket client)
+- Memory bridge (shared state across runtimes)
+- Subway transport (P2P mesh, optional)
+
+**Use when:** You need Python agents to communicate with non-Python systems.
 
 ---
 
@@ -22,11 +74,24 @@ There is no orchestrator. No central registry. Just agents declaring what they k
 # Not yet on PyPI — install from source
 git clone https://github.com/stellamariesays/Manifold
 cd Manifold
+
+# Core + Visualization (Python only)
 pip install -e .
 
 # For WebSocket transport (production)
 pip install websockets
+
+# Federation server (TypeScript/Node)
+cd federation
+npm install
+npm run build
 ```
+
+### What to install
+
+- **Core mesh only:** `pip install -e .` (default, includes visualization)
+- **Federation server:** Requires Node.js. See [`federation/README.md`](federation/README.md)
+- **Full platform:** Install both Python package + federation server
 
 ---
 
@@ -35,7 +100,7 @@ pip install websockets
 Start the broker (one process, anywhere on your network):
 
 ```bash
-python -m manifold.server
+python -m visualization.server
 # Manifold broker  ws://0.0.0.0:8765
 ```
 
@@ -43,7 +108,8 @@ Then connect agents — Python, Elixir, Haskell, browser, anything that speaks W
 
 ```python
 import asyncio
-from manifold import Agent
+from manifold import Agent  # backward-compatible import
+# or: from core import Agent
 
 async def main():
     braid = Agent(name="braid", transport="ws://localhost:8765")
@@ -234,17 +300,18 @@ print(store.stats())
 | URI | Description |
 |-----|-------------|
 | `memory://local` | In-process pub/sub. Default. For testing and single-process multi-agent. |
-| `ws://host:port` | WebSocket broker. For production — agents, humans, browsers, anything. Run with `python -m manifold.server`. |
+| `ws://host:port` | WebSocket broker. For production — agents, humans, browsers, anything. Run with `python -m visualization.server`. |
 | `subway://host:port` | [Subway](https://github.com/subway-ai/subway) P2P transport. Optional — requires Subway mesh access. |
+| **federation** | Multi-host mesh federation via TypeScript server. See [Federation](#federation) below. |
 
 ### Running the WebSocket broker
 
 ```bash
 # default: bind 0.0.0.0:8765
-python -m manifold.server
+python -m visualization.server
 
 # custom host/port
-python -m manifold.server --host 127.0.0.1 --port 9001
+python -m visualization.server --host 127.0.0.1 --port 9001
 ```
 
 The broker is a lightweight pub/sub relay — no state, no auth, no config. Run it once; every agent points at it. Works over LAN, Tailscale, or any TCP network.
