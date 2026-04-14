@@ -611,6 +611,19 @@ python examples/teacup.py         # file concrete moments, recall by topic/tag
 
 ---
 
+## Agent Integration
+
+Want to add agents to your mesh? See the **[Void Lifecycle Guide](docs/VOID_LIFECYCLE.md)** for the complete workflow:
+
+- How to detect **dark circles** (capability gaps the mesh is gesturing toward)
+- Opening **Numinous Voids** (BEAM processes for emergent work)
+- The **mesh → voids → work → naming → mesh** pattern
+- SSJ2 mode (30-40 void exploration)
+
+The guide covers integration with [Numinous](https://github.com/stellamariesays/numinous) (the right hemisphere — implicit ground where new agents are born).
+
+---
+
 ## Formal spec
 
 See [`MANIFOLD.md`](MANIFOLD.md) for the full mathematical model: charts,
