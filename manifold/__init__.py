@@ -34,6 +34,8 @@ from core import (
     FogMap, FogDelta, FogSeam, Gap, GapKind,
     GlossolaliaReading, GlossolaliaProbe,
 )
+from core.store import PersistentStore
+from core.persist import *
 
 # Re-export visualization for backward compatibility
 from visualization import (

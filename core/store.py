@@ -82,7 +82,7 @@ class PersistentStore:
         return reg
 
     @staticmethod
-    def save(path: str | Path, registry: CapabilityRegistry) -> None:
+    def save(path: str | Path, registry: CapabilityRegistry, dark_circles: list | None = None) -> None:
         """
         Save a CapabilityRegistry to disk.
 
@@ -105,6 +105,9 @@ class PersistentStore:
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "version": PersistentStore.VERSION,
         }
+
+        if dark_circles:
+            data["dark_circles"] = dark_circles
 
         p.write_text(json.dumps(data, indent=2))
 
@@ -150,8 +153,20 @@ class PersistentStore:
             for record in stored.all_agents():
                 merged.register_self(record.name, record.capabilities, record.address)
 
-        PersistentStore.save(path, merged)
+        PersistentStore.save(path, merged, dark_circles=PersistentStore._load_dark_circles(path))
         return merged
+
+    @staticmethod
+    def _load_dark_circles(path):
+        """Extract dark_circles from existing store file."""
+        p = Path(path)
+        if not p.exists():
+            return None
+        try:
+            data = json.loads(p.read_text())
+            return data.get("dark_circles")
+        except (json.JSONDecodeError, OSError):
+            return None
 
     @staticmethod
     def summary(path: str | Path) -> dict:
