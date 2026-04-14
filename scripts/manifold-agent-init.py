@@ -45,9 +45,9 @@ if _NUMINOUS.exists():
     except ImportError:
         pass
 
-from manifold.atlas import Atlas
-from manifold.registry import CapabilityRegistry
-from manifold.store import PersistentStore
+from core.atlas import Atlas
+from core.registry import CapabilityRegistry
+from core.store import PersistentStore
 
 # ── Store path ────────────────────────────────────────────────────────────────
 _DEFAULT_STORE = _WORKSPACE / "data" / "manifold" / "stella-atlas.json"
