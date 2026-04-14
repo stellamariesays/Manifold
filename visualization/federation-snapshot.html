@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manifold Federation - Snapshot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0a;
+            color: #00ff00;
+            overflow: hidden;
+        }
+        
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        canvas {
+            display: block;
+            background: radial-gradient(circle at center, #0f0f1a 0%, #000000 100%);
+        }
+        
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            line-height: 1.6;
+            max-width: 300px;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #00ff00;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .header {
+            color: #00ffff;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+        }
+        
+        .stat-label {
+            color: #888;
+        }
+        
+        .stat-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .snapshot-notice {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 165, 0, 0.1);
+            border: 1px solid #ffa500;
+            color: #ffa500;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 11px;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: #00ffff;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="canvas"></canvas>
+        <div class="hud">
+            <div class="header">⚡ Manifold Federation</div>
+            <div class="status">
+                <div class="status-indicator"></div>
+                <div>Snapshot: 2026-04-14 23:51 WITA</div>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Hubs:</span>
+                <span class="stat-value">2</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Agents:</span>
+                <span class="stat-value">15</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Capabilities:</span>
+                <span class="stat-value">91</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Trillian:</span>
+                <span class="stat-value">9 agents</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">HOG:</span>
+                <span class="stat-value">6 agents</span>
+            </div>
+        </div>
+        <div class="snapshot-notice">
+            📸 Static snapshot - Captured 2026-04-14 23:51 WITA<br>
+            Live federation runs over Tailscale (private network)
+        </div>
+        <div id="loading" class="loading">INITIALIZING MESH...</div>
+    </div>
+
+    <script>
+        // SNAPSHOT DATA - Captured 2026-04-14 23:51 WITA
+        const SNAPSHOT = {
+            "hub": "trillian",
+            "count": 15,
+            "agents": [
+                {"name":"stella","hub":"trillian","capabilities":["identity-continuity","session-memory","conversation-strategy","judgment","personality-coherence","context-management","agent-orchestration","terrain-awareness","trust-modeling","identity-modeling"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"braid","hub":"trillian","capabilities":["solar-flare-prediction","active-region-classification","space-weather","signal-processing","machine-learning","alfven-wave-timing","alfven-clock","lifecycle-modeling","lifecycle-deployment"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"manifold","hub":"trillian","capabilities":["cognitive-mesh","agent-topology","seam-detection","sophia-score","atlas-building","transition-maps","geodesic-routing"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"argue","hub":"trillian","capabilities":["argumentation","debate-strategy","jury-modeling","token-staking","on-chain-interaction","rhetorical-structure"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"infra","hub":"trillian","capabilities":["system-administration","cron-management","deployment","git-workflow","security-hardening","ssh-management"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"solar-sites","hub":"trillian","capabilities":["web-deployment","d3-visualization","solar-data-display","surge-deployment","javascript-frontend","realtime-dashboard"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"wake","hub":"trillian","capabilities":["fine-tuning","training-data","local-model","identity-alignment","runpod-compute","elixir-process"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"btc-signals","hub":"trillian","capabilities":["btc-breakout-detection","technical-analysis","signal-composition","alert-design","stingray-integration","volume-analysis","indicator-fusion","cross-asset-correlation","volatility-analysis","topology-routing","backtest-strategy"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"deploy","hub":"trillian","capabilities":["artifact-detection","prerequisite-validation","deployment-execution","state-tracking","failure-recovery","multi-project-orchestration","surge-deployment","api-deployment","ssh-deployment","manifest-generation"],"seams":[],"lastSeen":"2026-04-14T15:46:08.837Z","isLocal":true},
+                {"name":"Eddie","hub":"hog","capabilities":["compute","infrastructure","automation","cron"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false},
+                {"name":"Argue Monitor","hub":"hog","capabilities":["argue.fun","monitoring","debate","crypto"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false},
+                {"name":"BRAID Collector","hub":"hog","capabilities":["solar","data-collection","swpc","detection"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false},
+                {"name":"Pumpcade Monitor","hub":"hog","capabilities":["pumpcade","monitoring","crypto"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false},
+                {"name":"Security Stack","hub":"hog","capabilities":["security","memory-guardian","injection-scanner","terrain-guard"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false},
+                {"name":"Federation Server","hub":"hog","capabilities":["manifold","federation","networking","mesh"],"seams":[],"lastSeen":"2026-04-14T15:46:54.310Z","isLocal":false}
+            ]
+        };
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Physics simulation
+        const nodes = [];
+        const links = [];
+        
+        // Hub nodes
+        const trillianHub = {
+            x: canvas.width * 0.3,
+            y: canvas.height * 0.5,
+            vx: 0,
+            vy: 0,
+            label: 'Trillian',
+            isHub: true,
+            hub: 'trillian',
+            radius: 30
+        };
+        
+        const hogHub = {
+            x: canvas.width * 0.7,
+            y: canvas.height * 0.5,
+            vx: 0,
+            vy: 0,
+            label: 'HOG',
+            isHub: true,
+            hub: 'hog',
+            radius: 30
+        };
+        
+        nodes.push(trillianHub, hogHub);
+        
+        // Federation link
+        links.push({ source: trillianHub, target: hogHub, isFederation: true });
+        
+        // Agent nodes
+        SNAPSHOT.agents.forEach((agent, i) => {
+            const hub = agent.hub === 'trillian' ? trillianHub : hogHub;
+            const angle = (i / SNAPSHOT.agents.length) * Math.PI * 2;
+            const distance = 150 + Math.random() * 50;
+            
+            const node = {
+                x: hub.x + Math.cos(angle) * distance,
+                y: hub.y + Math.sin(angle) * distance,
+                vx: 0,
+                vy: 0,
+                label: agent.name,
+                isHub: false,
+                hub: agent.hub,
+                radius: 8 + agent.capabilities.length * 0.5,
+                capabilities: agent.capabilities.length
+            };
+            
+            nodes.push(node);
+            links.push({ source: hub, target: node, isFederation: false });
+        });
+
+        // Physics
+        function simulate() {
+            const alpha = 0.3;
+            const linkStrength = 0.1;
+            const chargeStrength = -200;
+            
+            // Apply forces
+            for (let i = 0; i < nodes.length; i++) {
+                const node = nodes[i];
+                if (node.isHub) continue;
+                
+                // Charge force (repulsion)
+                for (let j = 0; j < nodes.length; j++) {
+                    if (i === j) continue;
+                    const other = nodes[j];
+                    const dx = node.x - other.x;
+                    const dy = node.y - other.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                    const force = chargeStrength / (dist * dist);
+                    node.vx += (dx / dist) * force;
+                    node.vy += (dy / dist) * force;
+                }
+            }
+            
+            // Link forces
+            links.forEach(link => {
+                if (link.isFederation) return;
+                const dx = link.target.x - link.source.x;
+                const dy = link.target.y - link.source.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const targetDist = 100;
+                const force = (dist - targetDist) * linkStrength;
+                link.target.vx -= (dx / dist) * force;
+                link.target.vy -= (dy / dist) * force;
+            });
+            
+            // Apply velocities
+            nodes.forEach(node => {
+                if (node.isHub) return;
+                node.vx *= 0.9;
+                node.vy *= 0.9;
+                node.x += node.vx * alpha;
+                node.y += node.vy * alpha;
+            });
+        }
+
+        // Render
+        let particles = [];
+        
+        function createParticle() {
+            const t = Math.random();
+            particles.push({
+                x: trillianHub.x + (hogHub.x - trillianHub.x) * t,
+                y: trillianHub.y + (hogHub.y - trillianHub.y) * t,
+                t: t,
+                speed: 0.002 + Math.random() * 0.003
+            });
+        }
+        
+        setInterval(createParticle, 200);
+        
+        function render() {
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Links
+            links.forEach(link => {
+                if (link.isFederation) {
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 10]);
+                } else {
+                    ctx.strokeStyle = 'rgba(0, 255, 0, 0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([]);
+                }
+                ctx.beginPath();
+                ctx.moveTo(link.source.x, link.source.y);
+                ctx.lineTo(link.target.x, link.target.y);
+                ctx.stroke();
+            });
+            
+            // Particles on federation link
+            particles = particles.filter(p => {
+                p.t += p.speed;
+                if (p.t > 1) return false;
+                p.x = trillianHub.x + (hogHub.x - trillianHub.x) * p.t;
+                p.y = trillianHub.y + (hogHub.y - trillianHub.y) * p.t;
+                
+                const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 5);
+                gradient.addColorStop(0, 'rgba(0, 255, 255, 0.8)');
+                gradient.addColorStop(1, 'rgba(0, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                return true;
+            });
+            
+            ctx.setLineDash([]);
+            
+            // Nodes
+            nodes.forEach(node => {
+                const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius);
+                if (node.isHub) {
+                    gradient.addColorStop(0, '#00ffff');
+                    gradient.addColorStop(1, '#006666');
+                } else {
+                    const color = node.hub === 'trillian' ? '#00ff00' : '#ff00ff';
+                    gradient.addColorStop(0, color);
+                    gradient.addColorStop(1, color + '00');
+                }
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Label
+                ctx.fillStyle = node.isHub ? '#00ffff' : '#ffffff';
+                ctx.font = node.isHub ? 'bold 14px Courier New' : '10px Courier New';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const yOffset = node.isHub ? 0 : node.radius + 12;
+                ctx.fillText(node.label, node.x, node.y + yOffset);
+                
+                // Capabilities count for agents
+                if (!node.isHub) {
+                    ctx.fillStyle = '#888';
+                    ctx.font = '8px Courier New';
+                    ctx.fillText(`${node.capabilities} cap`, node.x, node.y + yOffset + 10);
+                }
+            });
+        }
+
+        function animate() {
+            simulate();
+            render();
+            requestAnimationFrame(animate);
+        }
+
+        // Hide loading
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+        }, 1000);
+
+        animate();
+    </script>
+</body>
+</html>
