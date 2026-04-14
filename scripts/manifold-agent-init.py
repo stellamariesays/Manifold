@@ -191,6 +191,34 @@ _AGENTS = [
         "address": "mem://deploy",
         "focus": "deployment-automation",
     },
+    {
+        "name": "dev-tooling",
+        "capabilities": [
+            "tool-evaluation",
+            "package-installation",
+            "dependency-audit",
+            "environment-setup",
+            "tool-configuration",
+            "compatibility-checking",
+            "tool-recommendation",
+        ],
+        "address": "mem://dev-tooling",
+        "focus": "developer-tooling",
+    },
+    {
+        "name": "cron-monitor",
+        "capabilities": [
+            "cron-health-check",
+            "job-audit",
+            "silence-detection",
+            "error-tracking",
+            "success-rate-monitoring",
+            "alert-on-failure",
+            "cron-scheduling",
+        ],
+        "address": "mem://cron-monitor",
+        "focus": "cron-monitoring",
+    },
 ]
 
 
