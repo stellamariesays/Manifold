@@ -13,7 +13,7 @@ Manifold is organized as a **multi-layer platform**:
 ```
 manifold/
 ├── core/          Pure mesh computation (agents, capabilities, transitions)
-├── visualization/ Rendering outputs (MRI scans, trust diagrams, charts)
+├── visualization/ HTML visualizations (MRI scans, federation graphs)
 ├── federation/    Networking infrastructure (TypeScript/WebSocket)
 └── bridge/        Cross-language integration
 ```
@@ -29,13 +29,13 @@ The mesh computation engine. Language-agnostic logic for:
 **Use when:** You need mesh computation without visualization or networking.
 
 ### Visualization
-Python rendering layer. Generates:
-- MRI scans (mesh topology snapshots)
-- Trust diagrams (reputation networks)
-- Feedback charts
-- Local dev server
+Self-contained HTML visualizations. No build step, no dependencies.
 
-**Use when:** You want to visualize mesh state or render diagnostics.
+**Available visualizations:**
+- **Federation snapshot** (`visualization/federation-snapshot.html`) — Force-directed graph showing Trillian + HOG federation mesh with 15 agents, 91 capabilities, and animated particle effects on the federation link. [Live demo](https://federation.surge.sh)
+- **MRI scan** (`scripts/stella_mri.html`) — Mesh Resonance Imaging showing agent capabilities, seams, curvature, dark circles, and geodesic routing paths
+
+**Use when:** You want to visualize mesh state, federation topology, or render diagnostics. Open any `.html` file directly in a browser — no server required.
 
 ### Federation
 TypeScript/Node networking infrastructure for **multi-agent mesh federation**. WebSocket server + client for:
