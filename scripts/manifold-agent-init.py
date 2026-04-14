@@ -45,9 +45,9 @@ if _NUMINOUS.exists():
     except ImportError:
         pass
 
-from manifold.atlas import Atlas
-from manifold.registry import CapabilityRegistry
-from manifold.store import PersistentStore
+from core.atlas import Atlas
+from core.registry import CapabilityRegistry
+from core.store import PersistentStore
 
 # ── Store path ────────────────────────────────────────────────────────────────
 _DEFAULT_STORE = _WORKSPACE / "data" / "manifold" / "stella-atlas.json"
@@ -275,6 +275,16 @@ def run(store_path: Path, open_voids: bool = True, json_output: bool = False) ->
             voids_opened = open_from_atlas(atlas, top_n=8, include_holes=False)
         except Exception as exc:
             voids_opened = [{"error": str(exc)}]
+
+    # 7. Extract dark circles from implied regions and persist to atlas
+    dark_circles = []
+    for r in implied_regions:
+        name = r.get("term", "")
+        pressure = r.get("strength", 0)
+        if name:
+            dark_circles.append({"name": name, "pressure": round(pressure, 3)})
+
+    PersistentStore.save(store_path, reg, dark_circles=dark_circles if dark_circles else None)
 
     elapsed_ms = round((time.monotonic() - t0) * 1000)
 
