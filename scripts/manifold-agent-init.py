@@ -174,6 +174,23 @@ _AGENTS = [
         "address": "mem://btc-signals",
         "focus": "crypto-signals",
     },
+    {
+        "name": "deploy",
+        "capabilities": [
+            "artifact-detection",
+            "prerequisite-validation",
+            "deployment-execution",
+            "state-tracking",
+            "failure-recovery",
+            "multi-project-orchestration",
+            "surge-deployment",
+            "api-deployment",
+            "ssh-deployment",
+            "manifest-generation",
+        ],
+        "address": "mem://deploy",
+        "focus": "deployment-automation",
+    },
 ]
 
 
