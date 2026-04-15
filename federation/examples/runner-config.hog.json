@@ -1,0 +1,42 @@
+{
+  "hub": "hog",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 30000,
+  "agents": [
+    {
+      "name": "cron-monitor",
+      "script": "projects/cron-monitor-void/cron-monitor-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "data-detect",
+      "script": "projects/data-detection-void/data-detect-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "solar-detect",
+      "script": "projects/solar-detect-void/solar-detect-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "dev-tooling",
+      "script": "projects/dev-tooling-void/dev-tooling-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "hog-deploy",
+      "script": "projects/deploy-void/deploy-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 120000,
+      "maxConcurrency": 1
+    }
+  ]
+}
