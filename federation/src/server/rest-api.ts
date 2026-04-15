@@ -3,6 +3,8 @@ import type { CapabilityIndex } from './capability-index.js'
 import type { PeerRegistry } from './peer-registry.js'
 import type { MeshSync } from './mesh-sync.js'
 import type { TaskRouter } from './task-router.js'
+import type { TaskHistory } from './task-history.js'
+import type { MetricsCollector } from './metrics.js'
 import type { TaskRequest, TaskResult } from '../protocol/messages.js'
 
 export interface RestApiOptions {
@@ -23,6 +25,8 @@ export class RestApi {
   private peerRegistry!: PeerRegistry
   private meshSync!: MeshSync
   private taskRouter!: TaskRouter
+  private taskHistory!: TaskHistory
+  private metrics!: MetricsCollector
   private startTime = Date.now()
 
   constructor(options: RestApiOptions) {
@@ -32,11 +36,13 @@ export class RestApi {
     this._setup()
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter): Promise<void> {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector): Promise<void> {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
     this.meshSync = meshSync
     this.taskRouter = taskRouter
+    this.taskHistory = taskHistory
+    this.metrics = metrics
 
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
@@ -79,6 +85,9 @@ export class RestApi {
     router.post('/task', this._submitTask.bind(this))
     router.get('/task/:id', this._taskStatus.bind(this))
     router.get('/tasks', this._pendingTasks.bind(this))
+    router.get('/metrics', this._metrics.bind(this))
+    router.get('/task-history', this._taskHistory.bind(this))
+    router.get('/dashboard', this._dashboard.bind(this))
 
     this.app.use('/', router)
   }
@@ -318,6 +327,132 @@ export class RestApi {
       pending: this.taskRouter.getPendingTasks(),
       runner_count: this.taskRouter.runnerCount,
     })
+  }
+
+  /**
+   * GET /metrics — JSON metrics snapshot.
+   */
+  private _metrics(_req: Request, res: Response): void {
+    res.json(this.metrics.getSnapshot())
+  }
+
+  /**
+   * GET /task-history — recent task history.
+   * Query params: ?limit=N&offset=N
+   */
+  private async _taskHistory(req: Request, res: Response): Promise<void> {
+    const limit = parseInt(String(req.query['limit'] ?? '50'), 10)
+    const offset = parseInt(String(req.query['offset'] ?? '0'), 10)
+    const entries = await this.taskHistory.getRecent(limit, offset)
+    res.json({ count: entries.length, entries })
+  }
+
+  /**
+   * GET /dashboard — simple HTML overview.
+   */
+  private _dashboard(_req: Request, res: Response): void {
+    const m = this.metrics.getSnapshot()
+    const peers = this.peerRegistry.getPeers()
+    const pending = this.taskRouter.getPendingTasks()
+    const perAgent = Object.values(m.perAgent)
+      .sort((a, b) => b.tasksTotal - a.tasksTotal)
+
+    res.setHeader('Content-Type', 'text/html')
+    res.send(`<!DOCTYPE html>
+<html><head><title>Manifold — ${m.hub}</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;background:#0a0a0a;color:#e0e0e0;padding:1rem}
+  h1{color:#60a5fa;font-size:1.5rem;margin-bottom:0.5rem}
+  h2{color:#a78bfa;font-size:1.1rem;margin:1rem 0 0.5rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.5rem;margin:0.5rem 0}
+  .card{background:#1a1a2e;border:1px solid #2a2a4a;border-radius:8px;padding:0.75rem}
+  .card .label{color:#888;font-size:0.75rem;text-transform:uppercase}
+  .card .value{color:#f0f0f0;font-size:1.5rem;font-weight:bold}
+  table{width:100%;border-collapse:collapse;margin:0.5rem 0}
+  th,td{text-align:left;padding:0.4rem 0.6rem;border-bottom:1px solid #2a2a4a;font-size:0.85rem}
+  th{color:#888;font-weight:normal}
+  .ok{color:#4ade80} .err{color:#f87171} .warn{color:#fbbf24} .dim{color:#666}
+  a{color:#60a5fa;text-decoration:none}
+  .refresh{float:right;color:#888;font-size:0.8rem}
+</style>
+</head><body>
+<h1>🕸️ Manifold — ${m.hub}</h1>
+<div class="refresh">Auto-refreshes every 10s &middot; <a href="/dashboard">↻</a></div>
+
+<div class="grid">
+  <div class="card"><div class="label">Uptime</div><div class="value">${this._fmtUptime(m.uptime)}</div></div>
+  <div class="card"><div class="label">Peers</div><div class="value">${m.peers}</div></div>
+  <div class="card"><div class="label">Agents</div><div class="value">${m.agents}</div></div>
+  <div class="card"><div class="label">Capabilities</div><div class="value">${m.capabilities}</div></div>
+  <div class="card"><div class="label">Runners</div><div class="value">${m.runnersConnected}</div></div>
+  <div class="card"><div class="label">Dark Circles</div><div class="value">${m.darkCircles}</div></div>
+</div>
+
+<h2>📊 Task Stats</h2>
+<div class="grid">
+  <div class="card"><div class="label">Total Tasks</div><div class="value">${m.tasksTotal}</div></div>
+  <div class="card"><div class="label">Success</div><div class="value ok">${m.tasksSuccess}</div></div>
+  <div class="card"><div class="label">Errors</div><div class="value err">${m.tasksError}</div></div>
+  <div class="card"><div class="label">Success Rate</div><div class="value">${m.successRate}</div></div>
+  <div class="card"><div class="label">Avg Latency</div><div class="value">${m.avgExecutionMs}ms</div></div>
+  <div class="card"><div class="label">Pending</div><div class="value warn">${m.tasksPending}</div></div>
+</div>
+
+<h2>🤖 Per-Agent Stats</h2>
+<table><tr><th>Agent</th><th>Total</th><th>✓</th><th>✗</th><th>Avg ms</th><th>Last Seen</th></tr>
+${perAgent.length > 0 ? perAgent.map(a => `<tr>
+  <td>${a.name}<span class="dim">@${a.hub}</span></td>
+  <td>${a.tasksTotal}</td>
+  <td class="ok">${a.tasksSuccess}</td>
+  <td class="err">${a.tasksError + a.tasksTimeout}</td>
+  <td>${a.avgExecutionMs}</td>
+  <td class="dim">${a.lastSeen ? this._fmtTime(a.lastSeen) : '—'}</td>
+</tr>`).join('') : '<tr><td colspan="6" class="dim">No tasks executed yet</td></tr>'}
+</table>
+
+<h2>🌐 Peers</h2>
+<table><tr><th>Hub</th><th>Address</th><th>Agents</th><th>Last Seen</th></tr>
+${peers.map(p => `<tr>
+  <td>${p.hub}</td>
+  <td class="dim">${p.address}</td>
+  <td>${p.agentCount ?? '?'}</td>
+  <td class="dim">${this._fmtTime(p.lastSeen)}</td>
+</tr>`).join('') || '<tr><td colspan="4" class="dim">No peers connected</td></tr>'}
+</table>
+
+${pending.length > 0 ? `<h2>⏳ Pending Tasks</h2>
+<table><tr><th>ID</th><th>Target</th><th>Command</th><th>Age</th></tr>
+${pending.map(t => `<tr>
+  <td class="dim">${t.id.substring(0, 8)}...</td>
+  <td>${t.target}</td>
+  <td>${t.command}</td>
+  <td>${(t.age_ms / 1000).toFixed(1)}s</td>
+</tr>`).join('')}</table>` : ''}
+
+<script>setTimeout(() => location.reload(), 10000)</script>
+</body></html>`)
+  }
+
+  // ── Helpers for dashboard ──────────────────────────────────────────────────
+
+  private _fmtUptime(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+
+  private _fmtTime(iso: string | null | undefined): string {
+    if (!iso) return '—'
+    try {
+      const d = new Date(iso)
+      return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+    } catch {
+      return iso
+    }
   }
 
   private log(msg: string): void {
