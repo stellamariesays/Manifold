@@ -8,6 +8,8 @@ import { MeshSync } from './mesh-sync.js'
 import { RestApi } from './rest-api.js'
 import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
+import { TaskHistory } from './task-history.js'
+import { MetricsCollector } from './metrics.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
@@ -73,6 +75,8 @@ export class ManifoldServer extends EventEmitter {
   readonly meshSync: MeshSync
   readonly restApi: RestApi
   readonly taskRouter: TaskRouter
+  readonly taskHistory: TaskHistory
+  readonly metrics: MetricsCollector
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -122,6 +126,13 @@ export class ManifoldServer extends EventEmitter {
       debug: this.config.debug,
     })
 
+    this.taskHistory = new TaskHistory({
+      dataDir: './data/task-history',
+      debug: this.config.debug,
+    })
+
+    this.metrics = new MetricsCollector(this.hub)
+
     this._wirePeerRegistry()
   }
 
@@ -155,7 +166,7 @@ export class ManifoldServer extends EventEmitter {
 
     // 4. Start REST API
     if (this.config.restEnabled) {
-      await this.restApi.start(this.capIndex, this.peerRegistry, this.meshSync, this.taskRouter)
+      await this.restApi.start(this.capIndex, this.peerRegistry, this.meshSync, this.taskRouter, this.taskHistory, this.metrics)
     }
 
     // 5. Connect to static peers
@@ -168,6 +179,26 @@ export class ManifoldServer extends EventEmitter {
 
     // 7. Start task router
     this.taskRouter.start(this.capIndex, this.peerRegistry)
+
+    // 8. Start task history
+    await this.taskHistory.start()
+
+    // 9. Start metrics collector
+    this.metrics.start(this.taskRouter, this.peerRegistry, this.capIndex, this.taskHistory)
+
+    // Wire task completion to history
+    this.taskRouter.on('task:complete', ({ result }) => {
+      this.taskHistory.record({
+        id: result.id,
+        target: result.executed_by ?? 'unknown',
+        command: '(task)',
+        status: result.status,
+        execution_ms: result.execution_ms,
+        error: result.error,
+        hub: this.hub,
+        timestamp: result.completed_at,
+      })
+    })
 
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
   }
