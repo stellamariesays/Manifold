@@ -2,6 +2,8 @@ import express, { type Request, type Response, type Router } from 'express'
 import type { CapabilityIndex } from './capability-index.js'
 import type { PeerRegistry } from './peer-registry.js'
 import type { MeshSync } from './mesh-sync.js'
+import type { TaskRouter } from './task-router.js'
+import type { TaskRequest, TaskResult } from '../protocol/messages.js'
 
 export interface RestApiOptions {
   hub: string
@@ -20,6 +22,7 @@ export class RestApi {
   private capIndex!: CapabilityIndex
   private peerRegistry!: PeerRegistry
   private meshSync!: MeshSync
+  private taskRouter!: TaskRouter
   private startTime = Date.now()
 
   constructor(options: RestApiOptions) {
@@ -29,10 +32,11 @@ export class RestApi {
     this._setup()
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync): Promise<void> {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter): Promise<void> {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
     this.meshSync = meshSync
+    this.taskRouter = taskRouter
 
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
@@ -72,6 +76,9 @@ export class RestApi {
     router.get('/mesh', this._mesh.bind(this))
     router.post('/query', this._query.bind(this))
     router.post('/route', this._route.bind(this))
+    router.post('/task', this._submitTask.bind(this))
+    router.get('/task/:id', this._taskStatus.bind(this))
+    router.get('/tasks', this._pendingTasks.bind(this))
 
     this.app.use('/', router)
   }
@@ -211,6 +218,105 @@ export class RestApi {
       hub: agent.hub,
       isLocal: agent.isLocal,
       message: 'Route acknowledged (WebSocket routing in Phase 2)',
+    })
+  }
+
+  /**
+   * POST /task — submit a task for execution.
+   * Blocks until result is available (with timeout).
+   */
+  private _submitTask(req: Request, res: Response): void {
+    const { target, command, args, timeout_ms, capability } = req.body as {
+      target?: string
+      command?: string
+      args?: Record<string, unknown>
+      timeout_ms?: number
+      capability?: string
+    }
+
+    if (!command) {
+      res.status(400).json({ error: 'command is required' })
+      return
+    }
+
+    const resolvedTarget = target ?? 'any'
+    const task: TaskRequest = {
+      id: crypto.randomUUID(),
+      target: resolvedTarget,
+      capability,
+      command,
+      args,
+      timeout_ms: timeout_ms ?? 30_000,
+      origin: this.hub,
+      caller: `${this.hub}`,
+      created_at: new Date().toISOString(),
+    }
+
+    // For "any" target with capability, resolve to best agent
+    if (resolvedTarget === 'any' && capability) {
+      const agents = this.capIndex.findByCapability(capability)
+      if (agents.length === 0) {
+        res.status(404).json({ error: `No agent found with capability: ${capability}` })
+        return
+      }
+      // Prefer local agents
+      const local = agents.find(a => a.isLocal)
+      const chosen = local ?? agents[0]
+      task.target = `${chosen.name}@${chosen.hub}`
+    } else if (resolvedTarget === 'any') {
+      res.status(400).json({ error: 'capability is required when target is "any"' })
+      return
+    }
+
+    // Set up response handler
+    const onResult = (result: { result: TaskResult; task: TaskRequest }) => {
+      if (result.task.id === task.id) {
+        clearTimeout(timeout)
+        this.taskRouter.removeListener('task:complete', onResult)
+        res.json({
+          task_id: result.result.id,
+          status: result.result.status,
+          output: result.result.output,
+          error: result.result.error,
+          executed_by: result.result.executed_by,
+          execution_ms: result.result.execution_ms,
+          completed_at: result.result.completed_at,
+        })
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      this.taskRouter.removeListener('task:complete', onResult)
+      res.json({
+        task_id: task.id,
+        status: 'timeout',
+        error: 'Task timed out waiting for result',
+        target: task.target,
+      })
+    }, task.timeout_ms! + 2000)
+
+    this.taskRouter.on('task:complete', onResult)
+
+    // Route the task — if local and no runner, routeTask will emit task:complete with not_found immediately
+    this.taskRouter.routeTask(task, null)
+  }
+
+  /**
+   * GET /task/:id — check task status.
+   */
+  private _taskStatus(req: Request, res: Response): void {
+    const id = String(req.params['id'] ?? '')
+    const status = this.taskRouter.getTaskStatus(id)
+    res.json({ task_id: id, status })
+  }
+
+  /**
+   * GET /tasks — list pending tasks.
+   */
+  private _pendingTasks(_req: Request, res: Response): void {
+    res.json({
+      pending: this.taskRouter.getPendingTasks(),
+      runner_count: this.taskRouter.runnerCount,
     })
   }
 
