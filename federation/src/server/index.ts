@@ -7,12 +7,15 @@ import { CapabilityIndex } from './capability-index.js'
 import { MeshSync } from './mesh-sync.js'
 import { RestApi } from './rest-api.js'
 import { PythonBridge } from './python-bridge.js'
+import { TaskRouter } from './task-router.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
   CapabilityQueryMessage,
   AgentRequestMessage,
   MeshSyncMessage,
+  TaskRequest,
+  TaskResult,
 } from '../protocol/messages.js'
 import type { ServerEvents, MeshStatus, PeerInfo, AgentResult } from '../shared/types.js'
 import type { PeerEntry } from './peer-registry.js'
@@ -69,6 +72,7 @@ export class ManifoldServer extends EventEmitter {
   readonly capIndex: CapabilityIndex
   readonly meshSync: MeshSync
   readonly restApi: RestApi
+  readonly taskRouter: TaskRouter
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -112,6 +116,12 @@ export class ManifoldServer extends EventEmitter {
       debug: this.config.debug,
     })
 
+    this.taskRouter = new TaskRouter({
+      hub: this.hub,
+      defaultTimeoutMs: 30_000,
+      debug: this.config.debug,
+    })
+
     this._wirePeerRegistry()
   }
 
@@ -145,7 +155,7 @@ export class ManifoldServer extends EventEmitter {
 
     // 4. Start REST API
     if (this.config.restEnabled) {
-      await this.restApi.start(this.capIndex, this.peerRegistry, this.meshSync)
+      await this.restApi.start(this.capIndex, this.peerRegistry, this.meshSync, this.taskRouter)
     }
 
     // 5. Connect to static peers
@@ -156,6 +166,9 @@ export class ManifoldServer extends EventEmitter {
     // 6. Start periodic mesh sync
     this.meshSync.start(this.capIndex, this.peerRegistry)
 
+    // 7. Start task router
+    this.taskRouter.start(this.capIndex, this.peerRegistry)
+
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
   }
 
@@ -165,6 +178,7 @@ export class ManifoldServer extends EventEmitter {
 
     this.meshSync.stop()
     this.peerRegistry.stop()
+    this.taskRouter.stop()
     this.pythonBridge?.stop()
 
     if (this.config.restEnabled) {
@@ -300,16 +314,39 @@ export class ManifoldServer extends EventEmitter {
     })
   }
 
-  private _handleClientMessage(msg: FederationMessage, ws: WebSocket): void {
-    switch (msg.type) {
+  private _handleClientMessage(msg: FederationMessage | Record<string, any>, ws: WebSocket): void {
+    // Handle Phase 2 task messages
+    const msgType = (msg as Record<string, any>).type as string
+
+    if (msgType === 'task_request') {
+      const task = (msg as any).task as TaskRequest
+      this.taskRouter.routeTask(task, ws)
+      return
+    }
+
+    if (msgType === 'task_result') {
+      const result = (msg as any).result as TaskResult
+      this.taskRouter.handleResult(result)
+      return
+    }
+
+    if (msgType === 'agent_runner_ready') {
+      const agents = (msg as any).agents as string[]
+      this.taskRouter.registerRunner(ws, agents)
+      return
+    }
+
+    // Phase 1 message handling
+    const fedMsg = msg as FederationMessage
+    switch (fedMsg.type) {
       case 'mesh_sync':
-        this._handleMeshSync(msg)
+        this._handleMeshSync(fedMsg)
         break
       case 'capability_query':
-        this._handleCapabilityQuery(msg, ws)
+        this._handleCapabilityQuery(fedMsg, ws)
         break
       case 'agent_request':
-        this._handleAgentRequest(msg, ws)
+        this._handleAgentRequest(fedMsg, ws)
         break
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
@@ -417,9 +454,25 @@ export class ManifoldServer extends EventEmitter {
   }
 
   private _wirePeerRegistry(): void {
-    this.peerRegistry.on('message', (msg: FederationMessage, _peer: PeerEntry) => {
-      if (msg.type === 'mesh_sync') {
-        this._handleMeshSync(msg)
+    this.peerRegistry.on('message', (msg: FederationMessage | Record<string, any>, _peer: PeerEntry) => {
+      const msgType = (msg as Record<string, any>).type as string
+
+      // Handle Phase 2 task messages from remote peers
+      if (msgType === 'task_request') {
+        const task = (msg as any).task as TaskRequest
+        // Remote task — no replyTo WebSocket (result goes back via peer)
+        this.taskRouter.routeTask(task, null)
+        return
+      }
+
+      if (msgType === 'task_result') {
+        const result = (msg as any).result as TaskResult
+        this.taskRouter.handleResult(result)
+        return
+      }
+
+      if (msgType === 'mesh_sync') {
+        this._handleMeshSync(msg as MeshSyncMessage)
       }
     })
 
