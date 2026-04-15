@@ -14,6 +14,11 @@ export type MessageType =
   | 'ping'
   | 'pong'
   | 'error'
+  // Phase 3: Detection-Coordination
+  | 'detection_claim'
+  | 'detection_verify'
+  | 'detection_challenge'
+  | 'detection_outcome'
 
 export interface BaseMessage {
   type: MessageType
@@ -190,6 +195,95 @@ export interface ErrorMessage extends BaseMessage {
 
 // ── Union ──────────────────────────────────────────────────────────────────────
 
+// ── Detection Coordination (Phase 3) ────────────────────────────────────────
+//
+// Propagates detection claims across the federation mesh.
+// Detectors post claims, validators verify or challenge, outcomes close the loop.
+
+export interface DetectionClaim {
+  /** Unique claim ID */
+  id: string
+  /** Detector that made the claim: "detector-name@hub" */
+  source: string
+  /** Domain: "solar", "market", "mesh", "security", "deployment" */
+  domain: string
+  /** Human-readable summary */
+  summary: string
+  /** Confidence 0-1 */
+  confidence: number
+  /** SHA-256 hash of supporting evidence (data fingerprint, not raw data) */
+  evidence_hash: string
+  /** ISO timestamp */
+  created_at: string
+  /** Optional: TTL in seconds before claim expires */
+  ttl_seconds?: number
+  /** Optional: structured evidence payload */
+  evidence?: Record<string, unknown>
+}
+
+export interface DetectionVerify {
+  /** Claim being verified */
+  claim_id: string
+  /** Verifier identity */
+  verifier: string
+  /** Agreement: true = confirms, false = disputes */
+  agrees: boolean
+  /** Verifier's own confidence 0-1 */
+  confidence: number
+  /** Optional notes */
+  notes?: string
+  /** ISO timestamp */
+  verified_at: string
+}
+
+export interface DetectionChallenge {
+  /** Claim being challenged */
+  claim_id: string
+  /** Challenger identity */
+  challenger: string
+  /** Reason for challenge */
+  reason: string
+  /** Counter-evidence hash */
+  counter_evidence_hash?: string
+  /** ISO timestamp */
+  challenged_at: string
+}
+
+export interface DetectionOutcome {
+  /** Original claim ID */
+  claim_id: string
+  /** "confirmed" | "false_positive" | "expired" | "superseded" */
+  outcome: 'confirmed' | 'false_positive' | 'expired' | 'superseded'
+  /** Agent or human that determined the outcome */
+  resolved_by: string
+  /** ISO timestamp */
+  resolved_at: string
+  /** Optional outcome notes */
+  notes?: string
+  /** Superseding claim ID if outcome is "superseded" */
+  superseded_by?: string
+}
+
+export interface DetectionClaimMessage extends BaseMessage {
+  type: 'detection_claim'
+  claim: DetectionClaim
+}
+
+export interface DetectionVerifyMessage extends BaseMessage {
+  type: 'detection_verify'
+  verification: DetectionVerify
+}
+
+export interface DetectionChallengeMessage extends BaseMessage {
+  type: 'detection_challenge'
+  challenge: DetectionChallenge
+}
+
+export interface DetectionOutcomeMessage extends BaseMessage {
+  type: 'detection_outcome'
+  outcome: DetectionOutcome
+}
+
 export type FederationMessage =
   | PeerAnnounceMessage
   | PeerByeMessage
@@ -204,3 +298,8 @@ export type FederationMessage =
   | PingMessage
   | PongMessage
   | ErrorMessage
+  // Phase 3
+  | DetectionClaimMessage
+  | DetectionVerifyMessage
+  | DetectionChallengeMessage
+  | DetectionOutcomeMessage

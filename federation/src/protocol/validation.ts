@@ -145,6 +145,66 @@ const AgentRunnerReadySchema = z.object({
   agents: z.array(z.string()),
 })
 
+// ── Phase 3: Detection-Coordination schemas ────────────────────────────────────
+
+const DetectionClaimSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  domain: z.string(),
+  summary: z.string(),
+  confidence: z.number().min(0).max(1),
+  evidence_hash: z.string(),
+  created_at: z.string(),
+  ttl_seconds: z.number().positive().optional(),
+  evidence: z.record(z.unknown()).optional(),
+})
+
+const DetectionVerifySchema = z.object({
+  claim_id: z.string(),
+  verifier: z.string(),
+  agrees: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  notes: z.string().optional(),
+  verified_at: z.string(),
+})
+
+const DetectionChallengeSchema = z.object({
+  claim_id: z.string(),
+  challenger: z.string(),
+  reason: z.string(),
+  counter_evidence_hash: z.string().optional(),
+  challenged_at: z.string(),
+})
+
+const DetectionOutcomeSchema = z.object({
+  claim_id: z.string(),
+  outcome: z.enum(['confirmed', 'false_positive', 'expired', 'superseded']),
+  resolved_by: z.string(),
+  resolved_at: z.string(),
+  notes: z.string().optional(),
+  superseded_by: z.string().optional(),
+})
+
+const DetectionClaimMessageSchema = z.object({
+  type: z.literal('detection_claim'),
+  claim: DetectionClaimSchema,
+})
+
+const DetectionVerifyMessageSchema = z.object({
+  type: z.literal('detection_verify'),
+  verification: DetectionVerifySchema,
+})
+
+const DetectionChallengeMessageSchema = z.object({
+  type: z.literal('detection_challenge'),
+  challenge: DetectionChallengeSchema,
+})
+
+const DetectionOutcomeMessageSchema = z.object({
+  type: z.literal('detection_outcome'),
+  outcome: DetectionOutcomeSchema,
+})
+
 // ── Discriminated union validator ──────────────────────────────────────────────
 
 const FederationMessageSchema = z.discriminatedUnion('type', [
@@ -164,6 +224,11 @@ const FederationMessageSchema = z.discriminatedUnion('type', [
   TaskResultSchema,
   TaskAckSchema,
   AgentRunnerReadySchema,
+  // Phase 3
+  DetectionClaimMessageSchema,
+  DetectionVerifyMessageSchema,
+  DetectionChallengeMessageSchema,
+  DetectionOutcomeMessageSchema,
 ])
 
 export function validateMessage(raw: unknown): FederationMessage {
