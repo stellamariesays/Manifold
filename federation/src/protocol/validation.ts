@@ -98,9 +98,52 @@ const ErrorSchema = z.object({
   requestId: z.string().optional(),
 })
 
+// ── Phase 2: Task Execution schemas ────────────────────────────────────────────
+
+const TaskRequestSchema = z.object({
+  type: z.literal('task_request'),
+  task: z.object({
+    id: z.string(),
+    target: z.string(),
+    capability: z.string().optional(),
+    command: z.string(),
+    args: z.record(z.unknown()).optional(),
+    timeout_ms: z.number().positive().optional(),
+    origin: z.string().optional(),
+    caller: z.string().optional(),
+    created_at: z.string().optional(),
+  }),
+})
+
+const TaskResultSchema = z.object({
+  type: z.literal('task_result'),
+  result: z.object({
+    id: z.string(),
+    status: z.enum(['success', 'error', 'timeout', 'not_found', 'rejected']),
+    output: z.unknown().optional(),
+    error: z.string().optional(),
+    executed_by: z.string().optional(),
+    execution_ms: z.number().optional(),
+    completed_at: z.string(),
+  }),
+})
+
+const TaskAckSchema = z.object({
+  type: z.literal('task_ack'),
+  task_id: z.string(),
+  queue_position: z.number().optional(),
+})
+
+const AgentRunnerReadySchema = z.object({
+  type: z.literal('agent_runner_ready'),
+  hub: z.string().optional(),
+  agents: z.array(z.string()),
+})
+
 // ── Discriminated union validator ──────────────────────────────────────────────
 
 const FederationMessageSchema = z.discriminatedUnion('type', [
+  // Phase 1
   PeerAnnounceSchema,
   PeerByeSchema,
   CapabilityQuerySchema,
@@ -111,6 +154,11 @@ const FederationMessageSchema = z.discriminatedUnion('type', [
   PingSchema,
   PongSchema,
   ErrorSchema,
+  // Phase 2
+  TaskRequestSchema,
+  TaskResultSchema,
+  TaskAckSchema,
+  AgentRunnerReadySchema,
 ])
 
 export function validateMessage(raw: unknown): FederationMessage {
