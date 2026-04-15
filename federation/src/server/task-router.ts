@@ -21,6 +21,8 @@ import type {
 } from '../protocol/messages.js'
 import type { CapabilityIndex } from './capability-index.js'
 import type { PeerRegistry } from './peer-registry.js'
+import type { TaskAllowlist } from './security.js'
+import type { RateLimiter } from './security.js'
 
 export interface PendingTask {
   task: TaskRequest
@@ -56,6 +58,8 @@ export class TaskRouter extends EventEmitter {
 
   private capIndex!: CapabilityIndex
   private peerRegistry!: PeerRegistry
+  private allowlist!: TaskAllowlist | null
+  private rateLimiter!: RateLimiter | null
 
   constructor(options: TaskRouterOptions) {
     super()
@@ -65,9 +69,11 @@ export class TaskRouter extends EventEmitter {
     this.debug = options.debug ?? false
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry): void {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, allowlist?: TaskAllowlist, rateLimiter?: RateLimiter): void {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
+    this.allowlist = allowlist ?? null
+    this.rateLimiter = rateLimiter ?? null
     this.log('Task router started')
   }
 
@@ -101,13 +107,42 @@ export class TaskRouter extends EventEmitter {
   /**
    * Route a task_request. Called when the server receives one from any source.
    */
-  routeTask(task: TaskRequest, replyTo: WebSocket | null): void {
+  routeTask(task: TaskRequest, replyTo: WebSocket | null, sourceHub?: string): void {
     // Parse target
     const [agentName, targetHub] = task.target.includes('@')
       ? task.target.split('@')
       : [task.target, this.hub]
 
     const resolvedHub = targetHub ?? this.hub
+
+    // Security: check allowlist for remote tasks
+    if (sourceHub && this.allowlist) {
+      if (!this.allowlist.isAllowed(sourceHub, task.target)) {
+        const result: TaskResult = {
+          id: task.id,
+          status: 'rejected',
+          error: `Hub ${sourceHub} is not allowed to target ${task.target}`,
+          completed_at: new Date().toISOString(),
+        }
+        this.sendResult(result, replyTo)
+        this.emit('task:complete', { result, task })
+        return
+      }
+    }
+
+    // Security: rate limit check
+    const rateKey = sourceHub ?? 'local'
+    if (this.rateLimiter && !this.rateLimiter.check(rateKey)) {
+      const result: TaskResult = {
+        id: task.id,
+        status: 'rejected',
+        error: `Rate limit exceeded for ${rateKey}`,
+        completed_at: new Date().toISOString(),
+      }
+      this.sendResult(result, replyTo)
+      this.emit('task:complete', { result, task })
+      return
+    }
 
     // Check if we already have this task (dedup)
     if (this.pending.has(task.id)) {

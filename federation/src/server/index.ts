@@ -10,6 +10,7 @@ import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
+import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
@@ -57,6 +58,9 @@ export interface ManifoldServerConfig {
   /** Whether to expose REST API. Default true. */
   restEnabled?: boolean
 
+  /** Security configuration */
+  security?: SecurityConfig
+
   debug?: boolean
 }
 
@@ -77,6 +81,8 @@ export class ManifoldServer extends EventEmitter {
   readonly taskRouter: TaskRouter
   readonly taskHistory: TaskHistory
   readonly metrics: MetricsCollector
+  readonly allowlist: TaskAllowlist
+  readonly rateLimiter: RateLimiter
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -93,6 +99,7 @@ export class ManifoldServer extends EventEmitter {
       atlasPath: '',
       syncIntervalMs: 15_000,
       restEnabled: true,
+      security: {},
       debug: false,
       ...config,
     }
@@ -133,6 +140,12 @@ export class ManifoldServer extends EventEmitter {
 
     this.metrics = new MetricsCollector(this.hub)
 
+    this.allowlist = new TaskAllowlist(this.config.security?.allowedTargets)
+    this.rateLimiter = new RateLimiter(
+      this.config.security?.rateLimitPerHub ?? 60,
+      60_000, // 1 minute window
+    )
+
     this._wirePeerRegistry()
   }
 
@@ -166,7 +179,11 @@ export class ManifoldServer extends EventEmitter {
 
     // 4. Start REST API
     if (this.config.restEnabled) {
-      await this.restApi.start(this.capIndex, this.peerRegistry, this.meshSync, this.taskRouter, this.taskHistory, this.metrics)
+      await this.restApi.start(
+        this.capIndex, this.peerRegistry, this.meshSync,
+        this.taskRouter, this.taskHistory, this.metrics,
+        this.config.security,
+      )
     }
 
     // 5. Connect to static peers
@@ -178,7 +195,7 @@ export class ManifoldServer extends EventEmitter {
     this.meshSync.start(this.capIndex, this.peerRegistry)
 
     // 7. Start task router
-    this.taskRouter.start(this.capIndex, this.peerRegistry)
+    this.taskRouter.start(this.capIndex, this.peerRegistry, this.allowlist, this.rateLimiter)
 
     // 8. Start task history
     await this.taskHistory.start()
@@ -491,8 +508,8 @@ export class ManifoldServer extends EventEmitter {
       // Handle Phase 2 task messages from remote peers
       if (msgType === 'task_request') {
         const task = (msg as any).task as TaskRequest
-        // Remote task — no replyTo WebSocket (result goes back via peer)
-        this.taskRouter.routeTask(task, null)
+        // Remote task — pass source hub for allowlist check
+        this.taskRouter.routeTask(task, null, _peer.hub)
         return
       }
 
