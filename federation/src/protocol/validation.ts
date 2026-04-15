@@ -112,6 +112,11 @@ const TaskRequestSchema = z.object({
     origin: z.string().optional(),
     caller: z.string().optional(),
     created_at: z.string().optional(),
+    teacup: z.object({
+      trigger: z.string(),
+      ground_state: z.string().optional(),
+      observation: z.string().optional(),
+    }).optional(),
   }),
 })
 

@@ -204,16 +204,18 @@ export class ManifoldServer extends EventEmitter {
     this.metrics.start(this.taskRouter, this.peerRegistry, this.capIndex, this.taskHistory)
 
     // Wire task completion to history
-    this.taskRouter.on('task:complete', ({ result }) => {
+    this.taskRouter.on('task:complete', ({ result, task }) => {
       this.taskHistory.record({
         id: result.id,
-        target: result.executed_by ?? 'unknown',
-        command: '(task)',
+        target: task.target,
+        command: task.command,
+        args: task.args as Record<string, any> | undefined,
         status: result.status,
         execution_ms: result.execution_ms,
         error: result.error,
         hub: this.hub,
         timestamp: result.completed_at,
+        teacup: task.teacup,
       })
     })
 

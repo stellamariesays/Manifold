@@ -94,6 +94,8 @@ export class RestApi {
     router.get('/tasks', this._pendingTasks.bind(this))
     router.get('/metrics', this._metrics.bind(this))
     router.get('/task-history', this._taskHistory.bind(this))
+    router.get('/teacups', this._teacups.bind(this))
+    router.post('/teacup/:id/score', this._scoreTeacup.bind(this))
     router.get('/dashboard', this._dashboard.bind(this))
 
     this.app.use('/', router)
@@ -242,12 +244,13 @@ export class RestApi {
    * Blocks until result is available (with timeout).
    */
   private _submitTask(req: Request, res: Response): void {
-    const { target, command, args, timeout_ms, capability } = req.body as {
+    const { target, command, args, timeout_ms, capability, teacup } = req.body as {
       target?: string
       command?: string
       args?: Record<string, unknown>
       timeout_ms?: number
       capability?: string
+      teacup?: { trigger: string; ground_state?: string; observation?: string }
     }
 
     if (!command) {
@@ -266,6 +269,7 @@ export class RestApi {
       origin: this.hub,
       caller: `${this.hub}`,
       created_at: new Date().toISOString(),
+      teacup,
     }
 
     // For "any" target with capability, resolve to best agent
@@ -334,6 +338,38 @@ export class RestApi {
       pending: this.taskRouter.getPendingTasks(),
       runner_count: this.taskRouter.runnerCount,
     })
+  }
+
+  /**
+   * GET /teacups — teacup entries (tasks with concrete context).
+   * Query params: ?limit=N
+   */
+  private async _teacups(req: Request, res: Response): Promise<void> {
+    const limit = parseInt(String(req.query['limit'] ?? '20'), 10)
+    const entries = await this.taskHistory.getTeacups(limit)
+    res.json({ count: entries.length, entries })
+  }
+
+  /**
+   * POST /teacup/:id/score — score a teacup outcome.
+   * Body: { score: +1|-1|0, scored_by: "hal"|"auto"|"terrain" }
+   */
+  private async _scoreTeacup(req: Request, res: Response): Promise<void> {
+    const id = String(req.params['id'] ?? '')
+    const { score, scored_by } = req.body
+
+    if (typeof score !== 'number' || ![-1, 0, 1].includes(score)) {
+      res.status(400).json({ error: 'score must be -1, 0, or 1' })
+      return
+    }
+
+    const found = await this.taskHistory.scoreOutcome(id, score, String(scored_by ?? 'unknown'))
+    if (!found) {
+      res.status(404).json({ error: 'Task not found or already scored' })
+      return
+    }
+
+    res.json({ ok: true, id, score, scored_by })
   }
 
   /**

@@ -110,6 +110,12 @@ export interface TaskRequest {
   caller: string
   /** Timestamp when request was created */
   created_at: string
+  /** The teacup — concrete context for why this task was submitted */
+  teacup?: {
+    trigger: string
+    ground_state?: string
+    observation?: string
+  }
 }
 
 export interface TaskResult {

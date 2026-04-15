@@ -1,7 +1,12 @@
 /**
  * Task History — append-only JSONL log of all task executions.
  *
- * Each entry: { id, target, command, status, execution_ms, timestamp, hub, error? }
+ * Each entry: { id, target, command, status, execution_ms, timestamp, hub, error?, teacup? }
+ *
+ * The teacup: the concrete moment — what the agent was looking at,
+ * what triggered the action, what the ground state was. Not a summary.
+ * The door, not the insight.
+ *
  * Rotates daily. Survives restarts. Queryable via REST /task-history.
  */
 
@@ -9,16 +14,38 @@ import { appendFile, mkdir, readdir, readFile, stat } from 'fs/promises'
 import { join } from 'path'
 import type { TaskResult } from '../protocol/messages.js'
 
+/**
+ * The concrete moment that grounded a decision or action.
+ * Not a summary — the specific thing the agent was holding when it acted.
+ */
+export interface Teacup {
+  /** What triggered this action — the specific signal, not the abstraction */
+  trigger: string
+  /** What the agent was observing when it acted */
+  ground_state?: string
+  /** Raw output or observation — the actual data, not processed */
+  observation?: string
+  /** Outcome scored after the fact: +1 good, -1 bad, 0 neutral, null unscored */
+  outcome_score?: number | null
+  /** Who scored the outcome (human name, 'auto', 'terrain-delta') */
+  scored_by?: string
+  /** Timestamp when outcome was scored */
+  scored_at?: string
+}
+
 export interface TaskHistoryEntry {
   id: string
   target: string
   command: string
+  args?: Record<string, any>
   status: string
   execution_ms?: number
   error?: string
   hub: string
   runner?: string
   timestamp: string
+  /** The teacup — concrete context for this action */
+  teacup?: Teacup
 }
 
 export interface TaskHistoryOptions {
@@ -109,6 +136,48 @@ export class TaskHistory {
       totalErrors: this.totalErrors,
       successRate: `${rate}%`,
     }
+  }
+
+  /** Score an existing task's outcome after the fact */
+  async scoreOutcome(taskId: string, score: number, scoredBy: string): Promise<boolean> {
+    const files = await this._getLogFiles()
+    // Search most recent files first
+    for (const file of files.reverse()) {
+      const filePath = join(this.dataDir, file)
+      try {
+        const content = await readFile(filePath, 'utf-8')
+        const lines = content.trim().split('\n')
+        let found = false
+        const updated = lines.map(line => {
+          try {
+            const entry = JSON.parse(line)
+            if (entry.id === taskId && !entry.teacup?.outcome_score) {
+              entry.teacup = entry.teacup ?? { trigger: '(recorded without teacup)' }
+              entry.teacup.outcome_score = score
+              entry.teacup.scored_by = scoredBy
+              entry.teacup.scored_at = new Date().toISOString()
+              found = true
+            }
+            return JSON.stringify(entry)
+          } catch { return line }
+        }).join('\n') + '\n'
+
+        if (found) {
+          const { writeFile } = await import('fs/promises')
+          await writeFile(filePath, updated, 'utf-8')
+          return true
+        }
+      } catch { /* skip */ }
+    }
+    return false
+  }
+
+  /** Get teacups — entries with teacup context, sorted by most recent */
+  async getTeacups(limit: number = 20): Promise<Array<TaskHistoryEntry & { teacup: Teacup }>> {
+    const entries = await this.getRecent(limit * 3) // overfetch since not all have teacups
+    return entries
+      .filter((e): e is TaskHistoryEntry & { teacup: Teacup } => e.teacup != null)
+      .slice(0, limit)
   }
 
   /** Clean old log files beyond retention */
