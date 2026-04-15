@@ -5,6 +5,8 @@ import type { MeshSync } from './mesh-sync.js'
 import type { TaskRouter } from './task-router.js'
 import type { TaskHistory } from './task-history.js'
 import type { MetricsCollector } from './metrics.js'
+import type { SecurityConfig } from './security.js'
+import { createAuthMiddleware } from './security.js'
 import type { TaskRequest, TaskResult } from '../protocol/messages.js'
 
 export interface RestApiOptions {
@@ -36,13 +38,18 @@ export class RestApi {
     this._setup()
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector): Promise<void> {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector, security?: SecurityConfig): Promise<void> {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
     this.meshSync = meshSync
     this.taskRouter = taskRouter
     this.taskHistory = taskHistory
     this.metrics = metrics
+
+    // Apply auth middleware if configured
+    if (security?.apiKey) {
+      this.app.use(createAuthMiddleware(security))
+    }
 
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
