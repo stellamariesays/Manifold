@@ -275,15 +275,7 @@ export class ManifoldServer extends EventEmitter {
         ws.on('message', (data) => {
           const raw = typeof data === 'string' ? data : data.toString()
           const msg = parseMessage(raw)
-          if (msg) {
-            this._handleClientMessage(msg, ws)
-          } else {
-            // Phase 2 messages not in validation schema — try raw
-            try {
-              const parsed = JSON.parse(raw)
-              if (parsed.type) this._handleClientMessage(parsed, ws)
-            } catch { /* ignore */ }
-          }
+          if (msg) this._handleClientMessage(msg, ws)
         })
       })
 
@@ -306,14 +298,7 @@ export class ManifoldServer extends EventEmitter {
         ws.on('message', (data) => {
           const raw = typeof data === 'string' ? data : data.toString()
           const msg = parseMessage(raw)
-          if (msg) {
-            this._handleClientMessage(msg, ws)
-          } else {
-            try {
-              const parsed = JSON.parse(raw)
-              if (parsed.type) this._handleClientMessage(parsed, ws)
-            } catch { /* ignore */ }
-          }
+          if (msg) this._handleClientMessage(msg, ws)
         })
 
         ws.on('error', (err) => {
