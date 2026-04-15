@@ -1,0 +1,15 @@
+{
+  "hub": "<hub-name>",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 30000,
+  "agents": [
+    {
+      "name": "<agent-name>",
+      "script": "<path/to/agent-script.py>",
+      "cwd": "<working-directory>",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1,
+      "env": {}
+    }
+  ]
+}
