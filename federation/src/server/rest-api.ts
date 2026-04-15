@@ -7,6 +7,7 @@ import type { TaskHistory } from './task-history.js'
 import type { MetricsCollector } from './metrics.js'
 import type { SecurityConfig } from './security.js'
 import { createAuthMiddleware } from './security.js'
+import type { DetectionCoord } from './detection-coord.js'
 import type { TaskRequest, TaskResult } from '../protocol/messages.js'
 
 export interface RestApiOptions {
@@ -29,6 +30,7 @@ export class RestApi {
   private taskRouter!: TaskRouter
   private taskHistory!: TaskHistory
   private metrics!: MetricsCollector
+  private detectionCoord!: DetectionCoord
   private startTime = Date.now()
 
   constructor(options: RestApiOptions) {
@@ -38,13 +40,14 @@ export class RestApi {
     this._setup()
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector, security?: SecurityConfig): Promise<void> {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector, security?: SecurityConfig, detectionCoord?: DetectionCoord): Promise<void> {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
     this.meshSync = meshSync
     this.taskRouter = taskRouter
     this.taskHistory = taskHistory
     this.metrics = metrics
+    this.detectionCoord = detectionCoord!
 
     // Apply auth middleware if configured
     if (security?.apiKey) {
@@ -97,6 +100,16 @@ export class RestApi {
     router.get('/teacups', this._teacups.bind(this))
     router.post('/teacup/:id/score', this._scoreTeacup.bind(this))
     router.get('/dashboard', this._dashboard.bind(this))
+
+    // Phase 3: Detection-Coordination endpoints
+    // NOTE: /detections/stats MUST come before /detections/:id (Express matches in order)
+    router.get('/detections/stats', this._detectionStats.bind(this))
+    router.get('/detections', this._detections.bind(this))
+    router.get('/detections/:id', this._detectionDetail.bind(this))
+    router.get('/trust', this._trustScores.bind(this))
+    router.post('/detection/claim', this._submitClaim.bind(this))
+    router.post('/detection/verify', this._submitVerify.bind(this))
+    router.post('/detection/outcome', this._submitOutcome.bind(this))
 
     this.app.use('/', router)
   }
@@ -500,5 +513,158 @@ ${pending.map(t => `<tr>
 
   private log(msg: string): void {
     if (this.debug) console.log(`[RestApi:${this.hub}] ${msg}`)
+  }
+
+  // ── Phase 3: Detection-Coordination handlers ─────────────────────────────
+
+  private _detections(req: Request, res: Response): void {
+    const domain = req.query['domain'] as string | undefined
+    const limit = parseInt(req.query['limit'] as string ?? '20', 10)
+    const open = req.query['open'] === 'true'
+
+    let claims = open
+      ? this.detectionCoord.getOpenClaims(domain)
+      : domain
+        ? this.detectionCoord.getOpenClaims(domain)
+        : this.detectionCoord.ledger.getRecentClaims(limit)
+
+    res.json({
+      claims: claims.slice(0, limit).map(e => ({
+        id: e.claim.id,
+        source: e.claim.source,
+        domain: e.claim.domain,
+        summary: e.claim.summary,
+        confidence: e.claim.confidence,
+        created_at: e.claim.created_at,
+        verifications: e.verifications.length,
+        challenges: e.challenges.length,
+        outcome: e.outcome?.outcome ?? null,
+      })),
+      total: claims.length,
+    })
+  }
+
+  private _detectionDetail(req: Request, res: Response): void {
+    const id = String(req.params['id'] ?? '')
+    const entry = this.detectionCoord.getClaim(id)
+    if (!entry) {
+      res.status(404).json({ error: 'Claim not found' })
+      return
+    }
+    res.json({
+      claim: entry.claim,
+      verifications: entry.verifications,
+      challenges: entry.challenges,
+      outcome: entry.outcome,
+      trust_score: this.detectionCoord.ledger.getTrustScore(entry.claim.source),
+    })
+  }
+
+  private _detectionStats(_req: Request, res: Response): void {
+    res.json(this.detectionCoord.getStats())
+  }
+
+  private _trustScores(_req: Request, res: Response): void {
+    res.json(this.detectionCoord.getTrustScores())
+  }
+
+  private _submitClaim(req: Request, res: Response): void {
+    const { source, domain, summary, confidence, evidence_hash, ttl_seconds, evidence } = req.body as {
+      source?: string
+      domain?: string
+      summary?: string
+      confidence?: number
+      evidence_hash?: string
+      ttl_seconds?: number
+      evidence?: Record<string, unknown>
+    }
+
+    if (!source || !domain || !summary || confidence === undefined) {
+      res.status(400).json({ error: 'source, domain, summary, and confidence are required' })
+      return
+    }
+
+    const claim = {
+      id: crypto.randomUUID(),
+      source,
+      domain,
+      summary,
+      confidence: Math.max(0, Math.min(1, confidence)),
+      evidence_hash: evidence_hash ?? '',
+      created_at: new Date().toISOString(),
+      ttl_seconds,
+      evidence,
+    }
+
+    this.detectionCoord.handleMessage({ type: 'detection_claim', claim })
+
+    res.json({
+      claim_id: claim.id,
+      status: 'recorded',
+      propagated: true,
+    })
+  }
+
+  private _submitVerify(req: Request, res: Response): void {
+    const { claim_id, verifier, agrees, confidence, notes } = req.body as {
+      claim_id?: string
+      verifier?: string
+      agrees?: boolean
+      confidence?: number
+      notes?: string
+    }
+
+    if (!claim_id || !verifier || agrees === undefined) {
+      res.status(400).json({ error: 'claim_id, verifier, and agrees are required' })
+      return
+    }
+
+    const verification = {
+      claim_id,
+      verifier,
+      agrees,
+      confidence: confidence ?? (agrees ? 0.8 : 0.2),
+      notes,
+      verified_at: new Date().toISOString(),
+    }
+
+    this.detectionCoord.handleMessage({ type: 'detection_verify', verification })
+
+    res.json({
+      claim_id,
+      status: 'verified',
+      agrees,
+    })
+  }
+
+  private _submitOutcome(req: Request, res: Response): void {
+    const { claim_id, outcome, resolved_by, notes, superseded_by } = req.body as {
+      claim_id?: string
+      outcome?: 'confirmed' | 'false_positive' | 'expired' | 'superseded'
+      resolved_by?: string
+      notes?: string
+      superseded_by?: string
+    }
+
+    if (!claim_id || !outcome || !resolved_by) {
+      res.status(400).json({ error: 'claim_id, outcome, and resolved_by are required' })
+      return
+    }
+
+    const detectionOutcome = {
+      claim_id,
+      outcome,
+      resolved_by,
+      resolved_at: new Date().toISOString(),
+      notes,
+      superseded_by,
+    }
+
+    this.detectionCoord.handleMessage({ type: 'detection_outcome', outcome: detectionOutcome })
+
+    res.json({
+      claim_id,
+      status: outcome,
+    })
   }
 }

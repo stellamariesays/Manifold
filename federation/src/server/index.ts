@@ -11,6 +11,8 @@ import { TaskRouter } from './task-router.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
+import { DetectionLedger } from './detection-ledger.js'
+import { DetectionCoord } from './detection-coord.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
@@ -83,6 +85,8 @@ export class ManifoldServer extends EventEmitter {
   readonly metrics: MetricsCollector
   readonly allowlist: TaskAllowlist
   readonly rateLimiter: RateLimiter
+  readonly detectionCoord: DetectionCoord
+  readonly detectionLedger: DetectionLedger
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -146,6 +150,16 @@ export class ManifoldServer extends EventEmitter {
       60_000, // 1 minute window
     )
 
+    // Phase 3: Detection-Coordination
+    this.detectionLedger = new DetectionLedger(
+      `./detection-ledger-${this.hub}.jsonl`,
+    )
+    this.detectionCoord = new DetectionCoord({
+      hub: this.hub,
+      ledger: this.detectionLedger,
+      debug: this.config.debug,
+    })
+
     this._wirePeerRegistry()
   }
 
@@ -182,7 +196,7 @@ export class ManifoldServer extends EventEmitter {
       await this.restApi.start(
         this.capIndex, this.peerRegistry, this.meshSync,
         this.taskRouter, this.taskHistory, this.metrics,
-        this.config.security,
+        this.config.security, this.detectionCoord,
       )
     }
 
@@ -217,6 +231,18 @@ export class ManifoldServer extends EventEmitter {
         timestamp: result.completed_at,
         teacup: task.teacup,
       })
+    })
+
+    // 10. Wire detection coordination broadcast
+    this.detectionCoord.setBroadcast((msg) => {
+      // Broadcast to all local clients
+      this.localWss?.clients.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify(msg))
+        }
+      })
+      // Broadcast to all federation peers
+      this.peerRegistry.broadcast(JSON.stringify(msg))
     })
 
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
@@ -386,6 +412,13 @@ export class ManifoldServer extends EventEmitter {
       return
     }
 
+    // Phase 3: Detection messages
+    if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
+        msgType === 'detection_challenge' || msgType === 'detection_outcome') {
+      this.detectionCoord.handleMessage(msg as any)
+      return
+    }
+
     // Phase 1 message handling
     const fedMsg = msg as FederationMessage
     switch (fedMsg.type) {
@@ -518,6 +551,13 @@ export class ManifoldServer extends EventEmitter {
       if (msgType === 'task_result') {
         const result = (msg as any).result as TaskResult
         this.taskRouter.handleResult(result)
+        return
+      }
+
+      // Phase 3: Detection messages from remote peers
+      if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
+          msgType === 'detection_challenge' || msgType === 'detection_outcome') {
+        this.detectionCoord.handleMessage(msg as any)
         return
       }
 
