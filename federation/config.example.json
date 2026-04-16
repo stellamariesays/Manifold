@@ -1,0 +1,14 @@
+# Example server config for standalone.mts
+# Copy to e.g. config-hog.json and adjust for your hub
+
+{
+  "name": "my-hub",
+  "federationPort": 8766,
+  "localPort": 8768,
+  "restPort": 8777,
+  "peers": [
+    "ws://100.x.y.z:8766"
+  ],
+  "atlasPath": "/path/to/workspace/data/manifold/atlas.json",
+  "debug": true
+}

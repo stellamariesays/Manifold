@@ -1,0 +1,31 @@
+# Manifold Federation Server — systemd user service
+#
+# Install:
+#   cp manifold-federation.service.example ~/.config/systemd/user/manifold-federation.service
+#   Edit paths and user as needed
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now manifold-federation.service
+#
+# View logs:
+#   journalctl --user -u manifold-federation.service -f
+#   (or check StandardOutput path)
+
+[Unit]
+Description=Manifold Federation Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/Manifold/federation
+Environment=HOME=/home/YOURUSER
+Environment=NODE_OPTIONS=--max-old-space-size=512
+Environment=MANIFOLD_CONFIG=/path/to/Manifold/federation/config.json
+ExecStart=/path/to/node /path/to/Manifold/federation/node_modules/.bin/tsx /path/to/Manifold/federation/standalone.mts
+Restart=always
+RestartSec=5
+# Uncomment to log to file instead of journal:
+# StandardOutput=append:/tmp/manifold-federation.log
+# StandardError=append:/tmp/manifold-federation.log
+
+[Install]
+WantedBy=default.target
