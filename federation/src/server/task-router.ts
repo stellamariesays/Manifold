@@ -27,6 +27,7 @@ import type { RateLimiter } from './security.js'
 export interface PendingTask {
   task: TaskRequest
   origin: 'local' | 'remote'
+  sourceHub?: string           // originating hub for remote tasks
   replyTo: WebSocket | null    // null if from remote peer
   createdAt: number
   timeout: ReturnType<typeof setTimeout> | null
@@ -108,6 +109,7 @@ export class TaskRouter extends EventEmitter {
    * Route a task_request. Called when the server receives one from any source.
    */
   routeTask(task: TaskRequest, replyTo: WebSocket | null, sourceHub?: string): void {
+    this.log(`Routing task: ${task.command} -> ${task.target} (${task.id.substring(0, 8)}...) from=${sourceHub ?? 'local'}`)
     // Parse target
     const [agentName, targetHub] = task.target.includes('@')
       ? task.target.split('@')
@@ -145,6 +147,7 @@ export class TaskRouter extends EventEmitter {
     }
 
     // Check if we already have this task (dedup)
+    this.log(`Dedup check: ${task.id.substring(0, 8)}... exists=${this.pending.has(task.id)}`)
     if (this.pending.has(task.id)) {
       const result: TaskResult = {
         id: task.id,
@@ -159,7 +162,7 @@ export class TaskRouter extends EventEmitter {
 
     // Route based on target hub
     if (resolvedHub === this.hub) {
-      this.routeToLocal(task, agentName, replyTo)
+      this.routeToLocal(task, agentName, replyTo, sourceHub)
     } else {
       this.routeToRemote(task, resolvedHub, replyTo)
     }
@@ -168,7 +171,7 @@ export class TaskRouter extends EventEmitter {
   /**
    * Route to a local agent runner.
    */
-  private routeToLocal(task: TaskRequest, agentName: string, replyTo: WebSocket | null): void {
+  private routeToLocal(task: TaskRequest, agentName: string, replyTo: WebSocket | null, sourceHub?: string): void {
     // Find a runner that has this agent
     const runner = this.findRunnerForAgent(agentName)
 
@@ -191,6 +194,7 @@ export class TaskRouter extends EventEmitter {
     const pending: PendingTask = {
       task,
       origin: replyTo ? 'local' : 'remote',
+      sourceHub: sourceHub,
       replyTo,
       createdAt: Date.now(),
       timeout: setTimeout(() => {
@@ -252,6 +256,7 @@ export class TaskRouter extends EventEmitter {
    * Handle a task_result from a runner or remote peer.
    */
   handleResult(result: TaskResult): void {
+    this.log(`Result: ${result.id.substring(0, 8)}... status=${result.status}${result.error ? ' error=' + result.error : ''}`)
     const pending = this.pending.get(result.id)
 
     if (!pending) {
@@ -271,7 +276,17 @@ export class TaskRouter extends EventEmitter {
     // Send result back to origin
     this.sendResult(result, pending.replyTo)
 
+    // If task came from a remote hub and no local WS to reply to, forward via peer
+    if (!pending.replyTo && pending.sourceHub) {
+      this.peerRegistry.sendTo(pending.sourceHub, JSON.stringify({
+        type: 'task_result',
+        result,
+      } as TaskResultMessage))
+      this.log(`Forwarded result back to ${pending.sourceHub} for ${result.id.substring(0, 8)}...`)
+    }
+
     this.log(`Result: ${result.status} for ${result.id.substring(0, 8)}... (${result.execution_ms ?? '?'}ms)`)
+    this.log(`Emitting task:complete for ${result.id.substring(0, 8)}... status=${result.status}`)
     this.emit('task:complete', { result, task: pending.task })
   }
 
@@ -295,10 +310,15 @@ export class TaskRouter extends EventEmitter {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  private findRunnerForAgent(agentName: string): { ws: WebSocket; agents: string[] } | null {
+  /** Normalize an agent entry to its name (handles both string and object format) */
+  private static agentName(a: string | { name: string }): string {
+    return typeof a === 'string' ? a : a.name
+  }
+
+  private findRunnerForAgent(agentName: string): { ws: WebSocket; agents: (string | { name: string })[] } | null {
     for (const [, runner] of this.runners) {
-      if (runner.agents.includes(agentName)) {
-        return runner
+      for (const a of runner.agents) {
+        if (TaskRouter.agentName(a) === agentName) return runner
       }
     }
     return null
@@ -345,7 +365,7 @@ export class TaskRouter extends EventEmitter {
   getRunnableAgents(): string[] {
     const agents = new Set<string>()
     for (const [, runner] of this.runners) {
-      for (const a of runner.agents) agents.add(a)
+      for (const a of runner.agents) agents.add(TaskRouter.agentName(a))
     }
     return Array.from(agents)
   }
