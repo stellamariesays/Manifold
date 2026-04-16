@@ -139,10 +139,19 @@ const TaskAckSchema = z.object({
   queue_position: z.number().optional(),
 })
 
+const AgentOrName = z.union([
+  z.string(),
+  z.object({
+    name: z.string(),
+    capabilities: z.array(z.string()).optional(),
+    seams: z.array(z.string()).optional(),
+  }),
+])
+
 const AgentRunnerReadySchema = z.object({
   type: z.literal('agent_runner_ready'),
   hub: z.string().optional(),
-  agents: z.array(z.string()),
+  agents: z.array(AgentOrName),
 })
 
 // ── Phase 3: Detection-Coordination schemas ────────────────────────────────────
