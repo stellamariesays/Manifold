@@ -1,0 +1,23 @@
+# Manifold Agent Runner — systemd user service
+#
+# Install:
+#   cp manifold-runner.service.example ~/.config/systemd/user/manifold-runner.service
+#   Edit paths and user as needed
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now manifold-runner.service
+
+[Unit]
+Description=Manifold Agent Runner
+After=manifold-federation.service
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/workspace
+ExecStart=/usr/bin/python3 /path/to/Manifold/federation/src/runtime/agent-runner.py --config /path/to/runner-config.json
+Restart=always
+RestartSec=5
+# StandardOutput=append:/tmp/manifold-runner.log
+# StandardError=append:/tmp/manifold-runner.log
+
+[Install]
+WantedBy=default.target
