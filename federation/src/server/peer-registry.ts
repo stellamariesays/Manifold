@@ -225,6 +225,17 @@ export class PeerRegistry extends EventEmitter {
       this.inbound.set(msg.hub, entry)
     }
 
+    // Dedup: if we already have an outbound connection to this hub, close the inbound duplicate
+    for (const [addr, outbound] of this.outbound.entries()) {
+      if (outbound.hub === msg.hub && outbound.ws && outbound.ws !== entry.ws) {
+        this.log(`Duplicate inbound for ${msg.hub}, closing (outbound at ${addr} preferred)`)
+        // Close inbound, keep outbound
+        entry.ws?.close()
+        this.inbound.delete(msg.hub)
+        return
+      }
+    }
+
     this.log(`Peer identified as hub: ${msg.hub}`)
   }
 
