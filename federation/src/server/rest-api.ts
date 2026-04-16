@@ -8,6 +8,7 @@ import type { MetricsCollector } from './metrics.js'
 import type { SecurityConfig } from './security.js'
 import { createAuthMiddleware } from './security.js'
 import type { DetectionCoord } from './detection-coord.js'
+import type { ManifestRegistry } from './manifest-registry.js'
 import type { TaskRequest, TaskResult } from '../protocol/messages.js'
 
 export interface RestApiOptions {
@@ -31,6 +32,7 @@ export class RestApi {
   private taskHistory!: TaskHistory
   private metrics!: MetricsCollector
   private detectionCoord!: DetectionCoord
+  private manifestRegistry!: ManifestRegistry
   private startTime = Date.now()
 
   constructor(options: RestApiOptions) {
@@ -40,7 +42,7 @@ export class RestApi {
     this._setup()
   }
 
-  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector, security?: SecurityConfig, detectionCoord?: DetectionCoord): Promise<void> {
+  start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, meshSync: MeshSync, taskRouter: TaskRouter, taskHistory: TaskHistory, metrics: MetricsCollector, manifestRegistry: ManifestRegistry, security?: SecurityConfig, detectionCoord?: DetectionCoord): Promise<void> {
     this.capIndex = capIndex
     this.peerRegistry = peerRegistry
     this.meshSync = meshSync
@@ -48,6 +50,7 @@ export class RestApi {
     this.taskHistory = taskHistory
     this.metrics = metrics
     this.detectionCoord = detectionCoord!
+    this.manifestRegistry = manifestRegistry
 
     // Apply auth middleware if configured
     if (security?.apiKey) {
@@ -110,6 +113,13 @@ export class RestApi {
     router.post('/detection/claim', this._submitClaim.bind(this))
     router.post('/detection/verify', this._submitVerify.bind(this))
     router.post('/detection/outcome', this._submitOutcome.bind(this))
+
+    // Agent Manifests
+    router.post('/manifests', this._registerManifest.bind(this))
+    router.get('/manifests', this._listManifests.bind(this))
+    router.get('/manifests/:name', this._getManifest.bind(this))
+    router.delete('/manifests/:name', this._deleteManifest.bind(this))
+    router.post('/discover', this._discover.bind(this))
 
     this.app.use('/', router)
   }
@@ -665,6 +675,136 @@ ${pending.map(t => `<tr>
     res.json({
       claim_id,
       status: outcome,
+    })
+  }
+
+  // ── Agent Manifest handlers ──────────────────────────────────────────────
+
+  /**
+   * POST /manifests — register an agent manifest.
+   */
+  private _registerManifest(req: Request, res: Response): void {
+    const { name, hub, capabilities, version, description, commands, health, load, metadata } = req.body as {
+      name?: string
+      hub?: string
+      capabilities?: Array<{ id: string; description: string; input?: Record<string, unknown>; output?: Record<string, unknown>; examples?: string[] }>
+      version?: string
+      description?: string
+      commands?: Record<string, string>
+      health?: { status: 'healthy' | 'degraded' | 'down'; message?: string; lastCheck?: string }
+      load?: number
+      metadata?: Record<string, unknown>
+    }
+
+    if (!name || !hub || !capabilities) {
+      res.status(400).json({ error: 'name, hub, and capabilities are required' })
+      return
+    }
+
+    const manifest = this.manifestRegistry.register({
+      name,
+      hub,
+      capabilities,
+      version,
+      description,
+      commands,
+      health,
+      load,
+      metadata,
+    })
+
+    res.json({ ok: true, agent: `${name}@${hub}`, capabilities: manifest.capabilities.length })
+  }
+
+  /**
+   * GET /manifests — list all manifests.
+   * Query: ?hub=...&capability=...
+   */
+  private _listManifests(req: Request, res: Response): void {
+    const { hub, capability } = req.query as Record<string, string>
+    const manifests = this.manifestRegistry.getAll({ hub, capability })
+    const stats = this.manifestRegistry.stats()
+    res.json({ count: manifests.length, stats, manifests })
+  }
+
+  /**
+   * GET /manifests/:name — get manifest for an agent.
+   * Supports "name" or "name@hub" format.
+   */
+  private _getManifest(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const [agentName, agentHub] = name.includes('@') ? name.split('@') : [name, this.hub]
+
+    const manifest = this.manifestRegistry.get(agentName, agentHub)
+    if (!manifest) {
+      res.status(404).json({ error: `No manifest for agent: ${name}` })
+      return
+    }
+
+    res.json(manifest)
+  }
+
+  /**
+   * DELETE /manifests/:name — remove an agent manifest.
+   */
+  private _deleteManifest(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const [agentName, agentHub] = name.includes('@') ? name.split('@') : [name, this.hub]
+
+    const removed = this.manifestRegistry.remove(agentName, agentHub)
+    res.json({ ok: removed, agent: `${agentName}@${agentHub}` })
+  }
+
+  /**
+   * POST /discover — find agents matching a natural language query.
+   * Body: { query: "evaluate identity claims", hub?: "...", limit?: 5 }
+   */
+  private _discover(req: Request, res: Response): void {
+    const { query, hub, limit } = req.body as { query?: string; hub?: string; limit?: number }
+
+    if (!query) {
+      res.status(400).json({ error: 'query is required' })
+      return
+    }
+
+    // Search manifests first
+    const manifestResults = this.manifestRegistry.discover(query, { hub, limit: limit ?? 5 })
+
+    // If no manifest matches, fall back to capability string matching
+    if (manifestResults.length === 0) {
+      const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
+      const agents = this.capIndex.getAllAgents().filter(a => {
+        if (hub && a.hub !== hub) return false
+        return a.capabilities.some(c =>
+          terms.some(t => c.toLowerCase().includes(t))
+        )
+      })
+
+      res.json({
+        query,
+        source: 'capability-fallback',
+        count: agents.length,
+        results: agents.slice(0, limit ?? 5).map(a => ({
+          agent: `${a.name}@${a.hub}`,
+          capabilities: a.capabilities,
+          note: 'No manifest registered — capability names matched only',
+        })),
+      })
+      return
+    }
+
+    res.json({
+      query,
+      source: 'manifests',
+      count: manifestResults.length,
+      results: manifestResults.map(r => ({
+        agent: `${r.manifest.name}@${r.manifest.hub}`,
+        score: r.score,
+        description: r.manifest.description,
+        matchedCapabilities: r.matchedCapabilities.map(c => c.id),
+        health: r.manifest.health?.status,
+        load: r.manifest.load,
+      })),
     })
   }
 }
