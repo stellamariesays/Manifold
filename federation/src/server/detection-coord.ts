@@ -65,13 +65,13 @@ export class DetectionCoord {
   }
 
   private handleClaim(claim: DetectionClaim): void {
-    this.log(`Claim: [${claim.domain}] ${claim.summary} (confidence: ${claim.confidence}) from ${claim.source}`)
-
-    // Store in ledger
+    // Store in ledger — dedup returns null if claim already existed
     const entry = this._ledger.addClaim(claim)
     if (!entry) return
 
-    // Propagate to all peers and local subscribers
+    this.log(`Claim: [${claim.domain}] ${claim.summary} (confidence: ${claim.confidence}) from ${claim.source}`)
+
+    // Propagate to all peers and local subscribers (only for NEW claims)
     this.broadcast({
       type: 'detection_claim',
       claim,
