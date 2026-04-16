@@ -1,6 +1,3 @@
-# Example server config for standalone.mts
-# Copy to e.g. config-hog.json and adjust for your hub
-
 {
   "name": "my-hub",
   "federationPort": 8766,
