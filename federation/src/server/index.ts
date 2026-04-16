@@ -347,11 +347,15 @@ export class ManifoldServer extends EventEmitter {
         this.log(`Inbound federation connection from ${remote}`)
         this.peerRegistry.registerInbound(ws, remote)
 
-        // Handle messages from local clients connecting to federation port directly
+        // task_request / task_result handled by _wirePeerRegistry — skip to avoid double-routing
         ws.on('message', (data) => {
           const raw = typeof data === 'string' ? data : data.toString()
           const msg = parseMessage(raw)
-          if (msg) this._handleClientMessage(msg, ws)
+          if (msg) {
+            const msgType = (msg as Record<string, any>).type as string
+            if (msgType === 'task_request' || msgType === 'task_result') return
+            this._handleClientMessage(msg, ws)
+          }
         })
       })
 
@@ -407,8 +411,19 @@ export class ManifoldServer extends EventEmitter {
     }
 
     if (msgType === 'agent_runner_ready') {
-      const agents = (msg as any).agents as string[]
-      this.taskRouter.registerRunner(ws, agents)
+      this.log(`Agent runner ready with ${((msg as any).agents as any[]).length} agents`)
+      const agents = (msg as any).agents as Array<string | { name: string; capabilities?: string[]; seams?: string[] }>
+      this.taskRouter.registerRunner(ws, agents.map(a => typeof a === 'string' ? a : a.name))
+
+      // Register agents into capability index so mesh sync broadcasts them to peers
+      for (const a of agents) {
+        if (typeof a === 'string') {
+          this.registerAgent(a, [])
+        } else {
+          this.registerAgent(a.name, a.capabilities ?? [], a.seams)
+        }
+      }
+      this.meshSync.sync()
       return
     }
 

@@ -88,10 +88,18 @@ class AgentRunner:
     def _on_open(self, ws) -> None:
         self.log(f"Connected to federation at {self.ws_url}")
         # Register
+        # Send agent details including capabilities for mesh registration
+        agent_details = []
+        for name, cfg in self.agents.items():
+            agent_details.append({
+                "name": name,
+                "capabilities": cfg.get("capabilities", ["task-execution"]),
+                "seams": cfg.get("seams", []),
+            })
         self._send({
             "type": "agent_runner_ready",
             "hub": self.hub,
-            "agents": list(self.agents.keys()),
+            "agents": agent_details,
         })
 
     def _on_message(self, ws, data: str) -> None:
