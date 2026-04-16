@@ -6,6 +6,7 @@ import { PeerRegistry } from './peer-registry.js'
 import { CapabilityIndex } from './capability-index.js'
 import { MeshSync } from './mesh-sync.js'
 import { RestApi } from './rest-api.js'
+import { ManifestRegistry } from './manifest-registry.js'
 import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
 import { TaskHistory } from './task-history.js'
@@ -87,6 +88,7 @@ export class ManifoldServer extends EventEmitter {
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
+  readonly manifestRegistry: ManifestRegistry
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -119,6 +121,7 @@ export class ManifoldServer extends EventEmitter {
     })
 
     this.capIndex = new CapabilityIndex()
+    this.manifestRegistry = new ManifestRegistry({ debug: this.config.debug })
     this.meshSync = new MeshSync({
       hub: this.hub,
       intervalMs: this.config.syncIntervalMs,
@@ -196,6 +199,7 @@ export class ManifoldServer extends EventEmitter {
       await this.restApi.start(
         this.capIndex, this.peerRegistry, this.meshSync,
         this.taskRouter, this.taskHistory, this.metrics,
+        this.manifestRegistry,
         this.config.security, this.detectionCoord,
       )
     }
