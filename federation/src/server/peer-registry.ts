@@ -32,6 +32,9 @@ export class PeerRegistry extends EventEmitter {
   /** Inbound peers (they dialed us) keyed by hub name */
   private inbound: Map<string, PeerEntry> = new Map()
 
+  /** Set of hub names where we have both inbound and outbound — inbound is receive-only */
+  private dedupedInbound: Set<string> = new Set()
+
   constructor(options: PeerRegistryOptions) {
     super()
     this.selfHub = options.selfHub
@@ -225,10 +228,22 @@ export class PeerRegistry extends EventEmitter {
       this.inbound.set(msg.hub, entry)
     }
 
+    // Dedup: if we already have an outbound to this hub, mark inbound as receive-only.
+    // We keep the inbound WebSocket alive to receive mesh_sync messages from the peer,
+    // but exclude it from broadcast/getPeers to avoid double-sending and ghost entries.
+    for (const [addr, outbound] of this.outbound.entries()) {
+      if (outbound.hub === msg.hub && outbound.ws && outbound.ws.readyState === WebSocket.OPEN) {
+        this.log(`Duplicate inbound for ${msg.hub} (outbound at ${addr}), marking inbound as receive-only`)
+        this.dedupedInbound.add(msg.hub)
+        break
+      }
+    }
+
     this.log(`Peer identified as hub: ${msg.hub}`)
   }
 
   private _handleInboundClose(entry: PeerEntry): void {
+    this.dedupedInbound.delete(entry.hub)
     this.inbound.delete(entry.hub)
     this.inbound.delete(entry.address)
     entry.ws = null
@@ -265,8 +280,11 @@ export class PeerRegistry extends EventEmitter {
   }
 
   private *_allConnected(): IterableIterator<PeerEntry> {
-    for (const entry of [...this.outbound.values(), ...this.inbound.values()]) {
+    for (const entry of this.outbound.values()) {
       if (entry.ws && entry.ws.readyState === WebSocket.OPEN) yield entry
+    }
+    for (const entry of this.inbound.values()) {
+      if (entry.ws && entry.ws.readyState === WebSocket.OPEN && !this.dedupedInbound.has(entry.hub)) yield entry
     }
   }
 
