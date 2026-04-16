@@ -22,7 +22,11 @@ export class DetectionLedger {
 
   // ── Write operations ────────────────────────────────────────────────────
 
-  addClaim(claim: DetectionClaim): LedgerEntry {
+  addClaim(claim: DetectionClaim): LedgerEntry | null {
+    // Dedup — skip if we've already seen this claim ID
+    const existing = this.entries.get(claim.id)
+    if (existing) return null  // Return null so caller knows it was a duplicate
+
     const entry: LedgerEntry = {
       claim,
       verifications: [],
@@ -36,6 +40,8 @@ export class DetectionLedger {
   addVerification(verification: DetectionVerify): LedgerEntry | null {
     const entry = this.entries.get(verification.claim_id)
     if (!entry) return null
+    // Dedup — same verifier shouldn't verify twice. Return null so caller skips broadcast.
+    if (entry.verifications.some(v => v.verifier === verification.verifier)) return null
     entry.verifications.push(verification)
     this.appendLog('verify', verification)
 
@@ -47,6 +53,8 @@ export class DetectionLedger {
   addChallenge(challenge: DetectionChallenge): LedgerEntry | null {
     const entry = this.entries.get(challenge.claim_id)
     if (!entry) return null
+    // Dedup — same challenger shouldn't challenge twice
+    if (entry.challenges.some(c => c.challenger === challenge.challenger)) return null
     entry.challenges.push(challenge)
     this.appendLog('challenge', challenge)
     return entry
