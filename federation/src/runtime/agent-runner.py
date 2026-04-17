@@ -38,6 +38,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 # Minimal deps — only stdlib + websocket-client
 try:
@@ -60,6 +62,7 @@ class AgentRunner:
     def __init__(self, config: dict):
         self.hub = config["hub"]
         self.ws_url = config.get("wsUrl", "ws://localhost:8768")
+        self.rest_url = config.get("restUrl", self._ws_to_rest(self.ws_url))
         self.default_timeout = config.get("defaultTimeoutMs", 30000)
         self.agents = {a["name"]: a for a in config.get("agents", [])}
         self.ws: websocket.WebSocketApp | None = None
@@ -77,6 +80,8 @@ class AgentRunner:
         self.ws.run_forever(reconnect=5)
 
     def stop(self) -> None:
+        # Deregister from REST API on graceful shutdown
+        self._deregister_all()
         if self.ws:
             self.ws.close()
         for task_id, proc in self.running_tasks.items():
@@ -87,8 +92,11 @@ class AgentRunner:
 
     def _on_open(self, ws) -> None:
         self.log(f"Connected to federation at {self.ws_url}")
-        # Register
-        # Send agent details including capabilities for mesh registration
+
+        # Register all agents via REST API (self-registration path)
+        self._register_all()
+
+        # Also send legacy WS agent_runner_ready for backward compat
         agent_details = []
         for name, cfg in self.agents.items():
             agent_details.append({
@@ -227,6 +235,44 @@ class AgentRunner:
 
     def _send_result(self, result: dict) -> None:
         self._send({"type": "task_result", "result": result})
+
+    # ── REST self-registration ─────────────────────────────────────────────
+
+    @staticmethod
+    def _ws_to_rest(ws_url: str) -> str:
+        """Derive REST URL from WS URL (ws://host:8768 → http://host:8767)."""
+        return ws_url.replace("ws://", "http://").replace("8768", "8767")
+
+    def _register_all(self) -> None:
+        """POST /agents/register for each agent in config."""
+        for name, cfg in self.agents.items():
+            capabilities = cfg.get("capabilities", ["task-execution"])
+            try:
+                body = json.dumps({"name": name, "capabilities": capabilities}).encode()
+                req = Request(
+                    f"{self.rest_url}/agents/register",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urlopen(req, timeout=5) as resp:
+                    result = json.loads(resp.read())
+                    self.log(f"REST register {name}: {result.get('status', '?')} ({len(capabilities)} caps)")
+            except Exception as e:
+                self.log(f"REST register {name} failed: {e} (WS path still active)")
+
+    def _deregister_all(self) -> None:
+        """DELETE /agents/:name for each agent on shutdown."""
+        for name in self.agents:
+            try:
+                req = Request(
+                    f"{self.rest_url}/agents/{name}",
+                    method="DELETE",
+                )
+                with urlopen(req, timeout=5) as resp:
+                    self.log(f"REST deregister {name}: ok")
+            except Exception as e:
+                self.log(f"REST deregister {name} failed: {e}")
 
     def log(self, msg: str) -> None:
         print(f"[AgentRunner:{self.hub}] {msg}", flush=True)
