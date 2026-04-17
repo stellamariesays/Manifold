@@ -6,6 +6,8 @@ export interface MeshSyncOptions {
   hub: string
   /** Sync interval in milliseconds. Default 15000. */
   intervalMs?: number
+  /** Max seconds since last heartbeat before a local agent is evicted. Default 60. */
+  agentTtlSeconds?: number
   debug?: boolean
 }
 
@@ -16,6 +18,7 @@ export interface MeshSyncOptions {
 export class MeshSync {
   private readonly hub: string
   private readonly intervalMs: number
+  private readonly agentTtlMs: number
   private readonly debug: boolean
 
   private timer: ReturnType<typeof setInterval> | null = null
@@ -25,6 +28,7 @@ export class MeshSync {
   constructor(options: MeshSyncOptions) {
     this.hub = options.hub
     this.intervalMs = options.intervalMs ?? 15_000
+    this.agentTtlMs = (options.agentTtlSeconds ?? 60) * 1000
     this.debug = options.debug ?? false
   }
 
@@ -49,8 +53,12 @@ export class MeshSync {
 
   /**
    * Build and broadcast a mesh_sync message to all peers.
+   * Also evicts stale local agents (no heartbeat for > agentTtlMs).
    */
   sync(): void {
+    // Evict stale local agents
+    this.evictStaleAgents()
+
     const localAgents = this.capIndex.getLocalAgents()
     const darkCircles = this.capIndex.getDarkCircles()
 
@@ -80,5 +88,23 @@ export class MeshSync {
 
   private log(msg: string): void {
     if (this.debug) console.log(`[MeshSync:${this.hub}] ${msg}`)
+  }
+
+  /**
+   * Evict local agents that haven't heartbeated within agentTtlMs.
+   * Runner-managed agents (started with the runner service) are excluded
+   * — they don't heartbeat because the runner keeps them alive.
+   */
+  private evictStaleAgents(): void {
+    const now = Date.now()
+    const localAgents = this.capIndex.getLocalAgents()
+    for (const agent of localAgents) {
+      if (!agent.lastSeen) continue
+      const age = now - new Date(agent.lastSeen).getTime()
+      if (age > this.agentTtlMs) {
+        this.capIndex.removeAgent(agent.name, agent.hub)
+        this.log(`Evicted stale agent: ${agent.name}@${agent.hub} (last seen ${Math.round(age / 1000)}s ago)`)
+      }
+    }
   }
 }
