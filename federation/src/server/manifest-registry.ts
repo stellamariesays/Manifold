@@ -54,8 +54,74 @@ export interface AgentManifest {
   updatedAt: string
 }
 
+/**
+ * Simple trie for fast prefix-based capability lookup.
+ * Inserts capability IDs split on '-' tokens so "solar-flare-detection"
+ * is findable by "solar", "flare", "detection", "solar-flare", etc.
+ */
+class CapabilityTrie {
+  private root: Map<string, Set<string>> = new Map()
+
+  /**
+   * Insert a capability ID. All prefix tokens are indexed.
+   * e.g. "solar-flare-detection" indexes:
+   *   "solar", "solar-flare", "solar-flare-detection",
+   *   "flare", "flare-detection", "detection"
+   */
+  insert(capId: string, agentKey: string): void {
+    const tokens = capId.toLowerCase().split(/[-_]/)
+    // Index all contiguous sub-spans of tokens
+    for (let i = 0; i < tokens.length; i++) {
+      for (let j = i + 1; j <= tokens.length; j++) {
+        const prefix = tokens.slice(i, j).join('-')
+        if (!this.root.has(prefix)) {
+          this.root.set(prefix, new Set())
+        }
+        this.root.get(prefix)!.add(agentKey)
+      }
+    }
+  }
+
+  /**
+   * Remove an agent key from all entries.
+   */
+  remove(agentKey: string): void {
+    for (const set of this.root.values()) {
+      set.delete(agentKey)
+    }
+  }
+
+  /**
+   * Find agent keys matching a query prefix.
+   * Returns exact match or all keys matching any prefix of the query tokens.
+   */
+  search(query: string): Set<string> {
+    const normalized = query.toLowerCase().replace(/[-_\s]+/g, '-')
+    // Exact match
+    if (this.root.has(normalized)) {
+      return this.root.get(normalized)!
+    }
+    // Try individual tokens
+    const tokens = normalized.split('-')
+    const result = new Set<string>()
+    for (const tok of tokens) {
+      const found = this.root.get(tok)
+      if (found) {
+        for (const k of found) result.add(k)
+      }
+    }
+    return result
+  }
+
+  /** Get number of indexed prefixes */
+  get size(): number {
+    return this.root.size
+  }
+}
+
 export class ManifestRegistry {
   private manifests = new Map<string, AgentManifest>() // key: "name@hub"
+  private trie = new CapabilityTrie()
   private debug: boolean
 
   constructor(options?: { debug?: boolean }) {
@@ -68,6 +134,7 @@ export class ManifestRegistry {
 
   /**
    * Register or update an agent manifest.
+   * Re-indexes the trie on update.
    */
   register(manifest: Omit<AgentManifest, 'registeredAt' | 'updatedAt'>): AgentManifest {
     const k = this.key(manifest.name, manifest.hub)
@@ -80,7 +147,18 @@ export class ManifestRegistry {
       updatedAt: now,
     }
 
+    // Remove old trie entries if updating
+    if (existing) {
+      this.trie.remove(k)
+    }
+
     this.manifests.set(k, entry)
+
+    // Index capabilities in trie
+    for (const cap of manifest.capabilities) {
+      this.trie.insert(cap.id, k)
+    }
+
     this.log(`Manifest registered: ${k} (${manifest.capabilities.length} capabilities)`)
     return entry
   }
@@ -115,12 +193,20 @@ export class ManifestRegistry {
    * Remove a manifest (agent left).
    */
   remove(name: string, hub: string): boolean {
-    return this.manifests.delete(this.key(name, hub))
+    const k = this.key(name, hub)
+    const removed = this.manifests.delete(k)
+    if (removed) {
+      this.trie.remove(k)
+    }
+    return removed
   }
 
   /**
    * Discover agents matching a natural language need.
-   * Returns ranked results based on capability keyword matching.
+   *
+   * Uses the trie for fast prefix-based capability lookup first,
+   * then falls back to full-text search on descriptions and examples.
+   * Returns ranked results.
    */
   discover(query: string, options?: { hub?: string; limit?: number }): Array<{
     manifest: AgentManifest
@@ -134,10 +220,45 @@ export class ManifestRegistry {
       score: number
     }> = []
 
+    // Phase 1: Trie lookup for each term — fast prefix matching
+    const trieCandidates = new Map<string, number>() // agentKey → trieScore
+    for (const term of terms) {
+      const matched = this.trie.search(term)
+      for (const agentKey of matched) {
+        trieCandidates.set(agentKey, (trieCandidates.get(agentKey) ?? 0) + 1)
+      }
+    }
+
+    // Phase 2: Full-text scan on descriptions/examples for agents not found via trie
+    const candidates = new Set<string>()
+    for (const k of trieCandidates.keys()) candidates.add(k)
+
     for (const manifest of this.getAll({ hub: options?.hub })) {
+      const k = this.key(manifest.name, manifest.hub)
+      if (candidates.has(k)) continue // already scored by trie
+
+      const agentText = `${manifest.name} ${manifest.description ?? ''}`.toLowerCase()
+      const agentMatch = terms.filter(t => agentText.includes(t)).length
+      if (agentMatch > 0) {
+        candidates.add(k)
+        // These will be scored in the loop below via full-text
+      }
+    }
+
+    // Score all candidates
+    for (const agentKey of candidates) {
+      const manifest = this.manifests.get(agentKey)
+      if (!manifest) continue
+      if (options?.hub && manifest.hub !== options.hub) continue
+
       const matched: CapabilityManifest[] = []
       let score = 0
 
+      // Trie bonus: matches from prefix lookup are stronger signals
+      const trieScore = trieCandidates.get(agentKey) ?? 0
+      score += trieScore * 2
+
+      // Full-text match on capabilities
       for (const cap of manifest.capabilities) {
         const text = `${cap.id} ${cap.description} ${(cap.examples ?? []).join(' ')}`.toLowerCase()
         const matchCount = terms.filter(t => text.includes(t)).length
@@ -147,14 +268,14 @@ export class ManifestRegistry {
         }
       }
 
-      // Also match on agent name and description
+      // Agent name/description match
       const agentText = `${manifest.name} ${manifest.description ?? ''}`.toLowerCase()
       const agentMatch = terms.filter(t => agentText.includes(t)).length
       if (agentMatch > 0) {
         score += agentMatch * 0.5
       }
 
-      if (matched.length > 0 || agentMatch > 0) {
+      if (matched.length > 0 || score > 0) {
         results.push({ manifest, matchedCapabilities: matched, score })
       }
     }
@@ -166,16 +287,44 @@ export class ManifestRegistry {
   /**
    * Stats about registered manifests.
    */
-  stats(): { total: number; byHub: Record<string, number>; totalCapabilities: number } {
+  stats(): {
+    total: number
+    byHub: Record<string, number>
+    totalCapabilities: number
+    avgCapabilitiesPerAgent: number
+    medianCapabilitiesPerAgent: number
+    maxCapabilities: number
+    minCapabilities: number
+    trieSize: number
+    healthSummary: Record<string, number>
+  } {
     const byHub: Record<string, number> = {}
     let totalCaps = 0
+    const capCounts: number[] = []
+    const healthCounts: Record<string, number> = {}
 
     for (const m of this.manifests.values()) {
       byHub[m.hub] = (byHub[m.hub] ?? 0) + 1
+      capCounts.push(m.capabilities.length)
       totalCaps += m.capabilities.length
+      const status = m.health?.status ?? 'unknown'
+      healthCounts[status] = (healthCounts[status] ?? 0) + 1
     }
 
-    return { total: this.manifests.size, byHub, totalCapabilities: totalCaps }
+    capCounts.sort((a, b) => a - b)
+    const total = this.manifests.size
+
+    return {
+      total,
+      byHub,
+      totalCapabilities: totalCaps,
+      avgCapabilitiesPerAgent: total > 0 ? Math.round((totalCaps / total) * 100) / 100 : 0,
+      medianCapabilitiesPerAgent: capCounts.length > 0 ? capCounts[Math.floor(capCounts.length / 2)] : 0,
+      maxCapabilities: capCounts.length > 0 ? capCounts[capCounts.length - 1] : 0,
+      minCapabilities: capCounts.length > 0 ? capCounts[0] : 0,
+      trieSize: this.trie.size,
+      healthSummary: healthCounts,
+    }
   }
 
   private log(msg: string): void {
