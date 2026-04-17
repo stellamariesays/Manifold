@@ -290,13 +290,21 @@ export class ManifoldServer extends EventEmitter {
    * Register a local agent's capabilities on this hub.
    */
   registerAgent(name: string, capabilities: string[], seams?: string[]): void {
-    const { added } = this.capIndex.upsertAgent(
+    const { added, capChanges } = this.capIndex.upsertAgent(
       { name, hub: this.hub, capabilities, seams },
       true,
     )
     if (added) {
       const agent = this.capIndex.getAgent(name, this.hub)!
       this.emit('agent:join', agent)
+    }
+    // New capabilities may resolve dark circles
+    if (added || capChanges.added.length > 0) {
+      const resolved = this.capIndex.resolveDarkCircles()
+      if (resolved.length > 0) {
+        this.log(`Agent ${name} resolved circles: ${resolved.join(', ')}`)
+        this.meshSync.sync() // propagate resolved state
+      }
     }
   }
 
@@ -614,10 +622,17 @@ export class ManifoldServer extends EventEmitter {
     }
 
     for (const agent of snapshot.agents) {
-      const { added } = this.capIndex.upsertAgent(agent, true)
+      const { added, capChanges } = this.capIndex.upsertAgent(agent, true)
       if (added) {
-        const full = this.capIndex.getAgent(agent.name, this.hub)!
+        const full = this.capIndex.getAgent(agent.name, agent.hub)!
         this.emit('agent:join', full)
+      }
+      // Bridge agents may have circle-closing capabilities
+      if (added || capChanges.added.length > 0) {
+        const resolved = this.capIndex.resolveDarkCircles()
+        if (resolved.length > 0) {
+          this.log(`Bridge agent ${agent.name} resolved circles: ${resolved.join(', ')}`)
+        }
       }
     }
 

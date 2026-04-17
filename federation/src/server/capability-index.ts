@@ -12,8 +12,11 @@ export class CapabilityIndex {
   /** capability → Set of agent keys */
   private byCapability: Map<string, Set<string>> = new Map()
 
-  /** Dark circle pressure, keyed by "name@hub" or "name" for aggregate */
+  /** Dark circle pressure, keyed by circle name */
   private darkCircles: Map<string, DarkCircleInfo> = new Map()
+
+  /** Raw (unresolved) dark circle pressures per hub, keyed by "circleName:hub" */
+  private rawPressures: Map<string, number> = new Map()
 
   // ── Agent management ────────────────────────────────────────────────────────
 
@@ -54,6 +57,11 @@ export class CapabilityIndex {
     }
 
     this.agents.set(key, result)
+
+    // If capabilities changed, re-resolve dark circles (new caps may cover gaps)
+    if (capChanges.added.length > 0 || capChanges.removed.length > 0) {
+      this.resolveDarkCircles()
+    }
 
     return { added: !prev, capChanges }
   }
@@ -137,9 +145,12 @@ export class CapabilityIndex {
 
   // ── Dark circles ─────────────────────────────────────────────────────────────
 
-  updateDarkCircles(hub: string, circles: DarkCircle[]): void {
+  updateDarkCircles(hub: string, circles: DarkCircle[]): string[] {
     for (const dc of circles) {
       const key = dc.name
+
+      // Store raw pressure before resolution
+      this.rawPressures.set(`${key}:${hub}`, dc.pressure)
 
       const existing = this.darkCircles.get(key) ?? {
         name: dc.name,
@@ -148,17 +159,79 @@ export class CapabilityIndex {
       }
 
       existing.byHub = existing.byHub ?? {}
-      existing.byHub[hub] = dc.pressure
-
-      // Aggregate pressure: max across hubs (alternatively could be avg or sum)
-      existing.pressure = Math.max(...Object.values(existing.byHub))
 
       this.darkCircles.set(key, existing)
     }
+
+    return this.resolveDarkCircles()
   }
 
   getDarkCircles(): DarkCircleInfo[] {
     return Array.from(this.darkCircles.values())
+  }
+
+  /**
+   * Find agents whose capabilities cover a dark circle by prefix match.
+   * A capability "detection" covers circles named "detection-modeling",
+   * "detection-solar", etc. Also matches exact names.
+   */
+  private findCoveringAgents(circleName: string): AgentResult[] {
+    const seen = new Set<string>()
+    const results: AgentResult[] = []
+
+    for (const [cap, keys] of this.byCapability.entries()) {
+      if (circleName === cap || circleName.startsWith(cap + '-') || cap.startsWith(circleName + '-')) {
+        for (const key of keys) {
+          if (!seen.has(key)) {
+            seen.add(key)
+            const agent = this.agents.get(key)
+            if (agent) results.push(agent)
+          }
+        }
+      }
+    }
+
+    return results
+  }
+
+  /**
+   * Resolve dark circles by matching agent capabilities against circle names.
+   * A capability covers a circle if it exactly matches or is a prefix of
+   * the circle name (e.g. "detection" covers "detection-modeling").
+   * Covered circles have pressure reduced: raw × 1/(1 + coverCount).
+   * Idempotent — always recalculates from raw pressures, so repeated calls
+   * are stable.
+   *
+   * Returns list of circles whose resolved pressure changed.
+   */
+  resolveDarkCircles(): string[] {
+    const changed: string[] = []
+
+    for (const [circleName, circle] of this.darkCircles.entries()) {
+      const coveringAgents = this.findCoveringAgents(circleName)
+      const coverCount = coveringAgents.length
+      const factor = 1 / (1 + coverCount)  // 0 agents → 1.0, 1 → 0.5, 2 → 0.33
+
+      // Recompute per-hub resolved pressures from raw
+      let maxResolved = 0
+      const hubs = Object.keys(circle.byHub ?? {})
+
+      for (const hub of hubs) {
+        const raw = this.rawPressures.get(`${circleName}:${hub}`) ?? 0
+        const resolved = raw * factor
+        circle.byHub[hub] = resolved
+        if (resolved > maxResolved) maxResolved = resolved
+      }
+
+      const prevPressure = circle.pressure
+      circle.pressure = maxResolved
+
+      if (Math.abs(circle.pressure - prevPressure) > 0.001) {
+        changed.push(circleName)
+      }
+    }
+
+    return changed
   }
 
   getDarkCircle(name: string): DarkCircleInfo | undefined {
