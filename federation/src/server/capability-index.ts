@@ -21,12 +21,17 @@ export class CapabilityIndex {
     const key = `${agent.name}@${agent.hub}`
     const prev = this.agents.get(key)
 
+    // Merge capabilities: union of existing + new (never removes caps added by other sources)
+    const mergedCaps = prev
+      ? [...new Set([...prev.capabilities, ...agent.capabilities])]
+      : agent.capabilities
+
     const result: AgentResult = {
       name: agent.name,
       hub: agent.hub,
-      capabilities: agent.capabilities,
-      pressure: agent.pressure,
-      seams: agent.seams,
+      capabilities: mergedCaps,
+      pressure: agent.pressure ?? prev?.pressure ?? 0.5,
+      seams: agent.seams ?? prev?.seams ?? [],
       lastSeen: agent.lastSeen ?? new Date().toISOString(),
       isLocal,
     }
@@ -35,13 +40,15 @@ export class CapabilityIndex {
 
     if (prev) {
       capChanges = {
-        added: agent.capabilities.filter(c => !prev.capabilities.includes(c)),
-        removed: prev.capabilities.filter(c => !agent.capabilities.includes(c)),
+        added: mergedCaps.filter(c => !prev.capabilities.includes(c)),
+        removed: [], // union merge never removes
       }
 
-      // Remove old capability mappings
+      // Remove old capability mappings for caps no longer present
       for (const cap of prev.capabilities) {
-        this.byCapability.get(cap)?.delete(key)
+        if (!mergedCaps.includes(cap)) {
+          this.byCapability.get(cap)?.delete(key)
+        }
       }
     }
 
