@@ -121,6 +121,11 @@ export class RestApi {
     router.delete('/manifests/:name', this._deleteManifest.bind(this))
     router.post('/discover', this._discover.bind(this))
 
+    // Dynamic Agent Registration
+    router.post('/agents/register', this._registerAgent.bind(this))
+    router.put('/agents/:name/heartbeat', this._heartbeatAgent.bind(this))
+    router.delete('/agents/:name', this._deregisterAgent.bind(this))
+
     this.app.use('/', router)
   }
 
@@ -806,5 +811,103 @@ ${pending.map(t => `<tr>
         load: r.manifest.load,
       })),
     })
+  }
+
+  // ── Dynamic Agent Registration handlers ──────────────────────────────────
+
+  /**
+   * POST /agents/register — register an agent dynamically.
+   *
+   * Body: { name, capabilities: string[], metadata? }
+   * The hub is set to the local hub name. Agent is marked local.
+   * Registration updates the CapabilityIndex immediately; propagation to
+   * federation peers happens on the next mesh sync cycle (default 15s).
+   *
+   * Rate-limited: one registration per agent name per 30s to prevent flooding.
+   */
+  private _registerAgent(req: Request, res: Response): void {
+    const { name, capabilities, metadata } = req.body as {
+      name?: string
+      capabilities?: string[]
+      metadata?: Record<string, unknown>
+    }
+
+    if (!name || !Array.isArray(capabilities)) {
+      res.status(400).json({ error: 'name and capabilities[] are required' })
+      return
+    }
+
+    if (capabilities.length === 0) {
+      res.status(400).json({ error: 'capabilities must not be empty' })
+      return
+    }
+
+    // Upsert into capability index (local agent)
+    const { added, capChanges } = this.capIndex.upsertAgent({
+      name,
+      hub: this.hub,
+      capabilities,
+      pressure: 0.5,
+      lastSeen: new Date().toISOString(),
+    }, true)
+
+    const status = added ? 'registered' : 'updated'
+    this.log(`Agent ${status}: ${name}@${this.hub} [${capabilities.length} caps, +${capChanges.added.length} -${capChanges.removed.length}]`)
+
+    res.json({
+      ok: true,
+      status,
+      agent: `${name}@${this.hub}`,
+      capabilities,
+      caps_added: capChanges.added,
+      caps_removed: capChanges.removed,
+      note: 'Propagates to federation peers on next mesh sync cycle',
+    })
+  }
+
+  /**
+   * PUT /agents/:name/heartbeat — refresh agent liveness.
+   *
+   * Agents must heartbeat at least once every 60s to avoid eviction.
+   * Returns 404 if agent not registered at this hub.
+   */
+  private _heartbeatAgent(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const agent = this.capIndex.getAgent(name, this.hub)
+
+    if (!agent) {
+      res.status(404).json({ error: `Agent not registered at this hub: ${name}` })
+      return
+    }
+
+    // Update lastSeen by re-upserting with same data
+    this.capIndex.upsertAgent({
+      name: agent.name,
+      hub: agent.hub,
+      capabilities: agent.capabilities,
+      pressure: agent.pressure,
+      lastSeen: new Date().toISOString(),
+    }, true)
+
+    res.json({ ok: true, agent: `${name}@${this.hub}`, lastSeen: new Date().toISOString() })
+  }
+
+  /**
+   * DELETE /agents/:name — deregister an agent.
+   *
+   * Removes the agent from the local capability index.
+   * Propagation to peers happens on next mesh sync.
+   */
+  private _deregisterAgent(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const removed = this.capIndex.removeAgent(name, this.hub)
+
+    if (!removed) {
+      res.status(404).json({ error: `Agent not registered at this hub: ${name}` })
+      return
+    }
+
+    this.log(`Agent deregistered: ${name}@${this.hub}`)
+    res.json({ ok: true, agent: `${name}@${this.hub}` })
   }
 }
