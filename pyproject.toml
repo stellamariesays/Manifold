@@ -27,3 +27,6 @@ exclude = ["tests*", "docs*", "scripts*", "examples*", "federation*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "integration: marks tests that require a live service (deselect with '-m not integration')",
+]
