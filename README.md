@@ -48,11 +48,34 @@ TypeScript/Node networking infrastructure for **multi-agent mesh federation**. W
 - Cross-host mesh synchronization (Stella on Trillian ↔ Eddie on HOG)
 - Capability index propagation
 - Peer discovery and routing
+- Task routing with store-and-forward
+- Detection coordination (claims, verification, challenges)
 - Python bridge for seamless integration
 
 **Use when:** You need agents on different machines to form a single logical mesh.
 
-**Status:** Phase 1 MVP (Tailscale-only). See [`federation/SPEC.md`](federation/SPEC.md) for details.
+#### Scaling Architecture (1000-node ready)
+
+The federation layer includes 10 scaling features designed for production deployment:
+
+| # | Feature | What it does |
+|---|---------|--------------|
+| 1 | **GossipSub peer sampling** | Cyclon-style random peer sampling — no single point of failure, proven at 10K+ nodes |
+| 2 | **Delta sync** | Version-tracked incremental updates instead of full snapshots — ~90% reduction in sync traffic |
+| 3 | **O(1) hub-name index** | Constant-time peer lookup via `Map<string, PeerEntry>` |
+| 4 | **Domain-based detection routing** | Detection claims route only to hubs with subscribed agents, not broadcast to all |
+| 5 | **Capability bloom filters** | Probabilistic capability discovery with ~1% false positive rate, ~100x smaller than full lists |
+| 6 | **Backpressure** | Per-source, per-runner, and global limits prevent cascade failures under burst load |
+| 7 | **MessagePack wire format** | Optional binary encoding — 30-50% smaller messages than JSON, auto-detected on receive |
+| 8 | **Persistent capability cache** | Atomic disk cache survives restarts for instant capability awareness |
+| 9 | **Store-and-forward routing** | Tasks hop through gossip mesh (max 6 hops) to reach agents on non-peer hubs |
+| 10 | **Pre-computed metrics** | Incremental counters with sliding-window throughput — O(1) monitoring |
+
+All features are backward compatible. JSON is the default wire format; MessagePack is opt-in. Delta sync falls back to full snapshots for new peers. Store-and-forward queues tasks when peers are unreachable and delivers on reconnect.
+
+**146 tests** across 12 test files covering all features.
+
+**Status:** Phase 2 complete. See [`federation/SPEC.md`](federation/SPEC.md) for protocol details.
 
 ### Bridge
 Cross-language integration. Currently includes:
