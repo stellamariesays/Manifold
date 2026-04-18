@@ -33,6 +33,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -58,6 +59,10 @@ def load_config(path: str) -> dict:
 
 # ── Runner ──────────────────────────────────────────────────────────────────────
 
+# Heartbeat interval must be well under the server's TTL (60 s).
+_HEARTBEAT_INTERVAL_S = 45
+
+
 class AgentRunner:
     def __init__(self, config: dict):
         self.hub = config["hub"]
@@ -67,6 +72,8 @@ class AgentRunner:
         self.agents = {a["name"]: a for a in config.get("agents", [])}
         self.ws: websocket.WebSocketApp | None = None
         self.running_tasks: dict[str, subprocess.Popen] = {}
+        self._stop_event = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
 
     def start(self) -> None:
         self.log(f"Connecting to {self.ws_url}")
@@ -80,6 +87,10 @@ class AgentRunner:
         self.ws.run_forever(reconnect=5)
 
     def stop(self) -> None:
+        # Signal the heartbeat thread to exit and wait for it.
+        self._stop_event.set()
+        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.join(timeout=2)
         # Deregister from REST API on graceful shutdown
         self._deregister_all()
         if self.ws:
@@ -95,6 +106,9 @@ class AgentRunner:
 
         # Register all agents via REST API (self-registration path)
         self._register_all()
+
+        # Start background heartbeat thread (idempotent — skip if already live)
+        self._start_heartbeat()
 
         # Also send legacy WS agent_runner_ready for backward compat
         agent_details = []
@@ -235,6 +249,45 @@ class AgentRunner:
 
     def _send_result(self, result: dict) -> None:
         self._send({"type": "task_result", "result": result})
+
+    # ── Heartbeat ──────────────────────────────────────────────────────────
+
+    def _start_heartbeat(self) -> None:
+        """Start the background heartbeat thread if not already running."""
+        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name="agent-heartbeat",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+        self.log(f"Heartbeat thread started (interval={_HEARTBEAT_INTERVAL_S}s)")
+
+    def _heartbeat_loop(self) -> None:
+        """Send PUT /agents/:name/heartbeat for every registered agent.
+
+        Runs every _HEARTBEAT_INTERVAL_S seconds.  Uses threading.Event.wait()
+        so it wakes up immediately when stop() signals the event.
+        """
+        while not self._stop_event.wait(timeout=_HEARTBEAT_INTERVAL_S):
+            for name in list(self.agents):
+                self._send_heartbeat(name)
+
+    def _send_heartbeat(self, name: str) -> None:
+        """PUT /agents/:name/heartbeat — renew the server-side TTL."""
+        try:
+            req = Request(
+                f"{self.rest_url}/agents/{name}/heartbeat",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="PUT",
+            )
+            with urlopen(req, timeout=5) as resp:
+                pass  # fire-and-forget; errors are non-fatal
+        except Exception as e:
+            self.log(f"Heartbeat {name} failed: {e}")
 
     # ── REST self-registration ─────────────────────────────────────────────
 
