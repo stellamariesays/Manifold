@@ -6,9 +6,11 @@ import { PeerRegistry } from './peer-registry.js'
 import { CapabilityIndex } from './capability-index.js'
 import { MeshSync } from './mesh-sync.js'
 import { RestApi } from './rest-api.js'
-import { ManifestRegistry } from './manifest-registry.js'
 import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
+import { HubCapabilityBloom } from './capability-bloom.js'
+import { PersistentCapabilityCache } from './capability-cache.js'
+import * as wireCodec from '../protocol/wire-codec.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
@@ -46,7 +48,7 @@ export interface ManifoldServerConfig {
     pubkey?: string
   }
 
-  /** Peer federation server addresses to connect to */
+  /** Peer federation server addresses to connect to / bootstrap from */
   peers?: string[]
 
   /**
@@ -63,6 +65,18 @@ export interface ManifoldServerConfig {
 
   /** Security configuration */
   security?: SecurityConfig
+
+  /** Enable GossipSub peer sampling. Default true. */
+  gossipEnabled?: boolean
+
+  /** GossipSub view size (max peers to maintain). Default 8. */
+  gossipViewSize?: number
+
+  /** GossipSub shuffle interval in ms. Default 10000. */
+  gossipShuffleIntervalMs?: number
+
+  /** Wire format for federation messages: 'json' (default) or 'msgpack'. */
+  wireFormat?: 'json' | 'msgpack'
 
   debug?: boolean
 }
@@ -85,10 +99,13 @@ export class ManifoldServer extends EventEmitter {
   readonly taskHistory: TaskHistory
   readonly metrics: MetricsCollector
   readonly allowlist: TaskAllowlist
+  /** Hub capability bloom filter */
+  hubBloom!: HubCapabilityBloom
+  /** Persistent capability cache */
+  private capCache!: PersistentCapabilityCache
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
-  readonly manifestRegistry: ManifestRegistry
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -106,6 +123,9 @@ export class ManifoldServer extends EventEmitter {
       syncIntervalMs: 15_000,
       restEnabled: true,
       security: {},
+      gossipEnabled: true,
+      gossipViewSize: 8,
+      gossipShuffleIntervalMs: 10_000,
       debug: false,
       ...config,
     }
@@ -117,15 +137,31 @@ export class ManifoldServer extends EventEmitter {
       selfHub: this.hub,
       selfAddress,
       selfPubkey: this.config.identity?.pubkey,
+      gossipEnabled: this.config.gossipEnabled,
+      gossipViewSize: this.config.gossipViewSize,
+      gossipShuffleIntervalMs: this.config.gossipShuffleIntervalMs,
+      gossipSeeds: this.config.peers,
+      capabilityBloomProvider: () => this.hubBloom?.serialize(),
       debug: this.config.debug,
     })
 
     this.capIndex = new CapabilityIndex()
-    this.manifestRegistry = new ManifestRegistry({ debug: this.config.debug })
+
+    // Capability bloom filter — rebuilt whenever capabilities change
+    this.hubBloom = new HubCapabilityBloom({ expectedItems: 200, errorRate: 0.01 })
+    this.capCache = new PersistentCapabilityCache({ hub: this.hub })
+
     this.meshSync = new MeshSync({
       hub: this.hub,
       intervalMs: this.config.syncIntervalMs,
       debug: this.config.debug,
+      localBroadcast: (data: string) => {
+        this.localWss?.clients.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data)
+          }
+        })
+      },
     })
 
     this.restApi = new RestApi({
@@ -160,6 +196,8 @@ export class ManifoldServer extends EventEmitter {
     this.detectionCoord = new DetectionCoord({
       hub: this.hub,
       ledger: this.detectionLedger,
+      capIndex: this.capIndex,
+      peerRegistry: this.peerRegistry,
       debug: this.config.debug,
     })
 
@@ -172,6 +210,29 @@ export class ManifoldServer extends EventEmitter {
     if (this.started) return
     this.started = true
     this.startTime = Date.now()
+
+    // 0. Load persistent capability cache for instant recovery
+    try {
+      const cached = await this.capCache.load()
+      if (cached.agents.length > 0) {
+        this.log(`Loading ${cached.agents.length} agents from capability cache`)
+        for (const entry of cached.agents) {
+          if (!entry.isLocal) {
+            this.capIndex.upsertAgent(entry.agent, false)
+          }
+        }
+        if (cached.darkCircles.length > 0) {
+          for (const dc of cached.darkCircles) {
+            for (const [hub, pressure] of Object.entries(dc.byHub)) {
+              this.capIndex.updateDarkCircles(hub, [{ name: dc.name, pressure }])
+            }
+          }
+        }
+        this._rebuildBloom()
+      }
+    } catch (err) {
+      this.log(`Cache load failed (non-fatal): ${err}`)
+    }
 
     // 1. Start Python bridge (if atlas configured)
     if (this.config.atlasPath) {
@@ -199,15 +260,17 @@ export class ManifoldServer extends EventEmitter {
       await this.restApi.start(
         this.capIndex, this.peerRegistry, this.meshSync,
         this.taskRouter, this.taskHistory, this.metrics,
-        this.manifestRegistry,
         this.config.security, this.detectionCoord,
       )
     }
 
-    // 5. Connect to static peers
+    // 5. Connect to static peers / gossip seeds
     for (const peerAddr of this.config.peers) {
       this.peerRegistry.addPeer(peerAddr)
     }
+
+    // 6. Start gossip sampler
+    this.peerRegistry.start()
 
     // 6. Start periodic mesh sync
     this.meshSync.start(this.capIndex, this.peerRegistry)
@@ -256,6 +319,24 @@ export class ManifoldServer extends EventEmitter {
     if (!this.started) return
     this.started = false
 
+    // Save capability cache for fast restart
+    try {
+      const agents = this.capIndex.getAllAgents().map(a => ({
+        agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
+        cachedAt: Date.now(),
+        isLocal: a.isLocal,
+      }))
+      const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
+        name: dc.name,
+        pressure: dc.pressure,
+        byHub: dc.byHub ?? {},
+      }))
+      await this.capCache.save(agents, darkCircles)
+      this.log(`Saved ${agents.length} agents to capability cache`)
+    } catch (err) {
+      this.log(`Cache save failed (non-fatal): ${err}`)
+    }
+
     this.meshSync.stop()
     this.peerRegistry.stop()
     this.taskRouter.stop()
@@ -290,7 +371,7 @@ export class ManifoldServer extends EventEmitter {
    * Register a local agent's capabilities on this hub.
    */
   registerAgent(name: string, capabilities: string[], seams?: string[]): void {
-    const { added, capChanges } = this.capIndex.upsertAgent(
+    const { added } = this.capIndex.upsertAgent(
       { name, hub: this.hub, capabilities, seams },
       true,
     )
@@ -298,14 +379,9 @@ export class ManifoldServer extends EventEmitter {
       const agent = this.capIndex.getAgent(name, this.hub)!
       this.emit('agent:join', agent)
     }
-    // New capabilities may resolve dark circles
-    if (added || capChanges.added.length > 0) {
-      const resolved = this.capIndex.resolveDarkCircles()
-      if (resolved.length > 0) {
-        this.log(`Agent ${name} resolved circles: ${resolved.join(', ')}`)
-        this.meshSync.sync() // propagate resolved state
-      }
-    }
+    // Update delta sync snapshot
+    this.meshSync.onLocalChange()
+    this._rebuildBloom()
   }
 
   /**
@@ -359,15 +435,11 @@ export class ManifoldServer extends EventEmitter {
         this.log(`Inbound federation connection from ${remote}`)
         this.peerRegistry.registerInbound(ws, remote)
 
-        // task_request / task_result handled by _wirePeerRegistry — skip to avoid double-routing
+        // Handle messages from local clients connecting to federation port directly
         ws.on('message', (data) => {
           const raw = typeof data === 'string' ? data : data.toString()
           const msg = parseMessage(raw)
-          if (msg) {
-            const msgType = (msg as Record<string, any>).type as string
-            if (msgType === 'task_request' || msgType === 'task_result') return
-            this._handleClientMessage(msg, ws)
-          }
+          if (msg) this._handleClientMessage(msg, ws)
         })
       })
 
@@ -422,20 +494,14 @@ export class ManifoldServer extends EventEmitter {
       return
     }
 
-    if (msgType === 'agent_runner_ready') {
-      this.log(`Agent runner ready with ${((msg as any).agents as any[]).length} agents`)
-      const agents = (msg as any).agents as Array<string | { name: string; capabilities?: string[]; seams?: string[] }>
-      this.taskRouter.registerRunner(ws, agents.map(a => typeof a === 'string' ? a : a.name))
+    if (msgType === 'task_forward') {
+      this.taskRouter.handleForward(msg as any)
+      return
+    }
 
-      // Register agents into capability index so mesh sync broadcasts them to peers
-      for (const a of agents) {
-        if (typeof a === 'string') {
-          this.registerAgent(a, [])
-        } else {
-          this.registerAgent(a.name, a.capabilities ?? [], a.seams)
-        }
-      }
-      this.meshSync.sync()
+    if (msgType === 'agent_runner_ready') {
+      const agents = (msg as any).agents as string[]
+      this.taskRouter.registerRunner(ws, agents)
       return
     }
 
@@ -451,6 +517,12 @@ export class ManifoldServer extends EventEmitter {
     switch (fedMsg.type) {
       case 'mesh_sync':
         this._handleMeshSync(fedMsg)
+        break
+      case 'mesh_delta':
+        this._handleMeshDelta(fedMsg)
+        break
+      case 'mesh_delta_ack':
+        this._handleMeshDeltaAck(fedMsg)
         break
       case 'capability_query':
         this._handleCapabilityQuery(fedMsg, ws)
@@ -482,6 +554,55 @@ export class ManifoldServer extends EventEmitter {
     this.capIndex.updateDarkCircles(msg.hub, msg.darkCircles)
     this.peerRegistry.updateAgentCount(msg.hub, msg.agents.length)
     this.emit('mesh:sync', msg.hub)
+
+    // ACK the version if present (delta sync)
+    if (msg.version) {
+      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: msg.hub, version: msg.version })
+    }
+  }
+
+  private _handleMeshDelta(msg: FederationMessage): void {
+    const delta = msg as any
+    if (delta.agentDeltas) {
+      for (const ad of delta.agentDeltas) {
+        if (ad.op === 'upsert') {
+          const isLocal = ad.agent.hub === this.hub
+          const { added, capChanges } = this.capIndex.upsertAgent(ad.agent, isLocal)
+          if (added) {
+            const full = this.capIndex.getAgent(ad.agent.name, ad.agent.hub)!
+            this.emit('agent:join', full)
+          } else if (capChanges.added.length > 0 || capChanges.removed.length > 0) {
+            this.log(`Capability change for ${ad.agent.name}@${ad.agent.hub}`)
+          }
+        } else if (ad.op === 'remove') {
+          this.capIndex.removeAgent(ad.agent.name, ad.agent.hub)
+          this.emit('agent:leave', ad.agent)
+        }
+      }
+      this._rebuildBloom()
+    }
+
+    if (delta.darkCircleDeltas) {
+      // Collect current dark circles for this hub, apply deltas, then update
+      for (const dcd of delta.darkCircleDeltas) {
+        if (dcd.op === 'upsert') {
+          this.capIndex.updateDarkCircles(dcd.hub, [dcd.circle])
+        }
+        // remove dark circle would need a removeDarkCircle method — for now, upsert handles it
+      }
+    }
+
+    this.emit('mesh:delta', delta.hub)
+
+    // ACK the version
+    if (delta.toVersion) {
+      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: delta.hub, version: delta.toVersion })
+    }
+  }
+
+  private _handleMeshDeltaAck(msg: FederationMessage): void {
+    const ack = msg as any
+    this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: ack.hub, version: ack.version })
   }
 
   private _handleCapabilityQuery(msg: CapabilityQueryMessage, replyTo: WebSocket): void {
@@ -581,6 +702,11 @@ export class ManifoldServer extends EventEmitter {
         return
       }
 
+      if (msgType === 'task_forward') {
+        this.taskRouter.handleForward(msg as any)
+        return
+      }
+
       // Phase 3: Detection messages from remote peers
       if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
           msgType === 'detection_challenge' || msgType === 'detection_outcome') {
@@ -595,12 +721,16 @@ export class ManifoldServer extends EventEmitter {
 
     this.peerRegistry.on('peer:connect', (peer: PeerInfo) => {
       this.log(`Peer connected: ${peer.hub}`)
+      this.meshSync.onPeerConnect(peer.hub)
+      // Drain forward queue — new peer might unlock queued tasks
+      this.taskRouter.drainForwardQueue()
       this.emit('peer:connect', peer)
       // Send our state immediately
       this.meshSync.sync()
     })
 
-    this.peerRegistry.on('peer:disconnect', (peer: Pick<PeerInfo, 'hub'>) => {
+    this.peerRegistry.on('peer:disconnect', (peer: { hub: string; address: string }) => {
+      this.meshSync.onPeerDisconnect(peer.hub)
       this.log(`Peer disconnected: ${peer.hub}`)
       const removed = this.capIndex.removeHub(peer.hub)
       for (const key of removed) {
@@ -608,6 +738,7 @@ export class ManifoldServer extends EventEmitter {
         this.emit('agent:leave', { name, hub })
       }
       this.emit('peer:disconnect', peer)
+      this._rebuildBloom()
     })
   }
 
@@ -622,22 +753,23 @@ export class ManifoldServer extends EventEmitter {
     }
 
     for (const agent of snapshot.agents) {
-      const { added, capChanges } = this.capIndex.upsertAgent(agent, true)
+      const { added } = this.capIndex.upsertAgent(agent, true)
       if (added) {
-        const full = this.capIndex.getAgent(agent.name, agent.hub)!
+        const full = this.capIndex.getAgent(agent.name, this.hub)!
         this.emit('agent:join', full)
-      }
-      // Bridge agents may have circle-closing capabilities
-      if (added || capChanges.added.length > 0) {
-        const resolved = this.capIndex.resolveDarkCircles()
-        if (resolved.length > 0) {
-          this.log(`Bridge agent ${agent.name} resolved circles: ${resolved.join(', ')}`)
-        }
       }
     }
 
     this.capIndex.updateDarkCircles(this.hub, snapshot.darkCircles)
+    this.meshSync.onLocalChange()
+    this._rebuildBloom()
     this.log(`Bridge ingested: ${snapshot.agents.length} agents`)
+  }
+
+  /** Rebuild capability bloom filter from current index. */
+  private _rebuildBloom(): void {
+    const caps = this.capIndex.getAllCapabilities()
+    this.hubBloom.rebuild(caps)
   }
 
   private log(msg: string): void {
