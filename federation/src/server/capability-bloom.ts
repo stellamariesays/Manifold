@@ -49,9 +49,10 @@ export class BloomFilter {
 
   /** Reconstruct from serialized data. */
   static fromSerialized(size: number, hashCount: number, bits: Uint8Array): BloomFilter {
-    const bf = Object.create(BloomFilter.prototype) as BloomFilter
-    bf.size = size
-    bf.hashCount = hashCount
+    const bf = Object.create(BloomFilter.prototype, {
+      size: { value: size, writable: false, configurable: true },
+      hashCount: { value: hashCount, writable: false, configurable: true },
+    }) as BloomFilter
     bf.bits = bits
     return bf
   }

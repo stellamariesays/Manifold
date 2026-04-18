@@ -215,7 +215,8 @@ export class CapabilityIndex {
 
       // Recompute per-hub resolved pressures from raw
       let maxResolved = 0
-      const hubs = Object.keys(circle.byHub ?? {})
+      if (!circle.byHub) circle.byHub = {}
+      const hubs = Object.keys(circle.byHub)
 
       for (const hub of hubs) {
         const raw = this.rawPressures.get(`${circleName}:${hub}`) ?? 0
