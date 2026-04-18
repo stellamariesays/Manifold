@@ -2,6 +2,8 @@
 // Sits on top of the federation server, listens for detection_claim/verify/challenge/outcome.
 
 import type { DetectionLedger } from './detection-ledger.js'
+import type { CapabilityIndex } from './capability-index.js'
+import type { PeerRegistry } from './peer-registry.js'
 import type {
   DetectionClaim,
   DetectionVerify,
@@ -16,6 +18,10 @@ import type {
 export interface DetectionCoordOptions {
   hub: string
   ledger: DetectionLedger
+  capIndex?: CapabilityIndex
+  peerRegistry?: PeerRegistry
+  /** Enable domain-based routing (only send to subscribers). Default true. */
+  domainRoutingEnabled?: boolean
   debug?: boolean
 }
 
@@ -24,15 +30,24 @@ type DetectionMessage = DetectionClaimMessage | DetectionVerifyMessage | Detecti
 export class DetectionCoord {
   private readonly hub: string
   private readonly _ledger: DetectionLedger
+  private readonly capIndex?: CapabilityIndex
+  private readonly peerRegistry?: PeerRegistry
+  private readonly domainRoutingEnabled: boolean
   private readonly debug: boolean
   private broadcastFn: ((msg: object) => void) | null = null
 
   // Subscribers — agents that want to hear about detection events in specific domains
   private domainSubscribers = new Map<string, Set<string>>() // domain → Set<agent@hub>
 
+  // Track which hubs have agents subscribed to which domains
+  private domainHubIndex = new Map<string, Set<string>>() // domain → Set<hub>
+
   constructor(options: DetectionCoordOptions) {
     this._ledger = options.ledger
     this.hub = options.hub
+    this.capIndex = options.capIndex
+    this.peerRegistry = options.peerRegistry
+    this.domainRoutingEnabled = options.domainRoutingEnabled ?? true
     this.debug = options.debug ?? false
   }
 
@@ -65,19 +80,27 @@ export class DetectionCoord {
   }
 
   private handleClaim(claim: DetectionClaim): void {
-    // Store in ledger — dedup returns null if claim already existed
+    this.log(`Claim: [${claim.domain}] ${claim.summary} (confidence: ${claim.confidence}) from ${claim.source}`)
+
+    // Store in ledger
     const entry = this._ledger.addClaim(claim)
     if (!entry) return
 
-    this.log(`Claim: [${claim.domain}] ${claim.summary} (confidence: ${claim.confidence}) from ${claim.source}`)
+    // Domain-based routing: only send to hubs that have subscribers for this domain
+    if (this.domainRoutingEnabled && this.domainHubIndex.has(claim.domain)) {
+      this.routeToDomain(claim.domain, {
+        type: 'detection_claim',
+        claim,
+      })
+    } else {
+      // Fallback: broadcast to all
+      this.broadcast({
+        type: 'detection_claim',
+        claim,
+      })
+    }
 
-    // Propagate to all peers and local subscribers (only for NEW claims)
-    this.broadcast({
-      type: 'detection_claim',
-      claim,
-    })
-
-    // Notify domain subscribers
+    // Notify local subscribers
     this.notifySubscribers(claim.domain, claim)
   }
 
@@ -134,10 +157,34 @@ export class DetectionCoord {
     }
     this.domainSubscribers.get(domain)!.add(agent)
     this.log(`Subscribed ${agent} to domain: ${domain}`)
+
+    // Update hub index
+    if (!this.domainHubIndex.has(domain)) {
+      this.domainHubIndex.set(domain, new Set())
+    }
+    // Extract hub from agent (format: "name@hub" or just "name")
+    const hub = agent.includes('@') ? agent.split('@').pop()! : this.hub
+    this.domainHubIndex.get(domain)!.add(hub)
   }
 
   unsubscribe(domain: string, agent: string): void {
     this.domainSubscribers.get(domain)?.delete(agent)
+  }
+
+  /** Get hubs subscribed to a domain */
+  getHubsForDomain(domain: string): string[] {
+    return Array.from(this.domainHubIndex.get(domain) ?? [])
+  }
+
+  /** Get stats about domain routing */
+  getDomainRoutingStats(): { domains: number; totalSubscriptions: number; domainBreakdown: Record<string, number> } {
+    let totalSubs = 0
+    const breakdown: Record<string, number> = {}
+    for (const [domain, subs] of this.domainSubscribers) {
+      totalSubs += subs.size
+      breakdown[domain] = subs.size
+    }
+    return { domains: this.domainSubscribers.size, totalSubscriptions: totalSubs, domainBreakdown: breakdown }
   }
 
   private notifySubscribers(domain: string, claim: DetectionClaim): void {
@@ -168,6 +215,36 @@ export class DetectionCoord {
   private broadcast(msg: object): void {
     if (this.broadcastFn) {
       this.broadcastFn(msg)
+    }
+  }
+
+  /**
+   * Route a message only to hubs that have agents subscribed to the given domain.
+   */
+  private routeToDomain(domain: string, msg: object): void {
+    const targetHubs = this.domainHubIndex.get(domain)
+    if (!targetHubs || targetHubs.size === 0) {
+      // No subscribers — broadcast as fallback
+      this.broadcast(msg)
+      return
+    }
+
+    // Send to specific hubs via peer registry
+    if (this.peerRegistry) {
+      const msgStr = JSON.stringify(msg)
+      let sent = false
+      for (const hub of targetHubs) {
+        if (hub === this.hub) continue // local subscribers handled separately
+        if (this.peerRegistry.sendTo(hub, msgStr)) {
+          sent = true
+        }
+      }
+      // If we couldn't reach any specific hub, broadcast
+      if (!sent && targetHubs.size > 1) {
+        this.broadcast(msg)
+      }
+    } else {
+      this.broadcast(msg)
     }
   }
 
