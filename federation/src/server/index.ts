@@ -8,6 +8,8 @@ import { MeshSync } from './mesh-sync.js'
 import { RestApi } from './rest-api.js'
 import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
+import { HubCapabilityBloom } from './capability-bloom.js'
+import * as wireCodec from '../protocol/wire-codec.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
@@ -72,6 +74,9 @@ export interface ManifoldServerConfig {
   /** GossipSub shuffle interval in ms. Default 10000. */
   gossipShuffleIntervalMs?: number
 
+  /** Wire format for federation messages: 'json' (default) or 'msgpack'. */
+  wireFormat?: 'json' | 'msgpack'
+
   debug?: boolean
 }
 
@@ -93,6 +98,8 @@ export class ManifoldServer extends EventEmitter {
   readonly taskHistory: TaskHistory
   readonly metrics: MetricsCollector
   readonly allowlist: TaskAllowlist
+  /** Hub capability bloom filter */
+  hubBloom!: HubCapabilityBloom
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
@@ -131,10 +138,15 @@ export class ManifoldServer extends EventEmitter {
       gossipViewSize: this.config.gossipViewSize,
       gossipShuffleIntervalMs: this.config.gossipShuffleIntervalMs,
       gossipSeeds: this.config.peers,
+      capabilityBloomProvider: () => this.hubBloom?.serialize(),
       debug: this.config.debug,
     })
 
     this.capIndex = new CapabilityIndex()
+
+    // Capability bloom filter — rebuilt whenever capabilities change
+    this.hubBloom = new HubCapabilityBloom({ expectedItems: 200, errorRate: 0.01 })
+
     this.meshSync = new MeshSync({
       hub: this.hub,
       intervalMs: this.config.syncIntervalMs,
@@ -322,6 +334,7 @@ export class ManifoldServer extends EventEmitter {
     }
     // Update delta sync snapshot
     this.meshSync.onLocalChange()
+    this._rebuildBloom()
   }
 
   /**
@@ -514,6 +527,7 @@ export class ManifoldServer extends EventEmitter {
           this.emit('agent:leave', ad.agent)
         }
       }
+      this._rebuildBloom()
     }
 
     if (delta.darkCircleDeltas) {
@@ -665,6 +679,7 @@ export class ManifoldServer extends EventEmitter {
         this.emit('agent:leave', { name, hub })
       }
       this.emit('peer:disconnect', peer)
+      this._rebuildBloom()
     })
   }
 
@@ -688,7 +703,14 @@ export class ManifoldServer extends EventEmitter {
 
     this.capIndex.updateDarkCircles(this.hub, snapshot.darkCircles)
     this.meshSync.onLocalChange()
+    this._rebuildBloom()
     this.log(`Bridge ingested: ${snapshot.agents.length} agents`)
+  }
+
+  /** Rebuild capability bloom filter from current index. */
+  private _rebuildBloom(): void {
+    const caps = this.capIndex.getAllCapabilities()
+    this.hubBloom.rebuild(caps)
   }
 
   private log(msg: string): void {

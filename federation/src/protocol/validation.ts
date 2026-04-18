@@ -32,6 +32,11 @@ const PeerAnnounceSchema = z.object({
   timestamp: z.string(),
   signature: z.string().optional(),
   requestId: z.string().optional(),
+  capabilityBloom: z.object({
+    size: z.number(),
+    hashCount: z.number(),
+    bits: z.string(),
+  }).optional(),
 })
 
 const PeerByeSchema = z.object({

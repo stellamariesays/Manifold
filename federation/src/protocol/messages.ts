@@ -37,6 +37,8 @@ export interface PeerAnnounceMessage extends BaseMessage {
   pubkey?: string
   timestamp: string
   signature?: string
+  /** Bloom filter of hub capabilities (optional, for scaling) */
+  capabilityBloom?: { size: number; hashCount: number; bits: string }
 }
 
 export interface PeerByeMessage extends BaseMessage {
