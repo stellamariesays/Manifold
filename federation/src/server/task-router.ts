@@ -88,6 +88,25 @@ export class TaskRouter extends EventEmitter {
   /** Completed task results (kept briefly for status queries) */
   private completed = new Map<string, { result: TaskResult; completedAt: number }>()
 
+  /** Store-and-forward queue: tasks waiting for unreachable hubs */
+  private forwardQueue: Array<{
+    task: TaskRequest
+    targetHub: string
+    replyTo: WebSocket | null
+    sourceKey: string
+    enqueuedAt: number
+    attempts: number
+  }> = []
+
+  /** Max forward queue size. Default 200. */
+  private readonly maxForwardQueueSize = 200
+
+  /** Max hops for forwarded tasks. Default 6. */
+  private readonly maxForwardHops = 6
+
+  /** Forward queue drain interval */
+  private forwardDrainInterval: ReturnType<typeof setInterval> | null = null
+
   /** Connected local agent runners, keyed by runner session ID */
   private runners = new Map<string, { ws: WebSocket; agents: string[] }>()
 
@@ -116,10 +135,13 @@ export class TaskRouter extends EventEmitter {
     this.peerRegistry = peerRegistry
     this.allowlist = allowlist ?? null
     this.rateLimiter = rateLimiter ?? null
+    // Periodically try to forward queued tasks
+    this.forwardDrainInterval = setInterval(() => this.drainForwardQueue(), 15_000)
     this.log('Task router started')
   }
 
   stop(): void {
+    if (this.forwardDrainInterval) clearInterval(this.forwardDrainInterval)
     for (const [, pending] of this.pending) {
       if (pending.timeout) clearTimeout(pending.timeout)
     }
@@ -328,21 +350,33 @@ export class TaskRouter extends EventEmitter {
     if (!task.origin) task.origin = this.hub
     if (!task.caller) task.caller = `${this.hub}`
 
+    // Try direct send first
     const sent = this.peerRegistry.sendTo(targetHub, JSON.stringify({
       type: 'task_request',
       task,
     } as TaskRequestMessage))
 
     if (!sent) {
-      const result: TaskResult = {
-        id: task.id,
-        status: 'not_found',
-        error: `Peer hub ${targetHub} not connected`,
-        completed_at: new Date().toISOString(),
+      // Direct send failed — try store-and-forward via gossip mesh
+      const forwarded = this.tryForwardViaMesh(task, targetHub)
+      if (!forwarded) {
+        // Queue for later delivery
+        if (this.forwardQueue.length >= this.maxForwardQueueSize) {
+          const result: TaskResult = {
+            id: task.id,
+            status: 'rejected',
+            error: `Hub ${targetHub} unreachable and forward queue full`,
+            completed_at: new Date().toISOString(),
+          }
+          this.sendResult(result, replyTo)
+          this.emit('task:complete', { result, task })
+          return
+        }
+        this.forwardQueue.push({ task, targetHub, replyTo, sourceKey, enqueuedAt: Date.now(), attempts: 0 })
+        this.log(`Queued for store-and-forward: ${targetHub} (${task.id.substring(0, 8)}...) queue=${this.forwardQueue.length}`)
+        this.emit('task:forward_queued', { task, targetHub })
+        return
       }
-      this.sendResult(result, replyTo)
-      this.emit('task:complete', { result, task })
-      return
     }
 
     // Track pending (waiting for result from remote hub)
@@ -578,5 +612,148 @@ export class TaskRouter extends EventEmitter {
 
   private log(msg: string): void {
     if (this.debug) console.log(`[TaskRouter:${this.hub}] ${msg}`)
+  }
+
+  // ── Store-and-Forward ────────────────────────────────────────────────────
+
+  /**
+   * Try to forward a task through the gossip mesh toward its destination.
+   * Sends task_forward to peers that might have a route to the target hub.
+   */
+  private tryForwardViaMesh(task: TaskRequest, targetHub: string): boolean {
+    // Check if any peer knows about this hub via bloom filter
+    const peersWithRoute = this.peerRegistry.findHubsWithCapability?.(targetHub)
+    // Simple approach: forward to all connected peers (gossip-style)
+    const peers = this.peerRegistry.getPeers()
+    if (peers.length === 0) return false
+
+    const forwardMsg = {
+      type: 'task_forward' as const,
+      task,
+      hopCount: 1,
+      maxHops: this.maxForwardHops,
+      originHub: this.hub,
+    }
+
+    let sent = false
+    for (const peer of peers) {
+      if (peer.hub === targetHub) continue // already tried direct
+      if (this.peerRegistry.sendTo(peer.hub, JSON.stringify(forwardMsg))) {
+        sent = true
+      }
+    }
+    return sent
+  }
+
+  /**
+   * Handle incoming task_forward message from a peer.
+   * If we can reach the target, forward it. Otherwise, re-forward with hopCount++.
+   */
+  handleForward(msg: { task: TaskRequest; hopCount: number; maxHops: number; originHub: string }): void {
+    const { task, hopCount, maxHops, originHub } = msg
+
+    // Don't re-forward if we've seen this task or it originated here
+    if (task.origin === this.hub || this.pending.has(task.id)) return
+
+    // Parse target
+    const [, targetHub] = task.target.includes('@')
+      ? task.target.split('@')
+      : [task.target, this.hub]
+
+    // If target is local, route it locally
+    if (targetHub === this.hub) {
+      this.routeTask(task, null, originHub)
+      return
+    }
+
+    // Try direct send to target
+    const sent = this.peerRegistry.sendTo(targetHub, JSON.stringify({
+      type: 'task_request',
+      task,
+    }))
+    if (sent) {
+      this.log(`Forwarded task ${task.id.substring(0, 8)}... to ${targetHub} (hop ${hopCount})`)
+      return
+    }
+
+    // Re-forward if we have hops left
+    if (hopCount >= maxHops) {
+      this.log(`Dropping forward for ${task.id.substring(0, 8)}... — max hops reached`)
+      return
+    }
+
+    const forwardMsg = {
+      type: 'task_forward' as const,
+      task,
+      hopCount: hopCount + 1,
+      maxHops,
+      originHub,
+    }
+
+    const peers = this.peerRegistry.getPeers()
+    for (const peer of peers) {
+      if (peer.hub === originHub) continue // don't send back to origin
+      this.peerRegistry.sendTo(peer.hub, JSON.stringify(forwardMsg))
+    }
+  }
+
+  /**
+   * Drain the forward queue — try to deliver queued tasks.
+   * Called periodically and when new peers connect.
+   */
+  drainForwardQueue(): void {
+    if (this.forwardQueue.length === 0) return
+
+    const remaining: typeof this.forwardQueue = []
+    for (const entry of this.forwardQueue) {
+      // Check if task has expired
+      const elapsed = Date.now() - entry.enqueuedAt
+      const taskTtl = entry.task.timeout_ms ?? this.defaultTimeoutMs
+      if (elapsed >= taskTtl) {
+        const result: TaskResult = {
+          id: entry.task.id,
+          status: 'timeout',
+          error: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)`,
+          completed_at: new Date().toISOString(),
+        }
+        this.sendResult(result, entry.replyTo)
+        this.emit('task:complete', { result, task: entry.task })
+        continue
+      }
+
+      // Try direct send
+      const sent = this.peerRegistry.sendTo(entry.targetHub, JSON.stringify({
+        type: 'task_request',
+        task: entry.task,
+      }))
+      if (sent) {
+        // Track as pending
+        const pending: PendingTask = {
+          task: entry.task,
+          origin: 'local',
+          sourceKey: entry.sourceKey,
+          replyTo: entry.replyTo,
+          createdAt: entry.enqueuedAt,
+          timeout: setTimeout(() => this.handleTimeout(entry.task.id), taskTtl - elapsed),
+        }
+        this.pending.set(entry.task.id, pending)
+        this.pendingPerSource.set(entry.sourceKey, (this.pendingPerSource.get(entry.sourceKey) ?? 0) + 1)
+        this.log(`Forward queue delivered: ${entry.targetHub} (${entry.task.id.substring(0, 8)}...)`)
+        this.emit('task:forward_delivered', { task: entry.task, targetHub: entry.targetHub })
+        continue
+      }
+
+      entry.attempts++
+      remaining.push(entry)
+    }
+    this.forwardQueue = remaining
+  }
+
+  /** Get forward queue stats */
+  getForwardQueueStats(): { size: number; maxSize: number; oldestAgeMs: number } {
+    const oldest = this.forwardQueue.length > 0
+      ? Date.now() - this.forwardQueue[0].enqueuedAt
+      : 0
+    return { size: this.forwardQueue.length, maxSize: this.maxForwardQueueSize, oldestAgeMs: oldest }
   }
 }
