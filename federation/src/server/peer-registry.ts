@@ -2,8 +2,10 @@ import { EventEmitter } from 'events'
 import WebSocket from 'ws'
 import { v4 as uuid } from 'uuid'
 import { parseMessage } from '../protocol/validation.js'
+import { PeerSampler } from './peer-sampler.js'
 import type { FederationMessage, PeerAnnounceMessage } from '../protocol/messages.js'
 import type { PeerInfo } from '../shared/types.js'
+import type { ShuffleRequest, ShuffleResponse } from './peer-sampler.js'
 
 export interface PeerEntry extends PeerInfo {
   ws: WebSocket | null
@@ -16,6 +18,14 @@ export interface PeerRegistryOptions {
   selfAddress: string
   selfPubkey?: string
   reconnectDelay?: number
+  /** Enable GossipSub peer sampling. Default true. */
+  gossipEnabled?: boolean
+  /** Max peers to maintain connections to (GossipSub view size). Default 8 */
+  gossipViewSize?: number
+  /** Gossip shuffle interval in ms. Default 10000 */
+  gossipShuffleIntervalMs?: number
+  /** Seed addresses for bootstrapping */
+  gossipSeeds?: string[]
   debug?: boolean
 }
 
@@ -24,16 +34,20 @@ export class PeerRegistry extends EventEmitter {
   private readonly selfAddress: string
   private readonly selfPubkey: string | undefined
   private readonly reconnectDelay: number
+  private readonly gossipEnabled: boolean
   private readonly debug: boolean
 
-  /** Outbound peers (we dial these) */
+  /** Outbound peers (we dial these) — keyed by address */
   private outbound: Map<string, PeerEntry> = new Map()
 
-  /** Inbound peers (they dialed us) keyed by hub name */
+  /** Inbound peers (they dialed us) — keyed by address or hub name */
   private inbound: Map<string, PeerEntry> = new Map()
 
-  /** Set of hub names where we have both inbound and outbound — inbound is receive-only */
-  private dedupedInbound: Set<string> = new Set()
+  /** O(1) hub-name index — Maps hub name → PeerEntry */
+  private byHub: Map<string, PeerEntry> = new Map()
+
+  /** GossipSub peer sampler */
+  readonly sampler: PeerSampler
 
   constructor(options: PeerRegistryOptions) {
     super()
@@ -41,28 +55,62 @@ export class PeerRegistry extends EventEmitter {
     this.selfAddress = options.selfAddress
     this.selfPubkey = options.selfPubkey
     this.reconnectDelay = options.reconnectDelay ?? 10000
+    this.gossipEnabled = options.gossipEnabled ?? true
     this.debug = options.debug ?? false
+
+    this.sampler = new PeerSampler({
+      selfHub: this.selfHub,
+      selfAddress: this.selfAddress,
+      viewSize: options.gossipViewSize ?? 8,
+      shuffleIntervalMs: options.gossipShuffleIntervalMs ?? 10_000,
+      seeds: options.gossipSeeds,
+      debug: this.debug,
+    })
+
+    // Wire sampler events
+    this.sampler.on('shuffle:send', (target, request: ShuffleRequest) => {
+      this._sendShuffleRequest(target, request)
+    })
+
+    this.sampler.on('view:added', (desc) => {
+      // Connect to new view member if not already connected
+      this._ensureConnection(desc)
+    })
+
+    this.sampler.on('view:evicted', (desc) => {
+      this.log(`View evicted: ${desc.hub}`)
+      // Don't disconnect immediately — they might be in inbound map
+      // Only disconnect if purely outbound and not needed
+    })
+  }
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
+
+  /**
+   * Start the peer registry and gossip sampler.
+   */
+  start(): void {
+    if (this.gossipEnabled) {
+      this.sampler.start()
+    }
   }
 
   // ── Peer management ─────────────────────────────────────────────────────────
 
   /**
    * Add a static peer (outbound connection we maintain).
+   * In gossip mode, this adds to the sampler as a seed.
+   * In non-gossip mode, dials immediately.
    */
   addPeer(address: string): void {
-    if (this.outbound.has(address)) return
-    const entry: PeerEntry = {
-      hub: address, // placeholder until peer announces itself
-      address,
-      connectedAt: '',
-      lastSeen: new Date().toISOString(),
-      agentCount: 0,
-      ws: null,
-      reconnectTimer: null,
-      reconnectAttempts: 0,
+    if (this.gossipEnabled) {
+      this.sampler.addSeed(address)
+      // Trigger immediate connection to seed
+      const desc = { hub: address, address, age: 0 }
+      this._ensureConnection(desc)
+    } else {
+      this._addAndDialPeer(address)
     }
-    this.outbound.set(address, entry)
-    this._dialPeer(entry)
   }
 
   /**
@@ -80,16 +128,17 @@ export class PeerRegistry extends EventEmitter {
       reconnectAttempts: 0,
     }
 
-    // Use remoteAddress as temporary key until they announce their hub name
     this.inbound.set(remoteAddress, entry)
 
     ws.on('message', (data) => {
       const raw = typeof data === 'string' ? data : data.toString()
+      // Check for shuffle messages first
+      if (this._tryHandleShuffle(raw, entry)) return
+
       const msg = parseMessage(raw)
       if (!msg) return
 
       if (msg.type === 'peer_announce') {
-        // Promote to named entry
         this._handlePeerAnnounce(entry, msg)
       }
 
@@ -111,6 +160,7 @@ export class PeerRegistry extends EventEmitter {
 
   /**
    * Send a message to all connected peers.
+   * In gossip mode, sends to view peers only (bounded fanout).
    */
   broadcast(data: string): void {
     for (const entry of this._allConnected()) {
@@ -119,10 +169,10 @@ export class PeerRegistry extends EventEmitter {
   }
 
   /**
-   * Send a message to a specific peer by hub name.
+   * Send a message to a specific peer by hub name. O(1).
    */
   sendTo(hubName: string, data: string): boolean {
-    const entry = this._findByHub(hubName)
+    const entry = this.byHub.get(hubName)
     if (!entry?.ws) return false
     return this._safeSend(entry.ws, data)
   }
@@ -138,11 +188,12 @@ export class PeerRegistry extends EventEmitter {
    * Update agent count for a peer.
    */
   updateAgentCount(hub: string, count: number): void {
-    const entry = this._findByHub(hub)
+    const entry = this.byHub.get(hub)
     if (entry) entry.agentCount = count
   }
 
   stop(): void {
+    this.sampler.stop()
     for (const entry of this.outbound.values()) {
       if (entry.reconnectTimer) clearTimeout(entry.reconnectTimer)
       entry.ws?.close()
@@ -152,9 +203,90 @@ export class PeerRegistry extends EventEmitter {
     }
     this.outbound.clear()
     this.inbound.clear()
+    this.byHub.clear()
   }
 
-  // ── Private ─────────────────────────────────────────────────────────────────
+  // ── Gossip: Shuffle Message Handling ────────────────────────────────────────
+
+  /**
+   * Try to parse and handle a gossip shuffle message.
+   * Returns true if handled (not a federation protocol message).
+   */
+  private _tryHandleShuffle(raw: string, entry: PeerEntry): boolean {
+    try {
+      const obj = JSON.parse(raw)
+      if (obj.type === 'shuffle_request') {
+        const request = obj as ShuffleRequest
+        const response = this.sampler.handleShuffleRequest(request)
+        if (entry.ws && entry.ws.readyState === WebSocket.OPEN) {
+          entry.ws.send(JSON.stringify(response))
+        }
+        // Also add sender to known descriptors
+        for (const desc of request.samples) {
+          this.sampler.addDescriptor(desc)
+        }
+        return true
+      }
+      if (obj.type === 'shuffle_response') {
+        const response = obj as ShuffleResponse
+        this.sampler.handleShuffleResponse(response)
+        return true
+      }
+    } catch {
+      // Not JSON or not a shuffle message — fall through to normal handling
+    }
+    return false
+  }
+
+  /**
+   * Send a shuffle request to a target peer via WebSocket.
+   */
+  private _sendShuffleRequest(target: { hub: string; address: string }, request: ShuffleRequest): void {
+    // Find the connection for this target
+    const entry = this.byHub.get(target.hub)
+    if (entry?.ws && entry.ws.readyState === WebSocket.OPEN) {
+      entry.ws.send(JSON.stringify(request))
+    } else {
+      // Not connected to this view member — will be resolved on next cycle
+      this.log(`Cannot shuffle with ${target.hub}: not connected`)
+    }
+  }
+
+  // ── Connection Management ───────────────────────────────────────────────────
+
+  /**
+   * Ensure we have an outbound connection to a peer descriptor.
+   */
+  private _ensureConnection(desc: { hub: string; address: string }): void {
+    // Already connected?
+    if (this.byHub.has(desc.hub)) {
+      const existing = this.byHub.get(desc.hub)!
+      if (existing.ws && existing.ws.readyState === WebSocket.OPEN) return
+    }
+
+    // Already have outbound to this address?
+    if (this.outbound.has(desc.address)) return
+
+    this._addAndDialPeer(desc.address)
+  }
+
+  // ── Private: Original Peer Logic ────────────────────────────────────────────
+
+  private _addAndDialPeer(address: string): void {
+    if (this.outbound.has(address)) return
+    const entry: PeerEntry = {
+      hub: address, // placeholder until peer announces itself
+      address,
+      connectedAt: '',
+      lastSeen: new Date().toISOString(),
+      agentCount: 0,
+      ws: null,
+      reconnectTimer: null,
+      reconnectAttempts: 0,
+    }
+    this.outbound.set(address, entry)
+    this._dialPeer(entry)
+  }
 
   private _dialPeer(entry: PeerEntry): void {
     this.log(`Dialing ${entry.address}`)
@@ -182,6 +314,10 @@ export class PeerRegistry extends EventEmitter {
     ws.on('message', (data) => {
       entry.lastSeen = new Date().toISOString()
       const raw = typeof data === 'string' ? data : data.toString()
+
+      // Check for shuffle messages
+      if (this._tryHandleShuffle(raw, entry)) return
+
       const msg = parseMessage(raw)
       if (!msg) return
 
@@ -195,8 +331,17 @@ export class PeerRegistry extends EventEmitter {
     ws.on('close', () => {
       this.log(`Peer disconnected: ${entry.hub}`)
       entry.ws = null
+      this.byHub.delete(entry.hub)
       this.emit('peer:disconnect', { hub: entry.hub })
-      this._scheduleOutboundReconnect(entry)
+
+      // Only reconnect if this peer is still in our gossip view
+      if (this.gossipEnabled) {
+        const inView = this.sampler.getView().some(d => d.hub === entry.hub || d.address === entry.address)
+        if (inView) this._scheduleOutboundReconnect(entry)
+        else this.outbound.delete(entry.address)
+      } else {
+        this._scheduleOutboundReconnect(entry)
+      }
     })
 
     ws.on('error', (err) => {
@@ -228,24 +373,27 @@ export class PeerRegistry extends EventEmitter {
       this.inbound.set(msg.hub, entry)
     }
 
-    // Dedup: if we already have an outbound to this hub, mark inbound as receive-only.
-    // We keep the inbound WebSocket alive to receive mesh_sync messages from the peer,
-    // but exclude it from broadcast/getPeers to avoid double-sending and ghost entries.
-    for (const [addr, outbound] of this.outbound.entries()) {
-      if (outbound.hub === msg.hub && outbound.ws && outbound.ws.readyState === WebSocket.OPEN) {
-        this.log(`Duplicate inbound for ${msg.hub} (outbound at ${addr}), marking inbound as receive-only`)
-        this.dedupedInbound.add(msg.hub)
-        break
-      }
+    // Update hub-name index
+    if (oldHub !== msg.hub) this.byHub.delete(oldHub)
+    this.byHub.set(msg.hub, entry)
+
+    // Add to gossip sampler
+    if (this.gossipEnabled) {
+      this.sampler.addDescriptor({
+        hub: msg.hub,
+        address: msg.address || entry.address,
+        age: 0,
+        pubkey: msg.pubkey,
+      })
     }
 
     this.log(`Peer identified as hub: ${msg.hub}`)
   }
 
   private _handleInboundClose(entry: PeerEntry): void {
-    this.dedupedInbound.delete(entry.hub)
     this.inbound.delete(entry.hub)
     this.inbound.delete(entry.address)
+    this.byHub.delete(entry.hub)
     entry.ws = null
     this.emit('peer:disconnect', { hub: entry.hub })
   }
@@ -272,19 +420,9 @@ export class PeerRegistry extends EventEmitter {
     }
   }
 
-  private _findByHub(hub: string): PeerEntry | undefined {
-    for (const entry of [...this.outbound.values(), ...this.inbound.values()]) {
-      if (entry.hub === hub) return entry
-    }
-    return undefined
-  }
-
   private *_allConnected(): IterableIterator<PeerEntry> {
-    for (const entry of this.outbound.values()) {
+    for (const entry of [...this.outbound.values(), ...this.inbound.values()]) {
       if (entry.ws && entry.ws.readyState === WebSocket.OPEN) yield entry
-    }
-    for (const entry of this.inbound.values()) {
-      if (entry.ws && entry.ws.readyState === WebSocket.OPEN && !this.dedupedInbound.has(entry.hub)) yield entry
     }
   }
 
