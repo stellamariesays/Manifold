@@ -1,0 +1,12 @@
+{
+  "name": "thefog",
+  "federationPort": 8766,
+  "localPort": 8768,
+  "restPort": 8777,
+  "peers": [
+    "ws://100.86.105.39:8766",
+    "ws://100.70.172.34:8766"
+  ],
+  "atlasPath": null,
+  "debug": true
+}
