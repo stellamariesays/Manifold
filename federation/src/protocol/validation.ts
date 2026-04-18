@@ -174,6 +174,14 @@ const TaskAckSchema = z.object({
   queue_position: z.number().optional(),
 })
 
+const TaskForwardSchema = z.object({
+  type: z.literal('task_forward'),
+  task: TaskRequestSchema,
+  hopCount: z.number().int().min(0),
+  maxHops: z.number().int().min(1),
+  originHub: z.string(),
+})
+
 const AgentRunnerReadySchema = z.object({
   type: z.literal('agent_runner_ready'),
   hub: z.string().optional(),
@@ -260,6 +268,7 @@ const FederationMessageSchema = z.discriminatedUnion('type', [
   TaskRequestSchema,
   TaskResultSchema,
   TaskAckSchema,
+  TaskForwardSchema,
   AgentRunnerReadySchema,
   // Phase 3
   DetectionClaimMessageSchema,

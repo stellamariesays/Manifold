@@ -196,6 +196,8 @@ export class ManifoldServer extends EventEmitter {
     this.detectionCoord = new DetectionCoord({
       hub: this.hub,
       ledger: this.detectionLedger,
+      capIndex: this.capIndex,
+      peerRegistry: this.peerRegistry,
       debug: this.config.debug,
     })
 
@@ -492,6 +494,11 @@ export class ManifoldServer extends EventEmitter {
       return
     }
 
+    if (msgType === 'task_forward') {
+      this.taskRouter.handleForward(msg as any)
+      return
+    }
+
     if (msgType === 'agent_runner_ready') {
       const agents = (msg as any).agents as string[]
       this.taskRouter.registerRunner(ws, agents)
@@ -695,6 +702,11 @@ export class ManifoldServer extends EventEmitter {
         return
       }
 
+      if (msgType === 'task_forward') {
+        this.taskRouter.handleForward(msg as any)
+        return
+      }
+
       // Phase 3: Detection messages from remote peers
       if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
           msgType === 'detection_challenge' || msgType === 'detection_outcome') {
@@ -710,6 +722,8 @@ export class ManifoldServer extends EventEmitter {
     this.peerRegistry.on('peer:connect', (peer: PeerInfo) => {
       this.log(`Peer connected: ${peer.hub}`)
       this.meshSync.onPeerConnect(peer.hub)
+      // Drain forward queue — new peer might unlock queued tasks
+      this.taskRouter.drainForwardQueue()
       this.emit('peer:connect', peer)
       // Send our state immediately
       this.meshSync.sync()

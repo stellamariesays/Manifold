@@ -10,6 +10,7 @@ export type MessageType =
   | 'task_request'
   | 'task_result'
   | 'task_ack'
+  | 'task_forward'
   | 'mesh_sync'
   | 'mesh_delta'
   | 'mesh_delta_ack'
@@ -160,6 +161,18 @@ export interface TaskAckMessage extends BaseMessage {
   task_id: string
   /** Estimated queue position (0 = executing immediately) */
   queue_position?: number
+}
+
+/** Store-and-forward: relay a task toward its destination through the mesh */
+export interface TaskForwardMessage extends BaseMessage {
+  type: 'task_forward'
+  task: TaskRequest
+  /** Hops taken so far (prevents infinite loops) */
+  hopCount: number
+  /** Max hops allowed */
+  maxHops: number
+  /** Original sender hub */
+  originHub: string
 }
 
 // ── Mesh Sync ──────────────────────────────────────────────────────────────────
