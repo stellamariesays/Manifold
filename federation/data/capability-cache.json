@@ -1,0 +1,1 @@
+{"version":1,"hub":"client-test-hub","savedAt":1776536215431,"agents":[{"agent":{"name":"test-client","hub":"test-client","capabilities":["custom-skill","extra-skill"],"seams":[],"lastSeen":"2026-04-18T18:16:55.131Z"},"cachedAt":1776536215431,"isLocal":false}],"darkCircles":[]}

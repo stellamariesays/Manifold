@@ -9,6 +9,7 @@ import { RestApi } from './rest-api.js'
 import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
 import { HubCapabilityBloom } from './capability-bloom.js'
+import { PersistentCapabilityCache } from './capability-cache.js'
 import * as wireCodec from '../protocol/wire-codec.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
@@ -100,6 +101,8 @@ export class ManifoldServer extends EventEmitter {
   readonly allowlist: TaskAllowlist
   /** Hub capability bloom filter */
   hubBloom!: HubCapabilityBloom
+  /** Persistent capability cache */
+  private capCache!: PersistentCapabilityCache
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
@@ -146,6 +149,7 @@ export class ManifoldServer extends EventEmitter {
 
     // Capability bloom filter — rebuilt whenever capabilities change
     this.hubBloom = new HubCapabilityBloom({ expectedItems: 200, errorRate: 0.01 })
+    this.capCache = new PersistentCapabilityCache({ hub: this.hub })
 
     this.meshSync = new MeshSync({
       hub: this.hub,
@@ -204,6 +208,29 @@ export class ManifoldServer extends EventEmitter {
     if (this.started) return
     this.started = true
     this.startTime = Date.now()
+
+    // 0. Load persistent capability cache for instant recovery
+    try {
+      const cached = await this.capCache.load()
+      if (cached.agents.length > 0) {
+        this.log(`Loading ${cached.agents.length} agents from capability cache`)
+        for (const entry of cached.agents) {
+          if (!entry.isLocal) {
+            this.capIndex.upsertAgent(entry.agent, false)
+          }
+        }
+        if (cached.darkCircles.length > 0) {
+          for (const dc of cached.darkCircles) {
+            for (const [hub, pressure] of Object.entries(dc.byHub)) {
+              this.capIndex.updateDarkCircles(hub, [{ name: dc.name, pressure }])
+            }
+          }
+        }
+        this._rebuildBloom()
+      }
+    } catch (err) {
+      this.log(`Cache load failed (non-fatal): ${err}`)
+    }
 
     // 1. Start Python bridge (if atlas configured)
     if (this.config.atlasPath) {
@@ -289,6 +316,24 @@ export class ManifoldServer extends EventEmitter {
   async stop(): Promise<void> {
     if (!this.started) return
     this.started = false
+
+    // Save capability cache for fast restart
+    try {
+      const agents = this.capIndex.getAllAgents().map(a => ({
+        agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
+        cachedAt: Date.now(),
+        isLocal: a.isLocal,
+      }))
+      const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
+        name: dc.name,
+        pressure: dc.pressure,
+        byHub: dc.byHub ?? {},
+      }))
+      await this.capCache.save(agents, darkCircles)
+      this.log(`Saved ${agents.length} agents to capability cache`)
+    } catch (err) {
+      this.log(`Cache save failed (non-fatal): ${err}`)
+    }
 
     this.meshSync.stop()
     this.peerRegistry.stop()
