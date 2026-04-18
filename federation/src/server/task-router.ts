@@ -27,10 +27,22 @@ import type { RateLimiter } from './security.js'
 export interface PendingTask {
   task: TaskRequest
   origin: 'local' | 'remote'
-  sourceHub?: string           // originating hub for remote tasks
+  sourceKey: string       // for backpressure tracking
+  runnerId?: string       // local runner handling this task
   replyTo: WebSocket | null    // null if from remote peer
   createdAt: number
   timeout: ReturnType<typeof setTimeout> | null
+}
+
+export interface BackpressureConfig {
+  /** Max concurrent pending tasks across all sources. Default 1000. */
+  maxPendingTotal?: number
+  /** Max concurrent pending tasks per source hub. Default 100. */
+  maxPendingPerSource?: number
+  /** Max queued tasks waiting for a runner (beyond pending). Default 500. */
+  maxQueueSize?: number
+  /** Max concurrent tasks per runner. Default 50. */
+  maxPerRunner?: number
 }
 
 export interface TaskRouterOptions {
@@ -39,6 +51,8 @@ export interface TaskRouterOptions {
   defaultTimeoutMs?: number
   /** How long to keep completed task records. Default 60000. */
   completedTtlMs?: number
+  /** Backpressure limits. */
+  backpressure?: BackpressureConfig
   debug?: boolean
 }
 
@@ -50,6 +64,26 @@ export class TaskRouter extends EventEmitter {
 
   /** Pending tasks keyed by task ID */
   private pending = new Map<string, PendingTask>()
+
+  /** Queued tasks waiting for a runner slot */
+  private queue: Array<{ task: TaskRequest; agentName: string; replyTo: WebSocket | null; sourceKey: string }> = []
+
+  /** Per-source pending counts: sourceKey → count (dispatched only) */
+  private pendingPerSource = new Map<string, number>()
+
+  /** Per-source queued counts: sourceKey → count */
+  private queuedPerSource = new Map<string, number>()
+
+  /** Per-runner pending counts: runnerId → count */
+  private pendingPerRunner = new Map<string, number>()
+
+  /** Backpressure config (resolved) */
+  private readonly bp: {
+    maxPendingTotal: number
+    maxPendingPerSource: number
+    maxQueueSize: number
+    maxPerRunner: number
+  }
 
   /** Completed task results (kept briefly for status queries) */
   private completed = new Map<string, { result: TaskResult; completedAt: number }>()
@@ -68,6 +102,13 @@ export class TaskRouter extends EventEmitter {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30_000
     this.completedTtlMs = options.completedTtlMs ?? 60_000
     this.debug = options.debug ?? false
+    const bp = options.backpressure ?? {}
+    this.bp = {
+      maxPendingTotal: bp.maxPendingTotal ?? 1000,
+      maxPendingPerSource: bp.maxPendingPerSource ?? 100,
+      maxQueueSize: bp.maxQueueSize ?? 500,
+      maxPerRunner: bp.maxPerRunner ?? 50,
+    }
   }
 
   start(capIndex: CapabilityIndex, peerRegistry: PeerRegistry, allowlist?: TaskAllowlist, rateLimiter?: RateLimiter): void {
@@ -83,6 +124,10 @@ export class TaskRouter extends EventEmitter {
       if (pending.timeout) clearTimeout(pending.timeout)
     }
     this.pending.clear()
+    this.queue = []
+    this.pendingPerSource.clear()
+    this.queuedPerSource.clear()
+    this.pendingPerRunner.clear()
     this.runners.clear()
   }
 
@@ -109,7 +154,6 @@ export class TaskRouter extends EventEmitter {
    * Route a task_request. Called when the server receives one from any source.
    */
   routeTask(task: TaskRequest, replyTo: WebSocket | null, sourceHub?: string): void {
-    this.log(`Routing task: ${task.command} -> ${task.target} (${task.id.substring(0, 8)}...) from=${sourceHub ?? 'local'}`)
     // Parse target
     const [agentName, targetHub] = task.target.includes('@')
       ? task.target.split('@')
@@ -147,7 +191,6 @@ export class TaskRouter extends EventEmitter {
     }
 
     // Check if we already have this task (dedup)
-    this.log(`Dedup check: ${task.id.substring(0, 8)}... exists=${this.pending.has(task.id)}`)
     if (this.pending.has(task.id)) {
       const result: TaskResult = {
         id: task.id,
@@ -160,22 +203,79 @@ export class TaskRouter extends EventEmitter {
       return
     }
 
+    // Backpressure: total pending limit (includes queued)
+    const totalInFlight = this.pending.size + this.queue.length
+    if (totalInFlight >= this.bp.maxPendingTotal) {
+      const result: TaskResult = {
+        id: task.id,
+        status: 'rejected',
+        error: `Too many tasks in flight (${totalInFlight}/${this.bp.maxPendingTotal})`,
+        completed_at: new Date().toISOString(),
+      }
+      this.sendResult(result, replyTo)
+      this.emit('task:complete', { result, task })
+      this.emit('task:backpressure', { reason: 'pending_total', pendingCount: totalInFlight })
+      return
+    }
+
+    // Backpressure: per-source limit (includes dispatched + queued)
+    const sourceKey = sourceHub ?? 'local'
+    const dispatched = this.pendingPerSource.get(sourceKey) ?? 0
+    const queued = this.queuedPerSource.get(sourceKey) ?? 0
+    const sourceCount = dispatched + queued
+    if (sourceCount >= this.bp.maxPendingPerSource) {
+      const result: TaskResult = {
+        id: task.id,
+        status: 'rejected',
+        error: `Source ${sourceKey} has too many pending tasks (${sourceCount}/${this.bp.maxPendingPerSource})`,
+        completed_at: new Date().toISOString(),
+      }
+      this.sendResult(result, replyTo)
+      this.emit('task:complete', { result, task })
+      this.emit('task:backpressure', { reason: 'per_source', source: sourceKey, count: sourceCount })
+      return
+    }
+
     // Route based on target hub
     if (resolvedHub === this.hub) {
-      this.routeToLocal(task, agentName, replyTo, sourceHub)
+      this.routeToLocal(task, agentName, replyTo, sourceKey)
     } else {
-      this.routeToRemote(task, resolvedHub, replyTo)
+      this.routeToRemote(task, resolvedHub, replyTo, sourceKey)
     }
   }
 
   /**
    * Route to a local agent runner.
    */
-  private routeToLocal(task: TaskRequest, agentName: string, replyTo: WebSocket | null, sourceHub?: string): void {
-    // Find a runner that has this agent
-    const runner = this.findRunnerForAgent(agentName)
+  private routeToLocal(task: TaskRequest, agentName: string, replyTo: WebSocket | null, sourceKey: string): void {
+    // Find a runner that has this agent with capacity
+    const found = this.findRunnerForAgentWithCapacity(agentName)
 
-    if (!runner) {
+    if (!found) {
+      // Check if any runner exists for this agent at all
+      const anyRunner = this.findRunnerForAgent(agentName)
+      if (anyRunner) {
+        // Runner exists but at capacity — queue the task
+        if (this.queue.length >= this.bp.maxQueueSize) {
+          const result: TaskResult = {
+            id: task.id,
+            status: 'rejected',
+            error: `Task queue full (${this.queue.length}/${this.bp.maxQueueSize})`,
+            completed_at: new Date().toISOString(),
+          }
+          this.sendResult(result, replyTo)
+          this.emit('task:complete', { result, task })
+          this.emit('task:backpressure', { reason: 'queue_full', queueSize: this.queue.length })
+          return
+        }
+        this.queue.push({ task, agentName, replyTo, sourceKey })
+        this.queuedPerSource.set(sourceKey, (this.queuedPerSource.get(sourceKey) ?? 0) + 1)
+        this.log(`Queued: ${agentName} (queue: ${this.queue.length})`)
+        this.emit('task:queued', { task, queueSize: this.queue.length })
+        return
+      }
+
+      // No runner at all
       const result: TaskResult = {
         id: task.id,
         status: 'not_found',
@@ -184,17 +284,19 @@ export class TaskRouter extends EventEmitter {
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
-      // Emit so REST handler can catch it too
       this.emit('task:complete', { result, task })
       return
     }
+
+    const { runner, runnerId } = found
 
     // Set up pending task
     const timeoutMs = task.timeout_ms ?? this.defaultTimeoutMs
     const pending: PendingTask = {
       task,
       origin: replyTo ? 'local' : 'remote',
-      sourceHub: sourceHub,
+      sourceKey,
+      runnerId,
       replyTo,
       createdAt: Date.now(),
       timeout: setTimeout(() => {
@@ -203,18 +305,25 @@ export class TaskRouter extends EventEmitter {
     }
     this.pending.set(task.id, pending)
 
+    // Track per-runner count
+    const rCount = (this.pendingPerRunner.get(runnerId) ?? 0) + 1
+    this.pendingPerRunner.set(runnerId, rCount)
+
+    // Track per-source count
+    this.pendingPerSource.set(sourceKey, (this.pendingPerSource.get(sourceKey) ?? 0) + 1)
+
     // Forward to runner
     const msg: TaskRequestMessage = { type: 'task_request', task }
     runner.ws.send(JSON.stringify(msg))
 
-    this.log(`Routed to local: ${agentName} ${task.command} (${task.id.substring(0, 8)}...)`)
+    this.log(`Routed to local: ${agentName} ${task.command} (${task.id.substring(0, 8)}...) runner:${runnerId.substring(0, 8)} [${rCount}/${this.bp.maxPerRunner}]`)
     this.emit('task:routed', { task, target: 'local', agent: agentName })
   }
 
   /**
    * Route to a remote hub via federation.
    */
-  private routeToRemote(task: TaskRequest, targetHub: string, replyTo: WebSocket | null): void {
+  private routeToRemote(task: TaskRequest, targetHub: string, replyTo: WebSocket | null, sourceKey: string): void {
     // Set origin if not set
     if (!task.origin) task.origin = this.hub
     if (!task.caller) task.caller = `${this.hub}`
@@ -240,6 +349,7 @@ export class TaskRouter extends EventEmitter {
     const pending: PendingTask = {
       task,
       origin: 'local',
+      sourceKey,
       replyTo,
       createdAt: Date.now(),
       timeout: setTimeout(() => {
@@ -247,6 +357,9 @@ export class TaskRouter extends EventEmitter {
       }, task.timeout_ms ?? this.defaultTimeoutMs),
     }
     this.pending.set(task.id, pending)
+
+    // Track per-source count
+    this.pendingPerSource.set(sourceKey, (this.pendingPerSource.get(sourceKey) ?? 0) + 1)
 
     this.log(`Routed to remote: ${targetHub} (${task.id.substring(0, 8)}...)`)
     this.emit('task:routed', { task, target: 'remote', hub: targetHub })
@@ -256,18 +369,27 @@ export class TaskRouter extends EventEmitter {
    * Handle a task_result from a runner or remote peer.
    */
   handleResult(result: TaskResult): void {
-    this.log(`Result: ${result.id.substring(0, 8)}... status=${result.status}${result.error ? ' error=' + result.error : ''}`)
     const pending = this.pending.get(result.id)
 
     if (!pending) {
-      // Might be a result for a task we forwarded — check if origin is remote
       this.log(`Received result for unknown task: ${result.id.substring(0, 8)}...`)
       return
     }
 
-    // Clear timeout
+    // Clear timeout and remove from pending
     if (pending.timeout) clearTimeout(pending.timeout)
     this.pending.delete(result.id)
+
+    // Decrement per-runner count
+    if (pending.runnerId) {
+      const rc = this.pendingPerRunner.get(pending.runnerId) ?? 0
+      if (rc > 0) this.pendingPerRunner.set(pending.runnerId, rc - 1)
+    }
+
+    // Decrement per-source count
+    const sourceKey = pending.sourceKey
+    const sc = this.pendingPerSource.get(sourceKey) ?? 0
+    if (sc > 0) this.pendingPerSource.set(sourceKey, sc - 1)
 
     // Store completed
     this.completed.set(result.id, { result, completedAt: Date.now() })
@@ -276,18 +398,11 @@ export class TaskRouter extends EventEmitter {
     // Send result back to origin
     this.sendResult(result, pending.replyTo)
 
-    // If task came from a remote hub and no local WS to reply to, forward via peer
-    if (!pending.replyTo && pending.sourceHub) {
-      this.peerRegistry.sendTo(pending.sourceHub, JSON.stringify({
-        type: 'task_result',
-        result,
-      } as TaskResultMessage))
-      this.log(`Forwarded result back to ${pending.sourceHub} for ${result.id.substring(0, 8)}...`)
-    }
-
     this.log(`Result: ${result.status} for ${result.id.substring(0, 8)}... (${result.execution_ms ?? '?'}ms)`)
-    this.log(`Emitting task:complete for ${result.id.substring(0, 8)}... status=${result.status}`)
     this.emit('task:complete', { result, task: pending.task })
+
+    // Drain queue — try to dispatch next queued task
+    this._drainQueue()
   }
 
   private handleTimeout(taskId: string): void {
@@ -295,6 +410,17 @@ export class TaskRouter extends EventEmitter {
     if (!pending) return
 
     this.pending.delete(taskId)
+
+    // Decrement per-runner count
+    if (pending.runnerId) {
+      const rc = this.pendingPerRunner.get(pending.runnerId) ?? 0
+      if (rc > 0) this.pendingPerRunner.set(pending.runnerId, rc - 1)
+    }
+
+    // Decrement per-source
+    const sourceKey = pending.sourceKey
+    const sc = this.pendingPerSource.get(sourceKey) ?? 0
+    if (sc > 0) this.pendingPerSource.set(sourceKey, sc - 1)
 
     const result: TaskResult = {
       id: taskId,
@@ -306,22 +432,83 @@ export class TaskRouter extends EventEmitter {
     this.sendResult(result, pending.replyTo)
     this.log(`Timeout: ${taskId.substring(0, 8)}...`)
     this.emit('task:timeout', { task: pending.task })
+
+    // Drain queue
+    this._drainQueue()
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Normalize an agent entry to its name (handles both string and object format) */
-  private static agentName(a: string | { name: string }): string {
-    return typeof a === 'string' ? a : a.name
-  }
-
-  private findRunnerForAgent(agentName: string): { ws: WebSocket; agents: (string | { name: string })[] } | null {
+  private findRunnerForAgent(agentName: string): { ws: WebSocket; agents: string[] } | null {
     for (const [, runner] of this.runners) {
-      for (const a of runner.agents) {
-        if (TaskRouter.agentName(a) === agentName) return runner
+      if (runner.agents.includes(agentName)) {
+        return runner
       }
     }
     return null
+  }
+
+  private findRunnerForAgentWithCapacity(agentName: string): { runner: { ws: WebSocket; agents: string[] }; runnerId: string } | null {
+    // Find runner with capacity for this agent
+    for (const [runnerId, runner] of this.runners) {
+      if (runner.agents.includes(agentName)) {
+        const count = this.pendingPerRunner.get(runnerId) ?? 0
+        if (count < this.bp.maxPerRunner) {
+          return { runner, runnerId }
+        }
+      }
+    }
+    return null
+  }
+
+  /**
+   * Drain the queue — dispatch tasks waiting for runner capacity.
+   */
+  private _drainQueue(): void {
+    while (this.queue.length > 0) {
+      // Check total pending limit
+      if (this.pending.size >= this.bp.maxPendingTotal) break
+
+      const entry = this.queue[0]
+      const { task, agentName, replyTo, sourceKey } = entry
+      const found = this.findRunnerForAgentWithCapacity(agentName)
+
+      if (!found) break // No runner with capacity yet
+
+      const { runner, runnerId } = found
+
+      // Remove from queue and update queued-per-source
+      this.queue.shift()
+      const qCount = this.queuedPerSource.get(sourceKey) ?? 0
+      if (qCount > 0) this.queuedPerSource.set(sourceKey, qCount - 1)
+
+      // Dispatch
+      const timeoutMs = task.timeout_ms ?? this.defaultTimeoutMs
+      const pending: PendingTask = {
+        task,
+        origin: replyTo ? 'local' : 'remote',
+        sourceKey,
+        runnerId,
+        replyTo,
+        createdAt: Date.now(),
+        timeout: setTimeout(() => {
+          this.handleTimeout(task.id)
+        }, timeoutMs),
+      }
+      this.pending.set(task.id, pending)
+
+      const rCount = (this.pendingPerRunner.get(runnerId) ?? 0) + 1
+      this.pendingPerRunner.set(runnerId, rCount)
+
+      // Track per-source (dispatched)
+      this.pendingPerSource.set(sourceKey, (this.pendingPerSource.get(sourceKey) ?? 0) + 1)
+
+      const msg: TaskRequestMessage = { type: 'task_request', task }
+      runner.ws.send(JSON.stringify(msg))
+
+      this.log(`Drained from queue: ${agentName} (${task.id.substring(0, 8)}...) queue:${this.queue.length}`)
+      this.emit('task:dispatched', { task, fromQueue: true })
+    }
   }
 
   private sendResult(result: TaskResult, ws: WebSocket | null): void {
@@ -351,6 +538,25 @@ export class TaskRouter extends EventEmitter {
     }))
   }
 
+  /** Get backpressure stats */
+  getBackpressureStats(): {
+    pendingTotal: number
+    pendingLimit: number
+    queueSize: number
+    queueLimit: number
+    perSource: Record<string, number>
+    perRunner: Record<string, number>
+  } {
+    return {
+      pendingTotal: this.pending.size,
+      pendingLimit: this.bp.maxPendingTotal,
+      queueSize: this.queue.length,
+      queueLimit: this.bp.maxQueueSize,
+      perSource: Object.fromEntries(this.pendingPerSource),
+      perRunner: Object.fromEntries(this.pendingPerRunner),
+    }
+  }
+
   /** Number of connected runners */
   get runnerCount(): number {
     return this.runners.size
@@ -365,7 +571,7 @@ export class TaskRouter extends EventEmitter {
   getRunnableAgents(): string[] {
     const agents = new Set<string>()
     for (const [, runner] of this.runners) {
-      for (const a of runner.agents) agents.add(TaskRouter.agentName(a))
+      for (const a of runner.agents) agents.add(a)
     }
     return Array.from(agents)
   }

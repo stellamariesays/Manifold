@@ -185,6 +185,21 @@ export class PeerRegistry extends EventEmitter {
   }
 
   /**
+   * Send data to a specific peer by address or hub name.
+   * Returns true if sent, false if peer not found or not connected.
+   */
+  sendToPeer(addressOrHub: string, data: string): boolean {
+    const entry = this.outbound.get(addressOrHub) ||
+      this.inbound.get(addressOrHub) ||
+      this.byHub.get(addressOrHub)
+    if (entry?.ws?.readyState === 1) { // WebSocket.OPEN
+      entry.ws.send(data)
+      return true
+    }
+    return false
+  }
+
+  /**
    * Update agent count for a peer.
    */
   updateAgentCount(hub: string, count: number): void {
@@ -332,7 +347,7 @@ export class PeerRegistry extends EventEmitter {
       this.log(`Peer disconnected: ${entry.hub}`)
       entry.ws = null
       this.byHub.delete(entry.hub)
-      this.emit('peer:disconnect', { hub: entry.hub })
+      this.emit('peer:disconnect', { hub: entry.hub, address: entry.address })
 
       // Only reconnect if this peer is still in our gossip view
       if (this.gossipEnabled) {
@@ -361,15 +376,22 @@ export class PeerRegistry extends EventEmitter {
 
   private _handlePeerAnnounce(entry: PeerEntry, msg: PeerAnnounceMessage): void {
     const oldHub = entry.hub
+    const oldAddress = entry.address
 
-    // Update entry with announced hub name
+    // Update entry with announced hub name and address
     entry.hub = msg.hub
+    entry.address = msg.address || entry.address
     entry.pubkey = msg.pubkey
     entry.lastSeen = new Date().toISOString()
 
     // Re-key inbound map if needed
     if (this.inbound.has(oldHub) && oldHub !== msg.hub) {
       this.inbound.delete(oldHub)
+      this.inbound.set(msg.hub, entry)
+    }
+    // Also re-key if address changed
+    if (this.inbound.has(oldAddress) && oldAddress !== entry.address) {
+      this.inbound.delete(oldAddress)
       this.inbound.set(msg.hub, entry)
     }
 
@@ -395,7 +417,7 @@ export class PeerRegistry extends EventEmitter {
     this.inbound.delete(entry.address)
     this.byHub.delete(entry.hub)
     entry.ws = null
-    this.emit('peer:disconnect', { hub: entry.hub })
+    this.emit('peer:disconnect', { hub: entry.hub, address: entry.address })
   }
 
   private _sendAnnounce(ws: WebSocket): void {
