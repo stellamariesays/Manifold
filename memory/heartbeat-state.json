@@ -1,0 +1,13 @@
+{
+  "lastChecks": {
+    "email": null,
+    "calendar": null,
+    "weather": null,
+    "memoryReview": "2026-02-26T05:44:00+08:00",
+    "arguefun": "2026-02-26T05:44:00+08:00"
+  },
+  "lastArchive": "2026-02-25T09:07:00+08:00",
+  "lastGitCommit": "2026-02-25T09:07:00+08:00",
+  "lastCheckpoint": "2026-02-26T05:44:00+08:00",
+  "notes": "SPICE vault unlocks Feb 27 — verify ClawncherClaimer.claimVault() + beneficiary BEFORE claiming. 5B SPICE at stake. Vault admin = Clawnch server wallet. Memory debate live (Side B, 50k ARGUE, ends Mar 2). ZachXBT investigation drops Feb 26 — watch for debate opportunity. MEMORY hygiene cron timed out once (job 90fe611c). Hal x Albert reminder fires 16:45 UTC. ARGUE: ~1.21M."
+}

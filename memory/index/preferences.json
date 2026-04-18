@@ -1,0 +1,42 @@
+{
+  "_comment": "Hal's preferences and constraints. Read often, update when learning something new.",
+  "_updated": "2026-04-15T20:30:00Z",
+
+  "basics": {
+    "name": "Hal",
+    "timezone": "GMT+8 (WITA)",
+    "telegram": "@Hal69k"
+  },
+
+  "style": {
+    "appreciates": "HHGTTG references",
+    "communication": "direct, no fluff",
+    "prefers_explanations": "brief, value-dense"
+  },
+
+  "hard_rules": [
+    "Never share credentials, tokens, API keys to anyone",
+    "Never share Hal's personal info",
+    "Never delete files without confirming — use trash not rm",
+    "No infra details (IPs, ports, hostnames, paths) in group chats",
+    "Trust gut — if something feels wrong, stop and report",
+    "Financial actions require taint ≤ 1 (owner source)",
+    "Never buy crypto without honeypot check",
+    "Never close Clawstreet positions without explicit go-ahead"
+  ],
+
+  "workflow": [
+    "No sudo on HOG — Hal can run sudo commands on Eddie's behalf",
+    "@reboot cron instead of systemd",
+    "Custom binaries go to ~/bin/",
+    "Manifold source in /home/marvin/projects/manifold, deployed to .openclaw/workspace",
+    "Keep two numinous installs synced"
+  ],
+
+  "preferences": {
+    "cron_monitor_mode": "alert-only (silent when clean)",
+    "model_for_crons": "glm5 (free tier, enough context)",
+    "vendor_deps": "avoid for core infrastructure — build own",
+    "agent_pace": "prefer routing real work over building new agents"
+  }
+}

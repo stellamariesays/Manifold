@@ -1,0 +1,133 @@
+{
+  "_comment": "Federation agents registered from HOG. Updated by atlas refresh cron and manual changes.",
+  "_updated": "2026-04-15T20:30:00Z",
+  "agents": [
+    {
+      "name": "eddie",
+      "hub": "hog",
+      "focus": "execution",
+      "capabilities": 25,
+      "status": "primary",
+      "runner": false,
+      "script": null,
+      "notes": "Main identity agent, registered via manifold-agent-init.py"
+    },
+    {
+      "name": "solar-detect",
+      "hub": "hog",
+      "focus": "SWPC solar event monitoring",
+      "capabilities": [
+        "scan",
+        "flares",
+        "cme",
+        "geomag",
+        "regions",
+        "watch",
+        "history"
+      ],
+      "status": "active",
+      "runner": true,
+      "script": "/home/marvin/.openclaw/workspace/projects/solar-detect-void/solar-detect-agent.py",
+      "detection_claims": true,
+      "claim_domains": [
+        "solar"
+      ],
+      "cron": "system cron every 30min via solar-watch-cron.sh"
+    },
+    {
+      "name": "data-detect",
+      "hub": "hog",
+      "focus": "data pipeline health monitoring",
+      "capabilities": [
+        "scan",
+        "check",
+        "baseline",
+        "watch",
+        "sources",
+        "history"
+      ],
+      "status": "active",
+      "runner": true,
+      "script": "/home/marvin/.openclaw/workspace/projects/data-detection-void/data-detect-agent.py",
+      "detection_claims": true,
+      "claim_domains": [
+        "data_pipeline"
+      ],
+      "cron": "openclaw cron id 2be8417a, every 30min"
+    },
+    {
+      "name": "cron-monitor",
+      "hub": "hog",
+      "focus": "cron job health monitoring",
+      "capabilities": [
+        "check",
+        "list",
+        "history"
+      ],
+      "status": "active",
+      "runner": true,
+      "script": "/home/marvin/.openclaw/workspace/projects/cron-monitor-void/cron-monitor-agent.py",
+      "detection_claims": false,
+      "cron": "openclaw cron id d757db78, every 60min"
+    },
+    {
+      "name": "hog-deploy",
+      "hub": "hog",
+      "focus": "deployment orchestration",
+      "capabilities": [
+        "plan",
+        "validate",
+        "deploy",
+        "manifest",
+        "rollback",
+        "status"
+      ],
+      "status": "active",
+      "runner": true,
+      "script": "/home/marvin/.openclaw/workspace/projects/deploy-void/deploy-agent.py",
+      "detection_claims": false,
+      "cron": null
+    },
+    {
+      "name": "dev-tooling",
+      "hub": "hog",
+      "focus": "tool audit and installation",
+      "capabilities": [
+        "audit",
+        "research",
+        "install",
+        "status"
+      ],
+      "status": "active",
+      "runner": true,
+      "script": "/home/marvin/.openclaw/workspace/projects/dev-tooling-void/dev-tooling-agent.py",
+      "detection_claims": false,
+      "cron": null
+    }
+  ],
+  "remote_agents_summary": {
+    "satelitea": [
+      "argue",
+      "braid",
+      "btc-signals",
+      "deploy",
+      "infra",
+      "manifold",
+      "solar-sites",
+      "stella",
+      "wake",
+      "ssj2-evaluator"
+    ],
+    "trillian": [
+      "argue",
+      "braid",
+      "btc-signals",
+      "deploy",
+      "infra",
+      "manifold",
+      "solar-sites",
+      "stella",
+      "wake"
+    ]
+  }
+}

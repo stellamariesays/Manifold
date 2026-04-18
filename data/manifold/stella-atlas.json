@@ -1,0 +1,140 @@
+{
+  "agents": [
+    {
+      "name": "stella",
+      "capabilities": [
+        "identity-continuity",
+        "session-memory",
+        "conversation-strategy",
+        "judgment",
+        "personality-coherence",
+        "context-management",
+        "agent-orchestration",
+        "terrain-awareness",
+        "trust-modeling",
+        "identity-modeling"
+      ],
+      "address": "mem://stella",
+      "focus": "agent-identity"
+    },
+    {
+      "name": "braid",
+      "capabilities": [
+        "solar-flare-prediction",
+        "active-region-classification",
+        "space-weather",
+        "signal-processing",
+        "machine-learning",
+        "alfven-wave-timing",
+        "alfven-clock",
+        "lifecycle-modeling",
+        "lifecycle-deployment"
+      ],
+      "address": "mem://braid",
+      "focus": "solar-prediction"
+    },
+    {
+      "name": "manifold",
+      "capabilities": [
+        "cognitive-mesh",
+        "agent-topology",
+        "seam-detection",
+        "sophia-score",
+        "atlas-building",
+        "transition-maps",
+        "geodesic-routing"
+      ],
+      "address": "mem://manifold",
+      "focus": "mesh-topology"
+    },
+    {
+      "name": "argue",
+      "capabilities": [
+        "argumentation",
+        "debate-strategy",
+        "jury-modeling",
+        "token-staking",
+        "on-chain-interaction",
+        "rhetorical-structure"
+      ],
+      "address": "mem://argue",
+      "focus": "debate"
+    },
+    {
+      "name": "infra",
+      "capabilities": [
+        "system-administration",
+        "cron-management",
+        "deployment",
+        "git-workflow",
+        "security-hardening",
+        "ssh-management"
+      ],
+      "address": "mem://infra",
+      "focus": "operations"
+    },
+    {
+      "name": "solar-sites",
+      "capabilities": [
+        "web-deployment",
+        "d3-visualization",
+        "solar-data-display",
+        "surge-deployment",
+        "javascript-frontend",
+        "realtime-dashboard"
+      ],
+      "address": "mem://solar-sites",
+      "focus": "visualization"
+    },
+    {
+      "name": "wake",
+      "capabilities": [
+        "fine-tuning",
+        "training-data",
+        "local-model",
+        "identity-alignment",
+        "runpod-compute",
+        "elixir-process"
+      ],
+      "address": "mem://wake",
+      "focus": "model-training"
+    },
+    {
+      "name": "btc-signals",
+      "capabilities": [
+        "btc-breakout-detection",
+        "technical-analysis",
+        "signal-composition",
+        "alert-design",
+        "stingray-integration",
+        "volume-analysis",
+        "indicator-fusion",
+        "cross-asset-correlation",
+        "volatility-analysis",
+        "topology-routing",
+        "backtest-strategy"
+      ],
+      "address": "mem://btc-signals",
+      "focus": "crypto-signals"
+    },
+    {
+      "name": "deploy",
+      "capabilities": [
+        "artifact-detection",
+        "prerequisite-validation",
+        "deployment-execution",
+        "state-tracking",
+        "failure-recovery",
+        "multi-project-orchestration",
+        "surge-deployment",
+        "api-deployment",
+        "ssh-deployment",
+        "manifest-generation"
+      ],
+      "address": "mem://deploy",
+      "focus": "deployment-automation"
+    }
+  ],
+  "saved_at": "2026-04-18T01:45:03.536847+00:00",
+  "version": 1
+}
