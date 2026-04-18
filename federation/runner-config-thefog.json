@@ -1,0 +1,23 @@
+{
+  "hub": "thefog",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 30000,
+  "agents": [
+    {
+      "name": "sophia-fog",
+      "script": "agents/fog-agent.py",
+      "cwd": "/home/sophia/openclaw-workspace/sophia",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1,
+      "capabilities": ["fog-reading", "dark-circle-detection", "seam-analysis", "gap-inventory"]
+    },
+    {
+      "name": "sophia-reach",
+      "script": "agents/reach-agent.py",
+      "cwd": "/home/sophia/openclaw-workspace/sophia",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1,
+      "capabilities": ["reach-analysis", "reach-scan", "reach-pressure", "void-pressure"]
+    }
+  ]
+}
