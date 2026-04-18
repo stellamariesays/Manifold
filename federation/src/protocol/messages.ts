@@ -186,6 +186,8 @@ export interface DarkCircle {
 export interface MeshSyncMessage extends BaseMessage {
   type: 'mesh_sync'
   hub: string
+  /** Monotonic version for delta sync (optional for legacy peers) */
+  version?: number
   agents: AgentInfo[]
   darkCircles: DarkCircle[]
   timestamp: string

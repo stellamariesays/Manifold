@@ -91,5 +91,6 @@ export interface ServerEvents {
   'agent:join': (agent: AgentResult) => void
   'agent:leave': (agent: Pick<AgentResult, 'name' | 'hub'>) => void
   'mesh:sync': (hub: string) => void
+  'mesh:delta': (hub: string) => void
   'error': (err: Error) => void
 }

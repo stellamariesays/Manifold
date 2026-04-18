@@ -127,6 +127,7 @@ export class ManifoldServer extends EventEmitter {
       gossipViewSize: 8,
       gossipShuffleIntervalMs: 10_000,
       debug: false,
+      wireFormat: 'json',
       ...config,
     }
     this.hub = config.name
@@ -324,7 +325,7 @@ export class ManifoldServer extends EventEmitter {
       const agents = this.capIndex.getAllAgents().map(a => ({
         agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
         cachedAt: Date.now(),
-        isLocal: a.isLocal,
+        isLocal: a.isLocal ?? false,
       }))
       const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
         name: dc.name,
