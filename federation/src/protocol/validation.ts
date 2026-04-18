@@ -76,6 +76,36 @@ const MeshSyncSchema = z.object({
   agents: z.array(AgentInfoSchema),
   darkCircles: z.array(DarkCircleSchema),
   timestamp: z.string(),
+  version: z.number().optional(), // V2: version for delta sync
+  requestId: z.string().optional(),
+})
+
+const AgentDeltaSchema = z.object({
+  op: z.enum(['upsert', 'remove']),
+  agent: AgentInfoSchema,
+})
+
+const DarkCircleDeltaSchema = z.object({
+  op: z.enum(['upsert', 'remove']),
+  circle: DarkCircleSchema,
+  hub: z.string(),
+})
+
+const MeshDeltaSchema = z.object({
+  type: z.literal('mesh_delta'),
+  hub: z.string(),
+  fromVersion: z.number(),
+  toVersion: z.number(),
+  agentDeltas: z.array(AgentDeltaSchema),
+  darkCircleDeltas: z.array(DarkCircleDeltaSchema),
+  timestamp: z.string(),
+  requestId: z.string().optional(),
+})
+
+const MeshDeltaAckSchema = z.object({
+  type: z.literal('mesh_delta_ack'),
+  hub: z.string(),
+  version: z.number(),
   requestId: z.string().optional(),
 })
 
@@ -139,19 +169,10 @@ const TaskAckSchema = z.object({
   queue_position: z.number().optional(),
 })
 
-const AgentOrName = z.union([
-  z.string(),
-  z.object({
-    name: z.string(),
-    capabilities: z.array(z.string()).optional(),
-    seams: z.array(z.string()).optional(),
-  }),
-])
-
 const AgentRunnerReadySchema = z.object({
   type: z.literal('agent_runner_ready'),
   hub: z.string().optional(),
-  agents: z.array(AgentOrName),
+  agents: z.array(z.string()),
 })
 
 // ── Phase 3: Detection-Coordination schemas ────────────────────────────────────
@@ -225,6 +246,8 @@ const FederationMessageSchema = z.discriminatedUnion('type', [
   AgentRequestSchema,
   AgentResponseSchema,
   MeshSyncSchema,
+  MeshDeltaSchema,
+  MeshDeltaAckSchema,
   PingSchema,
   PongSchema,
   ErrorSchema,

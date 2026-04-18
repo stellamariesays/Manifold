@@ -156,7 +156,7 @@ describe('MeshSync', () => {
       getPeers: () => [],
     }
 
-    const sync = new MeshSync({ hub: 'trillian', intervalMs: 60_000 })
+    const sync = new MeshSync({ hub: 'trillian', intervalMs: 60_000, deltaSyncEnabled: false })
     // @ts-expect-error — testing internals
     sync.capIndex = idx
     // @ts-expect-error — testing internals

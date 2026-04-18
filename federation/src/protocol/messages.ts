@@ -11,6 +11,8 @@ export type MessageType =
   | 'task_result'
   | 'task_ack'
   | 'mesh_sync'
+  | 'mesh_delta'
+  | 'mesh_delta_ack'
   | 'ping'
   | 'pong'
   | 'error'
@@ -174,6 +176,48 @@ export interface MeshSyncMessage extends BaseMessage {
   timestamp: string
 }
 
+// ── Delta Sync ────────────────────────────────────────────────────────────────
+
+export interface AgentDelta {
+  op: 'upsert' | 'remove'
+  agent: AgentInfo
+}
+
+export interface DarkCircleDelta {
+  op: 'upsert' | 'remove'
+  circle: DarkCircle
+  hub: string
+}
+
+/** Full snapshot with version — replaces mesh_sync when delta sync is active */
+export interface MeshSyncMessageV2 extends BaseMessage {
+  type: 'mesh_sync'
+  hub: string
+  /** Monotonic version counter */
+  version: number
+  agents: AgentInfo[]
+  darkCircles: DarkCircle[]
+  timestamp: string
+}
+
+/** Delta-only sync — only changes since fromVersion */
+export interface MeshDeltaMessage extends BaseMessage {
+  type: 'mesh_delta'
+  hub: string
+  fromVersion: number
+  toVersion: number
+  agentDeltas: AgentDelta[]
+  darkCircleDeltas: DarkCircleDelta[]
+  timestamp: string
+}
+
+/** ACK from peer confirming they processed a version */
+export interface MeshDeltaAckMessage extends BaseMessage {
+  type: 'mesh_delta_ack'
+  hub: string
+  version: number
+}
+
 // ── Control ────────────────────────────────────────────────────────────────────
 
 export interface PingMessage extends BaseMessage {
@@ -295,6 +339,8 @@ export type FederationMessage =
   | TaskResultMessage
   | TaskAckMessage
   | MeshSyncMessage
+  | MeshDeltaMessage
+  | MeshDeltaAckMessage
   | PingMessage
   | PongMessage
   | ErrorMessage
