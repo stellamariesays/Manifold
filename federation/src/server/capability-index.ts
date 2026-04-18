@@ -159,6 +159,7 @@ export class CapabilityIndex {
       }
 
       existing.byHub = existing.byHub ?? {}
+      existing.byHub[hub] = dc.pressure  // track which hubs report this circle
 
       this.darkCircles.set(key, existing)
     }
