@@ -3,6 +3,8 @@ import WebSocket from 'ws'
 import { v4 as uuid } from 'uuid'
 import { parseMessage } from '../protocol/validation.js'
 import { PeerSampler } from './peer-sampler.js'
+import { BloomFilter } from './capability-bloom.js'
+import * as wireCodec from '../protocol/wire-codec.js'
 import type { FederationMessage, PeerAnnounceMessage } from '../protocol/messages.js'
 import type { PeerInfo } from '../shared/types.js'
 import type { ShuffleRequest, ShuffleResponse } from './peer-sampler.js'
@@ -26,6 +28,10 @@ export interface PeerRegistryOptions {
   gossipShuffleIntervalMs?: number
   /** Seed addresses for bootstrapping */
   gossipSeeds?: string[]
+  /** Provider for capability bloom filter data (called on peer_announce) */
+  capabilityBloomProvider?: () => { size: number; hashCount: number; bits: string } | undefined
+  /** Wire format for federation messages. Default 'json'. */
+  wireFormat?: 'json' | 'msgpack'
   debug?: boolean
 }
 
@@ -36,6 +42,8 @@ export class PeerRegistry extends EventEmitter {
   private readonly reconnectDelay: number
   private readonly gossipEnabled: boolean
   private readonly debug: boolean
+  private readonly capabilityBloomProvider?: () => { size: number; hashCount: number; bits: string } | undefined
+  private readonly wireFormat: 'json' | 'msgpack'
 
   /** Outbound peers (we dial these) — keyed by address */
   private outbound: Map<string, PeerEntry> = new Map()
@@ -45,6 +53,9 @@ export class PeerRegistry extends EventEmitter {
 
   /** O(1) hub-name index — Maps hub name → PeerEntry */
   private byHub: Map<string, PeerEntry> = new Map()
+
+  /** Remote hub capability bloom filters: hubName → serialized bloom */
+  private remoteBlooms: Map<string, { size: number; hashCount: number; bits: string }> = new Map()
 
   /** GossipSub peer sampler */
   readonly sampler: PeerSampler
@@ -57,6 +68,8 @@ export class PeerRegistry extends EventEmitter {
     this.reconnectDelay = options.reconnectDelay ?? 10000
     this.gossipEnabled = options.gossipEnabled ?? true
     this.debug = options.debug ?? false
+    this.capabilityBloomProvider = options.capabilityBloomProvider
+    this.wireFormat = options.wireFormat ?? 'json'
 
     this.sampler = new PeerSampler({
       selfHub: this.selfHub,
@@ -132,10 +145,11 @@ export class PeerRegistry extends EventEmitter {
 
     ws.on('message', (data) => {
       const raw = typeof data === 'string' ? data : data.toString()
-      // Check for shuffle messages first
+      // Check for shuffle messages first (always JSON strings)
       if (this._tryHandleShuffle(raw, entry)) return
 
-      const msg = parseMessage(raw)
+      const decoded = wireCodec.decode(typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer))
+      const msg = parseMessage(JSON.stringify(decoded))
       if (!msg) return
 
       if (msg.type === 'peer_announce') {
@@ -182,6 +196,24 @@ export class PeerRegistry extends EventEmitter {
    */
   getPeers(): PeerInfo[] {
     return Array.from(this._allConnected()).map(e => this._toPeerInfo(e))
+  }
+
+  /**
+   * Find hubs that might have a given capability (via bloom filter).
+   * Returns hub names. May include false positives.
+   */
+  findHubsWithCapability(capability: string): string[] {
+    const hubs: string[] = []
+    for (const [hubName, bloomData] of this.remoteBlooms) {
+      const bloom = BloomFilter.deserialize(bloomData)
+      if (bloom.has(capability)) hubs.push(hubName)
+    }
+    return hubs
+  }
+
+  /** Get all stored remote bloom data (for debugging/stats). */
+  getRemoteBlooms(): Map<string, { size: number; hashCount: number; bits: string }> {
+    return new Map(this.remoteBlooms)
   }
 
   /**
@@ -333,7 +365,8 @@ export class PeerRegistry extends EventEmitter {
       // Check for shuffle messages
       if (this._tryHandleShuffle(raw, entry)) return
 
-      const msg = parseMessage(raw)
+      const decoded = wireCodec.decode(typeof data === 'string' ? data : Buffer.from(data as ArrayBuffer))
+      const msg = parseMessage(JSON.stringify(decoded))
       if (!msg) return
 
       if (msg.type === 'peer_announce') {
@@ -399,6 +432,11 @@ export class PeerRegistry extends EventEmitter {
     if (oldHub !== msg.hub) this.byHub.delete(oldHub)
     this.byHub.set(msg.hub, entry)
 
+    // Store remote capability bloom
+    if (msg.capabilityBloom) {
+      this.remoteBlooms.set(msg.hub, msg.capabilityBloom)
+    }
+
     // Add to gossip sampler
     if (this.gossipEnabled) {
       this.sampler.addDescriptor({
@@ -428,14 +466,27 @@ export class PeerRegistry extends EventEmitter {
       pubkey: this.selfPubkey,
       timestamp: new Date().toISOString(),
       requestId: uuid(),
+      capabilityBloom: this.capabilityBloomProvider?.(),
     }
-    this._safeSend(ws, JSON.stringify(msg))
+    this._sendMsg(ws, msg)
   }
 
   private _safeSend(ws: WebSocket, data: string): boolean {
     if (ws.readyState !== WebSocket.OPEN) return false
     try {
       ws.send(data)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /** Send a message object using configured wire format. */
+  private _sendMsg(ws: WebSocket, obj: unknown): boolean {
+    if (ws.readyState !== WebSocket.OPEN) return false
+    try {
+      const encoded = wireCodec.encode(obj, this.wireFormat)
+      ws.send(encoded)
       return true
     } catch {
       return false
