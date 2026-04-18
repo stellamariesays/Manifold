@@ -139,6 +139,13 @@ export class ManifoldServer extends EventEmitter {
       hub: this.hub,
       intervalMs: this.config.syncIntervalMs,
       debug: this.config.debug,
+      localBroadcast: (data: string) => {
+        this.localWss?.clients.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data)
+          }
+        })
+      },
     })
 
     this.restApi = new RestApi({
@@ -313,6 +320,8 @@ export class ManifoldServer extends EventEmitter {
       const agent = this.capIndex.getAgent(name, this.hub)!
       this.emit('agent:join', agent)
     }
+    // Update delta sync snapshot
+    this.meshSync.onLocalChange()
   }
 
   /**
@@ -444,6 +453,12 @@ export class ManifoldServer extends EventEmitter {
       case 'mesh_sync':
         this._handleMeshSync(fedMsg)
         break
+      case 'mesh_delta':
+        this._handleMeshDelta(fedMsg)
+        break
+      case 'mesh_delta_ack':
+        this._handleMeshDeltaAck(fedMsg)
+        break
       case 'capability_query':
         this._handleCapabilityQuery(fedMsg, ws)
         break
@@ -474,6 +489,54 @@ export class ManifoldServer extends EventEmitter {
     this.capIndex.updateDarkCircles(msg.hub, msg.darkCircles)
     this.peerRegistry.updateAgentCount(msg.hub, msg.agents.length)
     this.emit('mesh:sync', msg.hub)
+
+    // ACK the version if present (delta sync)
+    if (msg.version) {
+      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: msg.hub, version: msg.version })
+    }
+  }
+
+  private _handleMeshDelta(msg: FederationMessage): void {
+    const delta = msg as any
+    if (delta.agentDeltas) {
+      for (const ad of delta.agentDeltas) {
+        if (ad.op === 'upsert') {
+          const isLocal = ad.agent.hub === this.hub
+          const { added, capChanges } = this.capIndex.upsertAgent(ad.agent, isLocal)
+          if (added) {
+            const full = this.capIndex.getAgent(ad.agent.name, ad.agent.hub)!
+            this.emit('agent:join', full)
+          } else if (capChanges.added.length > 0 || capChanges.removed.length > 0) {
+            this.log(`Capability change for ${ad.agent.name}@${ad.agent.hub}`)
+          }
+        } else if (ad.op === 'remove') {
+          this.capIndex.removeAgent(ad.agent.name, ad.agent.hub)
+          this.emit('agent:leave', ad.agent)
+        }
+      }
+    }
+
+    if (delta.darkCircleDeltas) {
+      // Collect current dark circles for this hub, apply deltas, then update
+      for (const dcd of delta.darkCircleDeltas) {
+        if (dcd.op === 'upsert') {
+          this.capIndex.updateDarkCircles(dcd.hub, [dcd.circle])
+        }
+        // remove dark circle would need a removeDarkCircle method — for now, upsert handles it
+      }
+    }
+
+    this.emit('mesh:delta', delta.hub)
+
+    // ACK the version
+    if (delta.toVersion) {
+      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: delta.hub, version: delta.toVersion })
+    }
+  }
+
+  private _handleMeshDeltaAck(msg: FederationMessage): void {
+    const ack = msg as any
+    this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: ack.hub, version: ack.version })
   }
 
   private _handleCapabilityQuery(msg: CapabilityQueryMessage, replyTo: WebSocket): void {
@@ -587,12 +650,14 @@ export class ManifoldServer extends EventEmitter {
 
     this.peerRegistry.on('peer:connect', (peer: PeerInfo) => {
       this.log(`Peer connected: ${peer.hub}`)
+      this.meshSync.onPeerConnect(peer.hub)
       this.emit('peer:connect', peer)
       // Send our state immediately
       this.meshSync.sync()
     })
 
-    this.peerRegistry.on('peer:disconnect', (peer: Pick<PeerInfo, 'hub'>) => {
+    this.peerRegistry.on('peer:disconnect', (peer: { hub: string; address: string }) => {
+      this.meshSync.onPeerDisconnect(peer.hub)
       this.log(`Peer disconnected: ${peer.hub}`)
       const removed = this.capIndex.removeHub(peer.hub)
       for (const key of removed) {
@@ -622,6 +687,7 @@ export class ManifoldServer extends EventEmitter {
     }
 
     this.capIndex.updateDarkCircles(this.hub, snapshot.darkCircles)
+    this.meshSync.onLocalChange()
     this.log(`Bridge ingested: ${snapshot.agents.length} agents`)
   }
 
