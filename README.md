@@ -35,6 +35,12 @@ Self-contained HTML visualizations. No build step, no dependencies.
 - **Federation snapshot** (`visualization/federation-snapshot.html`) — Force-directed graph showing Trillian + HOG federation mesh with 15 agents, 91 capabilities, and animated particle effects on the federation link. [Live demo](https://federation.surge.sh)
 - **MRI scan** (`scripts/stella_mri.html`) — Mesh Resonance Imaging showing agent capabilities, seams, curvature, dark circles, and geodesic routing paths
 
+> **Note:** MRI is a standalone script (`scripts/stella_mri.py`), not a packaged module.
+> `manifold.mri` does not exist as an importable module — `stella_mri.py` should be run directly:
+> `python3 scripts/stella_mri.py`
+> `tests/test_mri.py` has been removed because it imported the non-existent `manifold.mri`.
+> Packaging MRI as `manifold/mri.py` is tracked as future work.
+
 **Use when:** You want to visualize mesh state, federation topology, or render diagnostics. Open any `.html` file directly in a browser — no server required.
 
 ### Federation
