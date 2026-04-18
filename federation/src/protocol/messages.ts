@@ -10,7 +10,10 @@ export type MessageType =
   | 'task_request'
   | 'task_result'
   | 'task_ack'
+  | 'task_forward'
   | 'mesh_sync'
+  | 'mesh_delta'
+  | 'mesh_delta_ack'
   | 'ping'
   | 'pong'
   | 'error'
@@ -35,6 +38,8 @@ export interface PeerAnnounceMessage extends BaseMessage {
   pubkey?: string
   timestamp: string
   signature?: string
+  /** Bloom filter of hub capabilities (optional, for scaling) */
+  capabilityBloom?: { size: number; hashCount: number; bits: string }
 }
 
 export interface PeerByeMessage extends BaseMessage {
@@ -158,6 +163,18 @@ export interface TaskAckMessage extends BaseMessage {
   queue_position?: number
 }
 
+/** Store-and-forward: relay a task toward its destination through the mesh */
+export interface TaskForwardMessage extends BaseMessage {
+  type: 'task_forward'
+  task: TaskRequest
+  /** Hops taken so far (prevents infinite loops) */
+  hopCount: number
+  /** Max hops allowed */
+  maxHops: number
+  /** Original sender hub */
+  originHub: string
+}
+
 // ── Mesh Sync ──────────────────────────────────────────────────────────────────
 
 export interface DarkCircle {
@@ -172,6 +189,48 @@ export interface MeshSyncMessage extends BaseMessage {
   agents: AgentInfo[]
   darkCircles: DarkCircle[]
   timestamp: string
+}
+
+// ── Delta Sync ────────────────────────────────────────────────────────────────
+
+export interface AgentDelta {
+  op: 'upsert' | 'remove'
+  agent: AgentInfo
+}
+
+export interface DarkCircleDelta {
+  op: 'upsert' | 'remove'
+  circle: DarkCircle
+  hub: string
+}
+
+/** Full snapshot with version — replaces mesh_sync when delta sync is active */
+export interface MeshSyncMessageV2 extends BaseMessage {
+  type: 'mesh_sync'
+  hub: string
+  /** Monotonic version counter */
+  version: number
+  agents: AgentInfo[]
+  darkCircles: DarkCircle[]
+  timestamp: string
+}
+
+/** Delta-only sync — only changes since fromVersion */
+export interface MeshDeltaMessage extends BaseMessage {
+  type: 'mesh_delta'
+  hub: string
+  fromVersion: number
+  toVersion: number
+  agentDeltas: AgentDelta[]
+  darkCircleDeltas: DarkCircleDelta[]
+  timestamp: string
+}
+
+/** ACK from peer confirming they processed a version */
+export interface MeshDeltaAckMessage extends BaseMessage {
+  type: 'mesh_delta_ack'
+  hub: string
+  version: number
 }
 
 // ── Control ────────────────────────────────────────────────────────────────────
@@ -295,6 +354,8 @@ export type FederationMessage =
   | TaskResultMessage
   | TaskAckMessage
   | MeshSyncMessage
+  | MeshDeltaMessage
+  | MeshDeltaAckMessage
   | PingMessage
   | PongMessage
   | ErrorMessage
