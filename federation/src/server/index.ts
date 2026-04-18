@@ -300,6 +300,15 @@ export class ManifoldServer extends EventEmitter {
       })
     })
 
+    // Remove runner agents from mesh when runner disconnects
+    this.taskRouter.on('runner:disconnect', ({ agents }) => {
+      for (const agentName of agents) {
+        this.capIndex.removeAgent(agentName, this.hub)
+      }
+      this._rebuildBloom()
+      this.log(`Runner agents removed from mesh: ${agents.join(', ')}`)
+    })
+
     // 10. Wire detection coordination broadcast
     this.detectionCoord.setBroadcast((msg) => {
       // Broadcast to all local clients
@@ -502,6 +511,19 @@ export class ManifoldServer extends EventEmitter {
     if (msgType === 'agent_runner_ready') {
       const agents = (msg as any).agents as string[]
       this.taskRouter.registerRunner(ws, agents)
+
+      // Register runner agents in the capability index so they're mesh-visible
+      for (const agentName of agents) {
+        this.capIndex.upsertAgent({
+          name: agentName,
+          hub: this.hub,
+          capabilities: [agentName],  // agents are their own capability
+          pressure: 0,
+          isLocal: true,
+        }, true)
+      }
+      this._rebuildBloom()
+      this.log(`Runner agents registered in mesh: ${agents.join(', ')}`)
       return
     }
 
