@@ -113,7 +113,7 @@ export class Gate extends EventEmitter {
     // Create WebSocket server
     this.server = new WebSocketServer({
       server: this.httpServer,
-      verifyClient: (info) => this._verifyClient(info)
+      verifyClient: (info: { origin: string; secure: boolean; req: any }) => this._verifyClient(info)
     })
 
     this.server.on('connection', (ws, req) => {
@@ -188,7 +188,7 @@ export class Gate extends EventEmitter {
       publicKey,
       createdAt: new Date().toISOString(),
       toString: () => meshId,
-      toDisplayString: () => `${meshId} (${fingerprint}...)`,
+      toDisplayString: () => `${meshId} (${publicKey.slice(0, 16)}...)`,
       matches: (id: string) => id === meshId,
       sameIdentity: () => false,
       verify: async () => false,

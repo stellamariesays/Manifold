@@ -1,1 +1,72 @@
-/**\n * Manifold Mesh Identity System\n * \n * MeshPass: Cryptographic identity credential (Ed25519 keypair)\n * MeshID: Human-readable identity (name@hub format)\n */\n\nexport { MeshPass, type MeshPassKeyData, type MeshPassFileData } from './meshpass.js'\nexport { MeshID, MeshIDRegistry, type MeshIDData } from './meshid.js'\n\n// Re-export commonly used patterns\nexport const MESHID_REGEX = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+$/\n\n/**\n * Validate a MeshID string format.\n */\nexport function validateMeshIDFormat(meshIdString: string): boolean {\n  return MESHID_REGEX.test(meshIdString)\n}\n\n/**\n * Create a safe filename from a MeshID string.\n */\nexport function meshIdToFilename(meshId: string): string {\n  return meshId.replace('@', '_at_').replace(/[^a-zA-Z0-9_-]/g, '_')\n}\n\n/**\n * Generate a signed authentication message for mesh protocols.\n */\nexport async function createAuthMessage(meshPass: MeshPass, meshId: string, nonce?: string): Promise<{ meshId: string; nonce: string; timestamp: string; signature: string }> {\n  const timestamp = new Date().toISOString()\n  const nonceValue = nonce ?? Math.random().toString(36).substring(2, 15)\n  \n  // Message format for signing: \"AUTH:{meshId}:{nonce}:{timestamp}\"\n  const message = `AUTH:${meshId}:${nonceValue}:${timestamp}`\n  const signature = await meshPass.sign(message)\n  \n  return {\n    meshId,\n    nonce: nonceValue,\n    timestamp,\n    signature\n  }\n}\n\n/**\n * Verify a signed authentication message.\n */\nexport async function verifyAuthMessage(\n  authMsg: { meshId: string; nonce: string; timestamp: string; signature: string },\n  publicKeyHex: string,\n  maxAgeMs: number = 300000 // 5 minutes\n): Promise<boolean> {\n  try {\n    // Check timestamp age\n    const msgTime = new Date(authMsg.timestamp).getTime()\n    const now = Date.now()\n    if (now - msgTime > maxAgeMs) {\n      return false // Message too old\n    }\n\n    // Verify signature\n    const message = `AUTH:${authMsg.meshId}:${authMsg.nonce}:${authMsg.timestamp}`\n    return await MeshPass.verifyWithPublicKey(message, authMsg.signature, publicKeyHex)\n  } catch {\n    return false\n  }\n}"
+/**
+ * Manifold Mesh Identity System
+ * 
+ * MeshPass: Cryptographic identity credential (Ed25519 keypair)
+ * MeshID: Human-readable identity (name@hub format)
+ */
+
+import { MeshPass, type MeshPassKeyData, type MeshPassFileData } from './meshpass.js'
+import { MeshID, MeshIDRegistry, type MeshIDData } from './meshid.js'
+
+// Re-export everything
+export { MeshPass, type MeshPassKeyData, type MeshPassFileData, MeshID, MeshIDRegistry, type MeshIDData }
+
+// Re-export commonly used patterns
+export const MESHID_REGEX = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+$/
+
+/**
+ * Validate a MeshID string format.
+ */
+export function validateMeshIDFormat(meshIdString: string): boolean {
+  return MESHID_REGEX.test(meshIdString)
+}
+
+/**
+ * Create a safe filename from a MeshID string.
+ */
+export function meshIdToFilename(meshId: string): string {
+  return meshId.replace('@', '_at_').replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+/**
+ * Generate a signed authentication message for mesh protocols.
+ */
+export async function createAuthMessage(meshPass: MeshPass, meshId: string, nonce?: string): Promise<{ meshId: string; nonce: string; timestamp: string; signature: string }> {
+  const timestamp = new Date().toISOString()
+  const nonceValue = nonce ?? Math.random().toString(36).substring(2, 15)
+  
+  // Message format for signing: "AUTH:{meshId}:{nonce}:{timestamp}"
+  const message = `AUTH:${meshId}:${nonceValue}:${timestamp}`
+  const signature = await meshPass.sign(message)
+  
+  return {
+    meshId,
+    nonce: nonceValue,
+    timestamp,
+    signature
+  }
+}
+
+/**
+ * Verify a signed authentication message.
+ */
+export async function verifyAuthMessage(
+  authMsg: { meshId: string; nonce: string; timestamp: string; signature: string },
+  publicKeyHex: string,
+  maxAgeMs: number = 300000 // 5 minutes
+): Promise<boolean> {
+  try {
+    // Check timestamp age
+    const msgTime = new Date(authMsg.timestamp).getTime()
+    const now = Date.now()
+    if (now - msgTime > maxAgeMs) {
+      return false // Message too old
+    }
+
+    // Verify signature
+    const message = `AUTH:${authMsg.meshId}:${authMsg.nonce}:${authMsg.timestamp}`
+    return await MeshPass.verifyWithPublicKey(message, authMsg.signature, publicKeyHex)
+  } catch {
+    return false
+  }
+}
