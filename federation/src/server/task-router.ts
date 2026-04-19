@@ -215,7 +215,11 @@ export class TaskRouter extends EventEmitter {
     }
 
     // Check if we already have this task (dedup)
-    if (this.pending.has(task.id)) {
+    // When a task arrives from a remote peer (sourceHub set) and targets this
+    // hub locally, we accept it even if pending has it — the existing entry was
+    // likely created by routeToRemote before the task was forwarded to us.
+    const isRemoteToLocal = !!sourceHub && resolvedHub === this.hub
+    if (this.pending.has(task.id) && !isRemoteToLocal) {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
