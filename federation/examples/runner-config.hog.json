@@ -1,10 +1,11 @@
 {
   "hub": "hog",
   "wsUrl": "ws://localhost:8768",
-  "defaultTimeoutMs": 30000,
+  "defaultTimeoutMs": 60000,
   "agents": [
     {
       "name": "cron-monitor",
+      "type": "script",
       "capabilities": ["cron-monitoring", "schedule-management", "health-check", "alert-routing"],
       "script": "projects/cron-monitor-void/cron-monitor-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
@@ -13,6 +14,7 @@
     },
     {
       "name": "data-detect",
+      "type": "script",
       "capabilities": ["data-detection", "pipeline-health", "staleness-check", "anomaly-detection", "baseline-drift"],
       "script": "projects/data-detection-void/data-detect-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
@@ -21,6 +23,7 @@
     },
     {
       "name": "solar-detect",
+      "type": "script",
       "capabilities": ["solar-monitoring", "flare-detection", "cme-tracking", "geomagnetic-monitoring", "swpc-api"],
       "script": "projects/solar-detect-void/solar-detect-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
@@ -29,6 +32,7 @@
     },
     {
       "name": "dev-tooling",
+      "type": "script",
       "capabilities": ["development-tooling", "build-management", "test-runner", "debug-assist"],
       "script": "projects/dev-tooling-void/dev-tooling-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
@@ -37,6 +41,7 @@
     },
     {
       "name": "hog-deploy",
+      "type": "script",
       "capabilities": ["deployment", "surge-deploy", "git-operations", "manifest-management", "rollback", "validate", "plan"],
       "script": "projects/deploy-void/deploy-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
