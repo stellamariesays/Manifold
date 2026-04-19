@@ -1,0 +1,31 @@
+{
+  "hub": "hog",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 60000,
+  "agents": [
+    {
+      "name": "stella",
+      "type": "openclaw",
+      "agentId": "stella",
+      "capabilities": ["agent-orchestration", "conversation-strategy", "judgment", "context-management", "session-memory"],
+      "timeout_ms": 120000,
+      "maxConcurrency": 3
+    },
+    {
+      "name": "eddie",
+      "type": "openclaw",
+      "agentId": "main",
+      "capabilities": ["execution", "compute", "blockchain", "crypto-research", "script-execution", "web-research"],
+      "timeout_ms": 120000,
+      "maxConcurrency": 5
+    },
+    {
+      "name": "solar-detect",
+      "type": "script",
+      "capabilities": ["solar-monitoring", "flare-detection", "cme-tracking"],
+      "script": "projects/solar-detect-void/solar-detect-agent.py",
+      "cwd": "/home/marvin/.openclaw/workspace",
+      "timeout_ms": 60000
+    }
+  ]
+}
