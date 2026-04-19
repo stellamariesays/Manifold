@@ -1,0 +1,15 @@
+{
+  "hub": "my-hub",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 30000,
+  "agents": [
+    {
+      "name": "hello-mesh",
+      "script": "examples/quickstart-agent.py",
+      "cwd": ".",
+      "timeout_ms": 60000,
+      "maxConcurrency": 1,
+      "capabilities": ["greeting", "echo"]
+    }
+  ]
+}
