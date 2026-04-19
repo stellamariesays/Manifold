@@ -9,6 +9,9 @@ import type { SecurityConfig } from './security.js'
 import { createAuthMiddleware } from './security.js'
 import type { DetectionCoord } from './detection-coord.js'
 import type { TaskRequest, TaskResult } from '../protocol/messages.js'
+import { AttestationEngine } from '../attestation/engine.js'
+import { AntiSybilGuard, solvePoW } from '../attestation/anti-sybil.js'
+import type { ChallengeType } from '../attestation/challenges.js'
 
 export interface RestApiOptions {
   hub: string
@@ -31,12 +34,16 @@ export class RestApi {
   private taskHistory!: TaskHistory
   private metrics!: MetricsCollector
   private detectionCoord!: DetectionCoord
+  private attestationEngine: AttestationEngine
+  private antiSybilGuard: AntiSybilGuard
   private startTime = Date.now()
 
   constructor(options: RestApiOptions) {
     this.hub = options.hub
     this.port = options.port
     this.debug = options.debug ?? false
+    this.attestationEngine = new AttestationEngine()
+    this.antiSybilGuard = new AntiSybilGuard()
     this._setup()
   }
 
@@ -103,6 +110,14 @@ export class RestApi {
     router.get('/teacups', this._teacups.bind(this))
     router.post('/teacup/:id/score', this._scoreTeacup.bind(this))
     router.get('/dashboard', this._dashboard.bind(this))
+
+    // Phase 2: Attestation endpoints
+    router.post('/attestation/challenge', this._attestationChallenge.bind(this))
+    router.post('/attestation/proof', this._attestationProof.bind(this))
+    router.post('/attestation/attest', this._attestationAttest.bind(this))
+    router.get('/attestation/status/:agentId/:capability', this._attestationStatus.bind(this))
+    router.post('/registration/challenge', this._registrationChallenge.bind(this))
+    router.post('/registration/verify', this._registrationVerify.bind(this))
 
     // Phase 3: Detection-Coordination endpoints
     // NOTE: /detections/stats MUST come before /detections/:id (Express matches in order)
@@ -735,6 +750,159 @@ ${pending.map(t => `<tr>
       status: outcome,
     })
   }
+
+  // ── Phase 2: Attestation handlers ─────────────────────────────────────────
+
+  /**
+   * POST /attestation/challenge — issue a challenge for a capability claim.
+   * Body: { capability, agentId, difficulty?, type? }
+   */
+  private _attestationChallenge(req: Request, res: Response): void {
+    const { capability, agentId, difficulty, type } = req.body as {
+      capability?: string
+      agentId?: string
+      difficulty?: number
+      type?: ChallengeType
+    }
+
+    if (!capability || !agentId) {
+      res.status(400).json({ error: 'capability and agentId are required' })
+      return
+    }
+
+    const challenge = this.attestationEngine.issueChallenge(capability, agentId, difficulty, type)
+    this.log(`Attestation challenge issued: ${challenge.id} for ${agentId} / ${capability}`)
+    res.json({ challenge })
+  }
+
+  /**
+   * POST /attestation/proof — submit proof for a challenge.
+   * Body: { challengeId, agentId, response }
+   */
+  private _attestationProof(req: Request, res: Response): void {
+    const { challengeId, agentId, response } = req.body as {
+      challengeId?: string
+      agentId?: string
+      response?: Record<string, unknown>
+    }
+
+    if (!challengeId || !agentId || !response) {
+      res.status(400).json({ error: 'challengeId, agentId, and response are required' })
+      return
+    }
+
+    const result = this.attestationEngine.submitProof(challengeId, agentId, response)
+    if (!result.success) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+
+    this.log(`Attestation proof submitted: ${challengeId} by ${agentId}`)
+    res.json({ status: 'proof_submitted', challengeId })
+  }
+
+  /**
+   * POST /attestation/attest — peer attests to a proof.
+   * Body: { challengeId, peerId, score, notes? }
+   */
+  private _attestationAttest(req: Request, res: Response): void {
+    const { challengeId, peerId, score, notes } = req.body as {
+      challengeId?: string
+      peerId?: string
+      score?: number
+      notes?: string
+    }
+
+    if (!challengeId || !peerId || score === undefined) {
+      res.status(400).json({ error: 'challengeId, peerId, and score are required' })
+      return
+    }
+
+    const result = this.attestationEngine.addAttestation(challengeId, peerId, score, notes)
+    if (!result.success) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+
+    // Update CapabilityIndex attestation scores
+    const record = this.attestationEngine.getRecord(challengeId)
+    if (record) {
+      const scoreData = this.attestationEngine.getScore(
+        record.challenge.agentId,
+        record.challenge.capability,
+      )
+      this.capIndex.setAttestationScore(
+        record.challenge.agentId,
+        record.challenge.capability,
+        scoreData.averageScore,
+        scoreData.attestationCount,
+        scoreData.isAttested,
+      )
+    }
+
+    this.log(`Attestation: ${peerId} attested ${challengeId} with score ${score}`)
+    res.json({ status: 'attested', challengeId })
+  }
+
+  /**
+   * GET /attestation/status/:agentId/:capability — check attestation status.
+   */
+  private _attestationStatus(req: Request, res: Response): void {
+    const agentId = decodeURIComponent(String(req.params['agentId'] ?? ''))
+    const capability = decodeURIComponent(String(req.params['capability'] ?? ''))
+
+    const score = this.attestationEngine.getScore(agentId, capability)
+    res.json(score)
+  }
+
+  /**
+   * POST /registration/challenge — get a PoW challenge for registration.
+   */
+  private _registrationChallenge(req: Request, res: Response): void {
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+    const challenge = this.antiSybilGuard.issueChallenge(ip)
+
+    if (!challenge) {
+      res.status(429).json({ error: 'Rate limited — too many registration attempts from this IP' })
+      return
+    }
+
+    res.json({ challenge })
+  }
+
+  /**
+   * POST /registration/verify — submit PoW solution.
+   * Body: { challengeId, nonce, hash }
+   */
+  private _registrationVerify(req: Request, res: Response): void {
+    const { challengeId, nonce, hash } = req.body as {
+      challengeId?: string
+      nonce?: string
+      hash?: string
+    }
+
+    if (!challengeId || !nonce || !hash) {
+      res.status(400).json({ error: 'challengeId, nonce, and hash are required' })
+      return
+    }
+
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+    const result = this.antiSybilGuard.verifySolution({ challengeId, nonce, hash }, ip)
+
+    if (!result.valid) {
+      res.status(400).json({ error: result.error })
+      return
+    }
+
+    this.log(`PoW registration verified: challenge ${challengeId}`)
+    res.json({ status: 'verified', message: 'Registration approved' })
+  }
+
+  /** Expose attestation engine for testing */
+  getAttestationEngine(): AttestationEngine { return this.attestationEngine }
+
+  /** Expose anti-sybil guard for testing */
+  getAntiSybilGuard(): AntiSybilGuard { return this.antiSybilGuard }
 
   // ── Gossip ─────────────────────────────────────────────────────────────────
 

@@ -26,6 +26,10 @@ export type MessageType =
   | 'mesh_identity_announce'
   | 'mesh_identity_verify'
   | 'mesh_auth'
+  // Phase 2: Attestation
+  | 'attestation_challenge'
+  | 'attestation_proof'
+  | 'attestation_peer'
 
 export interface BaseMessage {
   type: MessageType
@@ -408,6 +412,83 @@ export interface MeshAuthMessage extends BaseMessage {
   auth: MeshAuthRequest
 }
 
+// ── Attestation (Phase 2) ─────────────────────────────────────────────────────
+//
+// Cross-hub attestation: challenges, proofs, and peer attestations relayed
+// across the federation mesh.
+
+export interface AttestationChallengePayload {
+  /** Challenge ID */
+  id: string
+  /** Challenge type */
+  type: 'generic' | 'code' | 'analysis'
+  /** Capability being challenged */
+  capability: string
+  /** Agent being challenged (name@hub) */
+  agentId: string
+  /** Difficulty 0.0–1.0 */
+  difficulty: number
+  /** Expiry timestamp */
+  expiresAt: string
+  /** Challenge test data */
+  testData: Record<string, unknown>
+  /** Integrity hash */
+  integrityHash: string
+  /** Creation timestamp */
+  createdAt: string
+  /** Hub that issued the challenge */
+  issuedBy: string
+}
+
+export interface AttestationProofPayload {
+  /** Challenge ID */
+  challengeId: string
+  /** Agent submitting proof */
+  agentId: string
+  /** Proof response data */
+  response: Record<string, unknown>
+  /** SHA-256 hash of response */
+  responseHash: string
+  /** Submission timestamp */
+  submittedAt: string
+  /** Hub where proof was submitted */
+  submittedVia: string
+}
+
+export interface AttestationPeerPayload {
+  /** Challenge ID */
+  challengeId: string
+  /** Peer making the attestation */
+  peerId: string
+  /** Agent whose proof is attested */
+  agentId: string
+  /** Capability being attested */
+  capability: string
+  /** Score 0.0–1.0 */
+  score: number
+  /** Optional notes */
+  notes?: string
+  /** Timestamp */
+  attestedAt: string
+  /** Hub where attestation was made */
+  attestedVia: string
+}
+
+export interface AttestationChallengeMessage extends BaseMessage {
+  type: 'attestation_challenge'
+  payload: AttestationChallengePayload
+}
+
+export interface AttestationProofMessage extends BaseMessage {
+  type: 'attestation_proof'
+  payload: AttestationProofPayload
+}
+
+export interface AttestationPeerMessage extends BaseMessage {
+  type: 'attestation_peer'
+  payload: AttestationPeerPayload
+}
+
 export type FederationMessage =
   | PeerAnnounceMessage
   | PeerByeMessage
@@ -434,3 +515,7 @@ export type FederationMessage =
   | MeshIdentityAnnounceMessage
   | MeshIdentityVerifyMessage
   | MeshAuthMessage
+  // Phase 2: Attestation
+  | AttestationChallengeMessage
+  | AttestationProofMessage
+  | AttestationPeerMessage
