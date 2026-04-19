@@ -5,11 +5,14 @@
  * Under the hood: Ed25519 keypair, but users never see "Ed25519" - it's always "MeshPass".
  */
 
-import { getRandomBytes, sign, verify, etc } from '@noble/ed25519'
-import { randomBytes } from 'crypto'
+import * as ed25519 from '@noble/ed25519'
+import { randomBytes, createHash } from 'crypto'
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
 import { homedir } from 'os'
+
+// Initialize noble/ed25519 with Node.js crypto
+ed25519.etc.sha512Sync = (...m) => createHash('sha512').update(ed25519.etc.concatBytes(...m)).digest()
 
 export interface MeshPassKeyData {
   /** Public key as hex string */
@@ -55,10 +58,10 @@ export class MeshPass {
    */
   static async generate(): Promise<MeshPass> {
     // Generate 32 random bytes for private key
-    const privateKey = getRandomBytes(32)
+    const privateKey = randomBytes(32)
     
-    // Derive public key
-    const publicKey = await etc.getPublicKey(privateKey)
+    // Derive public key using Ed25519
+    const publicKey = await ed25519.getPublicKey(privateKey)
     
     return new MeshPass(publicKey, privateKey)
   }
@@ -150,7 +153,7 @@ export class MeshPass {
    */
   async sign(message: string | Uint8Array): Promise<string> {
     const msgBytes = typeof message === 'string' ? new TextEncoder().encode(message) : message
-    const signature = await sign(msgBytes, this.privateKey)
+    const signature = await ed25519.sign(msgBytes, this.privateKey)
     return Buffer.from(signature).toString('hex')
   }
 
@@ -161,7 +164,7 @@ export class MeshPass {
     try {
       const msgBytes = typeof message === 'string' ? new TextEncoder().encode(message) : message
       const sigBytes = new Uint8Array(Buffer.from(signature, 'hex'))
-      return await verify(sigBytes, msgBytes, this.publicKey)
+      return await ed25519.verify(sigBytes, msgBytes, this.publicKey)
     } catch {
       return false
     }
@@ -175,7 +178,7 @@ export class MeshPass {
       const msgBytes = typeof message === 'string' ? new TextEncoder().encode(message) : message
       const sigBytes = new Uint8Array(Buffer.from(signature, 'hex'))
       const pubKey = new Uint8Array(Buffer.from(publicKeyHex, 'hex'))
-      return await verify(sigBytes, msgBytes, pubKey)
+      return await ed25519.verify(sigBytes, msgBytes, pubKey)
     } catch {
       return false
     }
