@@ -16,6 +16,7 @@ import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
 import { DetectionLedger } from './detection-ledger.js'
 import { DetectionCoord } from './detection-coord.js'
+import { DetectionSync } from './detection-sync.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
@@ -111,6 +112,7 @@ export class ManifoldServer extends EventEmitter {
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
+  readonly detectionSync: DetectionSync
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -205,6 +207,14 @@ export class ManifoldServer extends EventEmitter {
       ledger: this.detectionLedger,
       capIndex: this.capIndex,
       peerRegistry: this.peerRegistry,
+      debug: this.config.debug,
+    })
+
+    this.detectionSync = new DetectionSync({
+      hub: this.hub,
+      detectionCoord: this.detectionCoord,
+      peerRegistry: this.peerRegistry,
+      gossipIntervalMs: 60_000,
       debug: this.config.debug,
     })
 
@@ -328,6 +338,9 @@ export class ManifoldServer extends EventEmitter {
       this.peerRegistry.broadcast(JSON.stringify(msg))
     })
 
+    // 11. Start cross-hub detection sync
+    this.detectionSync.start()
+
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
   }
 
@@ -353,6 +366,7 @@ export class ManifoldServer extends EventEmitter {
       this.log(`Cache save failed (non-fatal): ${err}`)
     }
 
+    this.detectionSync.stop()
     this.meshSync.stop()
     this.peerRegistry.stop()
     this.taskRouter.stop()
@@ -769,6 +783,8 @@ export class ManifoldServer extends EventEmitter {
       this.emit('peer:connect', peer)
       // Send our state immediately
       this.meshSync.sync()
+      // Sync detection claims with new peer
+      this.detectionSync.registerPeer(peer.hub)
     })
 
     this.peerRegistry.on('peer:disconnect', (peer: { hub: string; address: string }) => {
