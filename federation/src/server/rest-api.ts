@@ -86,6 +86,9 @@ export class RestApi {
     router.get('/status', this._status.bind(this))
     router.get('/peers', this._peers.bind(this))
     router.get('/agents', this._agents.bind(this))
+    router.post('/agents/register', this._registerAgent.bind(this))
+    router.put('/agents/:name/heartbeat', this._heartbeatAgent.bind(this))
+    router.delete('/agents/:name', this._deregisterAgent.bind(this))
     router.get('/agents/:name', this._agent.bind(this))
     router.get('/capabilities', this._capabilities.bind(this))
     router.get('/dark-circles', this._darkCircles.bind(this))
@@ -163,6 +166,70 @@ export class RestApi {
     }
 
     res.json(agent)
+  }
+
+  /**
+   * POST /agents/register — register an agent (called by agent-runner on startup).
+   */
+  private _registerAgent(req: Request, res: Response): void {
+    const { name, capabilities, seams } = req.body as {
+      name?: string
+      capabilities?: string[]
+      seams?: string[]
+    }
+
+    if (!name || !capabilities) {
+      res.status(400).json({ error: 'name and capabilities are required' })
+      return
+    }
+
+    const { added } = this.capIndex.upsertAgent(
+      { name, hub: this.hub, capabilities, seams },
+      true,
+    )
+
+    // Rebuild bloom filter so peers see the new agent
+    this.meshSync.onLocalChange()
+
+    const status = added ? 'registered' : 'updated'
+    this.log(`REST register ${name}: ${status} (${capabilities.length} caps)`)
+    res.json({ status, name, hub: this.hub, capabilities })
+  }
+
+  /**
+   * PUT /agents/:name/heartbeat — renew an agent's TTL.
+   */
+  private _heartbeatAgent(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const agent = this.capIndex.getAllAgents().find(a => a.name === name && a.isLocal)
+
+    if (!agent) {
+      res.status(404).json({ error: `Agent not found: ${name}` })
+      return
+    }
+
+    // Touch the agent's lastSeen timestamp
+    this.capIndex.upsertAgent(
+      { name, hub: this.hub, capabilities: agent.capabilities, seams: agent.seams },
+      true,
+    )
+
+    res.json({ status: 'ok', name })
+  }
+
+  /**
+   * DELETE /agents/:name — deregister an agent (called by agent-runner on shutdown).
+   */
+  private _deregisterAgent(req: Request, res: Response): void {
+    const name = String(req.params['name'] ?? '')
+    const removed = this.capIndex.removeAgent(name, this.hub)
+
+    if (removed) {
+      this.meshSync.onLocalChange()
+      this.log(`REST deregister ${name}: removed`)
+    }
+
+    res.json({ status: removed ? 'removed' : 'not_found', name })
   }
 
   private _capabilities(_req: Request, res: Response): void {
