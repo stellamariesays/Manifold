@@ -166,6 +166,7 @@ export class TaskRouter extends EventEmitter {
 
     ws.on('close', () => {
       this.runners.delete(runnerId)
+      this.emit('runner:disconnect', { runnerId, agents })
       this.log(`Runner disconnected: ${runnerId.substring(0, 8)}...`)
     })
   }
