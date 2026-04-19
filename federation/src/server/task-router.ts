@@ -27,6 +27,7 @@ import type { RateLimiter } from './security.js'
 export interface PendingTask {
   task: TaskRequest
   origin: 'local' | 'remote'
+  originHub?: string      // hub that sent the task (for remote tasks, to send result back)
   sourceKey: string       // for backpressure tracking
   runnerId?: string       // local runner handling this task
   replyTo: WebSocket | null    // null if from remote peer
@@ -318,6 +319,7 @@ export class TaskRouter extends EventEmitter {
     const pending: PendingTask = {
       task,
       origin: replyTo ? 'local' : 'remote',
+      originHub: replyTo ? undefined : (task.origin || undefined),
       sourceKey,
       runnerId,
       replyTo,
@@ -431,7 +433,7 @@ export class TaskRouter extends EventEmitter {
     setTimeout(() => this.completed.delete(result.id), this.completedTtlMs)
 
     // Send result back to origin
-    this.sendResult(result, pending.replyTo)
+    this.sendResult(result, pending.replyTo, pending.originHub)
 
     this.log(`Result: ${result.status} for ${result.id.substring(0, 8)}... (${result.execution_ms ?? '?'}ms)`)
     this.emit('task:complete', { result, task: pending.task })
@@ -546,13 +548,18 @@ export class TaskRouter extends EventEmitter {
     }
   }
 
-  private sendResult(result: TaskResult, ws: WebSocket | null): void {
+  private sendResult(result: TaskResult, ws: WebSocket | null, originHub?: string): void {
     const msg: TaskResultMessage = { type: 'task_result', result }
 
     if (ws && ws.readyState === 1) { // WebSocket.OPEN
       ws.send(JSON.stringify(msg))
+    } else if (originHub && originHub !== this.hub) {
+      // Remote task — send result back to originating hub via federation
+      const sent = this.peerRegistry.sendTo(originHub, JSON.stringify(msg))
+      if (!sent) {
+        this.log(`Failed to send result back to ${originHub} for task ${result.id.substring(0, 8)}...`)
+      }
     }
-    // If no ws (remote origin), the remote hub's router will deliver it
   }
 
   /** Get status of a task by ID */
