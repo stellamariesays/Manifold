@@ -186,6 +186,8 @@ export interface DarkCircle {
 export interface MeshSyncMessage extends BaseMessage {
   type: 'mesh_sync'
   hub: string
+  /** Monotonic version counter (set by delta sync) */
+  version?: number
   agents: AgentInfo[]
   darkCircles: DarkCircle[]
   timestamp: string
@@ -202,17 +204,6 @@ export interface DarkCircleDelta {
   op: 'upsert' | 'remove'
   circle: DarkCircle
   hub: string
-}
-
-/** Full snapshot with version — replaces mesh_sync when delta sync is active */
-export interface MeshSyncMessageV2 extends BaseMessage {
-  type: 'mesh_sync'
-  hub: string
-  /** Monotonic version counter */
-  version: number
-  agents: AgentInfo[]
-  darkCircles: DarkCircle[]
-  timestamp: string
 }
 
 /** Delta-only sync — only changes since fromVersion */

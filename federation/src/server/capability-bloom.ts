@@ -29,8 +29,8 @@ export interface BloomFilterOptions {
 }
 
 export class BloomFilter {
-  readonly size: number        // number of bits
-  readonly hashCount: number   // number of hash functions
+  size: number        // number of bits
+  hashCount: number   // number of hash functions
   private bits: Uint8Array     // bit storage (byte-packed)
 
   constructor(options?: BloomFilterOptions) {
