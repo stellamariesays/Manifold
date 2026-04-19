@@ -220,6 +220,7 @@ export class CapabilityIndex {
       for (const hub of hubs) {
         const raw = this.rawPressures.get(`${circleName}:${hub}`) ?? 0
         const resolved = raw * factor
+        if (!circle.byHub) circle.byHub = {}
         circle.byHub[hub] = resolved
         if (resolved > maxResolved) maxResolved = resolved
       }

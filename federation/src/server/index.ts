@@ -126,6 +126,7 @@ export class ManifoldServer extends EventEmitter {
       gossipEnabled: true,
       gossipViewSize: 8,
       gossipShuffleIntervalMs: 10_000,
+      wireFormat: 'json' as const,
       debug: false,
       ...config,
     }
@@ -333,7 +334,7 @@ export class ManifoldServer extends EventEmitter {
       const agents = this.capIndex.getAllAgents().map(a => ({
         agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
         cachedAt: Date.now(),
-        isLocal: a.isLocal,
+        isLocal: a.isLocal ?? false,
       }))
       const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
         name: dc.name,
@@ -509,21 +510,23 @@ export class ManifoldServer extends EventEmitter {
     }
 
     if (msgType === 'agent_runner_ready') {
-      const agents = (msg as any).agents as string[]
-      this.taskRouter.registerRunner(ws, agents)
+      const rawAgents = (msg as any).agents as Array<string | { name: string; capabilities?: string[] }>
+      const agentNames = rawAgents.map(a => typeof a === 'string' ? a : a.name)
+      this.taskRouter.registerRunner(ws, agentNames)
 
       // Register runner agents in the capability index so they're mesh-visible
-      for (const agentName of agents) {
+      for (const entry of rawAgents) {
+        const name = typeof entry === 'string' ? entry : entry.name
+        const caps = typeof entry === 'string' ? [entry] : (entry.capabilities ?? [name])
         this.capIndex.upsertAgent({
-          name: agentName,
+          name,
           hub: this.hub,
-          capabilities: [agentName],  // agents are their own capability
+          capabilities: caps,
           pressure: 0,
-          isLocal: true,
         }, true)
       }
       this._rebuildBloom()
-      this.log(`Runner agents registered in mesh: ${agents.join(', ')}`)
+      this.log(`Runner agents registered in mesh: ${agentNames.join(', ')}`)
       return
     }
 
