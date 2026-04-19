@@ -185,7 +185,10 @@ const TaskForwardSchema = z.object({
 const AgentRunnerReadySchema = z.object({
   type: z.literal('agent_runner_ready'),
   hub: z.string().optional(),
-  agents: z.array(z.string()),
+  agents: z.array(z.union([
+    z.string(),
+    z.object({ name: z.string(), capabilities: z.array(z.string()).optional(), seams: z.array(z.string()).optional() }),
+  ])),
 })
 
 // ── Phase 3: Detection-Coordination schemas ────────────────────────────────────
