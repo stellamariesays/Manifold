@@ -50,8 +50,8 @@ export class BloomFilter {
   /** Reconstruct from serialized data. */
   static fromSerialized(size: number, hashCount: number, bits: Uint8Array): BloomFilter {
     const bf = Object.create(BloomFilter.prototype) as BloomFilter
-    bf.size = size
-    bf.hashCount = hashCount
+    ;(bf as any).size = size
+    ;(bf as any).hashCount = hashCount
     bf.bits = bits
     return bf
   }
