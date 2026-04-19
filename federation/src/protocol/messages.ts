@@ -30,6 +30,8 @@ export type MessageType =
   | 'attestation_challenge'
   | 'attestation_proof'
   | 'attestation_peer'
+  // Phase 3: Detection-Coordination sync
+  | 'detection_gossip'
 
 export interface BaseMessage {
   type: MessageType
@@ -356,6 +358,19 @@ export interface DetectionOutcomeMessage extends BaseMessage {
   outcome: DetectionOutcome
 }
 
+export interface GossipTrustScore {
+  source: string
+  score: number
+  totalClaims: number
+  verified: number
+}
+
+export interface DetectionGossipMessage extends BaseMessage {
+  type: 'detection_gossip'
+  scores: GossipTrustScore[]
+  hub: string
+}
+
 // ── MeshPass Identity (Phase 1) ──────────────────────────────────────────────
 //
 // Cryptographic identity and mesh authentication using Ed25519 signatures.
@@ -511,6 +526,8 @@ export type FederationMessage =
   | DetectionVerifyMessage
   | DetectionChallengeMessage
   | DetectionOutcomeMessage
+  // Phase 3: Detection sync
+  | DetectionGossipMessage
   // Phase 1: MeshPass
   | MeshIdentityAnnounceMessage
   | MeshIdentityVerifyMessage
