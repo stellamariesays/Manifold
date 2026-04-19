@@ -12,13 +12,21 @@ import { MeshID, MeshIDRegistry, type MeshIDData } from './meshid.js'
 export { MeshPass, type MeshPassKeyData, type MeshPassFileData, MeshID, MeshIDRegistry, type MeshIDData }
 
 // Re-export commonly used patterns
-export const MESHID_REGEX = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+$/
+export const MESHID_REGEX = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+#[a-fA-F0-9]{8}$/
+export const LEGACY_AGENT_KEY_REGEX = /^[a-zA-Z0-9_-]+@[a-zA-Z0-9_.-]+$/
 
 /**
- * Validate a MeshID string format.
+ * Validate a MeshID string format (name@hub#fingerprint).
  */
 export function validateMeshIDFormat(meshIdString: string): boolean {
   return MESHID_REGEX.test(meshIdString)
+}
+
+/**
+ * Validate a legacy agent key format (name@hub) used by capability-index.ts.
+ */
+export function validateAgentKeyFormat(agentKey: string): boolean {
+  return LEGACY_AGENT_KEY_REGEX.test(agentKey)
 }
 
 /**

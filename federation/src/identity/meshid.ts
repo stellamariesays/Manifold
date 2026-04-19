@@ -1,8 +1,8 @@
 /**
  * MeshID: Human-readable identity derived from a MeshPass.
  * 
- * Format: `name@hub` (e.g., `stella@satelliteA`, `eddie@thefog`)
- * Under the hood it resolves to a public key fingerprint, but users see the friendly name.
+ * Format: `name@hub#fingerprint` (e.g., `stella@satelliteA#a1b2c3d4`, `eddie@thefog#9f8e7d6c`)
+ * The fingerprint suffix avoids collision with capability-index internal agent keys (name@hub).
  */
 
 import { MeshPass } from './meshpass.js'
@@ -53,20 +53,26 @@ export class MeshID {
   }
 
   /**
-   * Parse a MeshID string (format: "name@hub") and resolve it to public key.
+   * Parse a MeshID string (format: "name@hub#fingerprint") and extract components.
    * Note: This only gives you the string components - you need a registry to resolve to keys.
    */
-  static parse(meshIdString: string): { name: string; hub: string } {
+  static parse(meshIdString: string): { name: string; hub: string; fingerprint?: string } {
     if (!meshIdString.includes('@')) {
-      throw new Error(`Invalid MeshID format: ${meshIdString} (expected name@hub)`)
+      throw new Error(`Invalid MeshID format: ${meshIdString} (expected name@hub#fingerprint)`)
     }
 
-    const [name, hub] = meshIdString.split('@', 2)
+    const [nameHub, fingerprint] = meshIdString.split('#', 2)
+    const [name, hub] = nameHub.split('@', 2)
+    
     if (!name || !hub) {
-      throw new Error(`Invalid MeshID format: ${meshIdString} (expected name@hub)`)
+      throw new Error(`Invalid MeshID format: ${meshIdString} (expected name@hub#fingerprint)`)
+    }
+    
+    if (!fingerprint) {
+      throw new Error(`Invalid MeshID format: ${meshIdString} (missing fingerprint suffix)`)
     }
 
-    return { name, hub }
+    return { name, hub, fingerprint }
   }
 
   /**
@@ -77,17 +83,25 @@ export class MeshID {
   }
 
   /**
-   * Get the string representation: "name@hub".
+   * Get the string representation: "name@hub#fingerprint".
    */
   toString(): string {
-    return `${this.name}@${this.hub}`
+    return `${this.name}@${this.hub}#${this.fingerprint.slice(0, 8)}`
   }
 
   /**
-   * Get display name with fingerprint: "stella@satelliteA (abc123...)".
+   * Get display name with full fingerprint: "stella@satelliteA#a1b2c3d4 (abc123def456789...)".
    */
   toDisplayString(): string {
     return `${this.toString()} (${this.fingerprint}...)`
+  }
+  
+  /**
+   * Get the legacy agent key format (name@hub) for internal use.
+   * This is used by capability-index.ts for backward compatibility.
+   */
+  toAgentKey(): string {
+    return `${this.name}@${this.hub}`
   }
 
   /**

@@ -93,7 +93,8 @@ class MeshPassDemo {
     
     for (const config of agentConfigs) {
       const meshPass = await MeshPass.generate()
-      const meshId = `${config.name}@${DEMO_CONFIG.hubName}`
+      const meshIdObj = MeshID.fromMeshPass(meshPass, config.name, DEMO_CONFIG.hubName)
+      const meshId = meshIdObj.toString()
       
       this.agents.push({
         name: config.name,

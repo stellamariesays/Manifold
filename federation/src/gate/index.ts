@@ -177,9 +177,11 @@ export class Gate extends EventEmitter {
   // Public API
   registerMeshID(meshId: string, publicKey: string): void {
     // Create a MeshID object from the data
-    const { name, hub } = validateMeshIDFormat(meshId) ? 
-      { name: meshId.split('@')[0], hub: meshId.split('@')[1] } : 
-      { name: meshId, hub: this.config.hubName }
+    const parsed = validateMeshIDFormat(meshId) ? 
+      meshId.split('#')[0].split('@') : 
+      [meshId, this.config.hubName]
+    const name = parsed[0]
+    const hub = parsed[1] || this.config.hubName
     
     const meshIdObj = {
       name,
@@ -335,9 +337,19 @@ export class Gate extends EventEmitter {
 
   private async _handleAuthMessage(ws: WebSocket, data: any, authTimeout: NodeJS.Timeout): Promise<void> {
     try {
-      const message = JSON.parse(data.toString())
+      // Simple validation for auth messages only - don't use full Zod parse
+      let message: any
+      try {
+        message = JSON.parse(data.toString())
+      } catch {
+        ws.send(JSON.stringify({
+          type: 'auth_error',
+          error: 'Invalid JSON format'
+        }))
+        return
+      }
       
-      if (message.type !== 'mesh_auth') {
+      if (!message || typeof message !== 'object' || message.type !== 'mesh_auth') {
         ws.send(JSON.stringify({
           type: 'auth_error',
           error: 'Expected mesh_auth message'
@@ -350,7 +362,7 @@ export class Gate extends EventEmitter {
       if (!validateMeshIDFormat(meshId)) {
         ws.send(JSON.stringify({
           type: 'auth_error',
-          error: 'Invalid MeshID format (expected name@hub)'
+          error: 'Invalid MeshID format (expected name@hub#fingerprint)'
         }))
         return
       }
@@ -424,7 +436,11 @@ export class Gate extends EventEmitter {
 
   private _handleSessionMessage(ws: WebSocket, data: any): void {
     const session = this.sessions.get(ws)
-    if (!session) return
+    if (!session) {
+      // This should not happen - close connection if no authenticated session
+      ws.close(4002, 'No authenticated session')
+      return
+    }
     
     // Rate limiting
     const now = Date.now()
@@ -446,6 +462,7 @@ export class Gate extends EventEmitter {
     session.lastActivity = new Date().toISOString()
     
     try {
+      // Only parse messages from authenticated sessions using full Zod validation
       const message = parseMessage(data.toString())
       if (!message) {
         ws.send(JSON.stringify({
