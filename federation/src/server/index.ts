@@ -52,6 +52,10 @@ export interface ManifoldServerConfig {
   /** Peer federation server addresses to connect to / bootstrap from */
   peers?: string[]
 
+  /** External address to advertise to peers (e.g. ws://100.86.105.39:8766).
+   *  If not set, defaults to ws://localhost:{federationPort}. */
+  advertiseAddress?: string
+
   /**
    * Path to Python manifold atlas JSON for local mesh state.
    * If provided, the bridge polls this file and injects agents into the index.
@@ -121,6 +125,7 @@ export class ManifoldServer extends EventEmitter {
       identity: {},
       peers: [],
       atlasPath: '',
+      advertiseAddress: '',
       syncIntervalMs: 15_000,
       restEnabled: true,
       security: {},
@@ -133,7 +138,7 @@ export class ManifoldServer extends EventEmitter {
     }
     this.hub = config.name
 
-    const selfAddress = `ws://localhost:${this.config.federationPort}`
+    const selfAddress = this.config.advertiseAddress || `ws://localhost:${this.config.federationPort}`
 
     this.peerRegistry = new PeerRegistry({
       selfHub: this.hub,
