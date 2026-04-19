@@ -185,10 +185,18 @@ const TaskForwardSchema = z.object({
 const AgentRunnerReadySchema = z.object({
   type: z.literal('agent_runner_ready'),
   hub: z.string().optional(),
-  agents: z.array(z.union([
-    z.string(),
-    z.object({ name: z.string(), capabilities: z.array(z.string()).optional(), seams: z.array(z.string()).optional() }),
-  ])),
+  agents: z.array(z.string().or(z.object({
+    name: z.string(),
+    capabilities: z.array(z.string()).optional(),
+    seams: z.array(z.string()).optional(),
+  }))),
+})
+
+const AgentRegisterSchema = z.object({
+  type: z.literal('agent_register'),
+  name: z.string(),
+  capabilities: z.array(z.string()),
+  seams: z.array(z.string()).optional(),
 })
 
 // ── Phase 3: Detection-Coordination schemas ────────────────────────────────────
@@ -273,6 +281,7 @@ const FederationMessageSchema = z.discriminatedUnion('type', [
   TaskAckSchema,
   TaskForwardSchema,
   AgentRunnerReadySchema,
+  AgentRegisterSchema,
   // Phase 3
   DetectionClaimMessageSchema,
   DetectionVerifyMessageSchema,

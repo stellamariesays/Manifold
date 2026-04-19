@@ -22,11 +22,23 @@ export type MessageType =
   | 'detection_verify'
   | 'detection_challenge'
   | 'detection_outcome'
+  // Phase 1: MeshPass Identity
+  | 'mesh_identity_announce'
+  | 'mesh_identity_verify'
+  | 'mesh_auth'
 
 export interface BaseMessage {
   type: MessageType
   requestId?: string
   timestamp?: string
+  /** Sender MeshID (name@hub) if authenticated */
+  sender?: string
+  /** Sender public key for signature verification */
+  senderPublicKey?: string
+  /** Gateway hub that relayed this message */
+  gatewayHub?: string
+  /** Message signature (hex) from sender's MeshPass */
+  signature?: string
 }
 
 // ── Peer Discovery ─────────────────────────────────────────────────────────────
@@ -64,6 +76,7 @@ export interface AgentInfo {
   pressure?: number
   seams?: string[]
   lastSeen?: string
+  isLocal?: boolean
 }
 
 export interface CapabilityResponseMessage extends BaseMessage {
@@ -191,6 +204,11 @@ export interface MeshSyncMessage extends BaseMessage {
   agents: AgentInfo[]
   darkCircles: DarkCircle[]
   timestamp: string
+}
+
+/** Extended mesh sync with delta versioning support */
+export interface MeshSyncMessageV2 extends MeshSyncMessage {
+  version: number
 }
 
 // ── Delta Sync ────────────────────────────────────────────────────────────────
@@ -334,6 +352,62 @@ export interface DetectionOutcomeMessage extends BaseMessage {
   outcome: DetectionOutcome
 }
 
+// ── MeshPass Identity (Phase 1) ──────────────────────────────────────────────
+//
+// Cryptographic identity and mesh authentication using Ed25519 signatures.
+
+export interface MeshIdentityAnnounce {
+  /** MeshID in name@hub format */
+  meshId: string
+  /** Ed25519 public key (hex) */
+  publicKey: string
+  /** Hub where this identity is registered */
+  hub: string
+  /** Capabilities this identity claims */
+  capabilities?: string[]
+  /** Registration timestamp */
+  registeredAt: string
+  /** Optional identity metadata */
+  metadata?: Record<string, unknown>
+}
+
+export interface MeshIdentityVerify {
+  /** MeshID being verified */
+  meshId: string
+  /** Challenge nonce to sign */
+  nonce: string
+  /** Verifier identity */
+  verifier: string
+  /** Timestamp */
+  verifyAt: string
+}
+
+export interface MeshAuthRequest {
+  /** MeshID requesting authentication */
+  meshId: string
+  /** Random nonce for this auth request */
+  nonce: string
+  /** Timestamp */
+  timestamp: string
+  /** Signature of "AUTH:{meshId}:{nonce}:{timestamp}" */
+  signature: string
+}
+
+export interface MeshIdentityAnnounceMessage extends BaseMessage {
+  type: 'mesh_identity_announce'
+  identity: MeshIdentityAnnounce
+}
+
+export interface MeshIdentityVerifyMessage extends BaseMessage {
+  type: 'mesh_identity_verify'
+  verification: MeshIdentityVerify
+}
+
+export interface MeshAuthMessage extends BaseMessage {
+  type: 'mesh_auth'
+  auth: MeshAuthRequest
+}
+
 export type FederationMessage =
   | PeerAnnounceMessage
   | PeerByeMessage
@@ -345,6 +419,7 @@ export type FederationMessage =
   | TaskResultMessage
   | TaskAckMessage
   | MeshSyncMessage
+  | MeshSyncMessageV2
   | MeshDeltaMessage
   | MeshDeltaAckMessage
   | PingMessage
@@ -355,3 +430,7 @@ export type FederationMessage =
   | DetectionVerifyMessage
   | DetectionChallengeMessage
   | DetectionOutcomeMessage
+  // Phase 1: MeshPass
+  | MeshIdentityAnnounceMessage
+  | MeshIdentityVerifyMessage
+  | MeshAuthMessage
