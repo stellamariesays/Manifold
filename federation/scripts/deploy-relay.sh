@@ -29,7 +29,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$APIKEY" ]]; then echo "ERROR: --apikey required"; exit 1; fi
+if [[ -z "$APIKEY" ]]; then
+  APIKEY=$(openssl rand -hex 32)
+  echo "  Generated API key: $APIKEY"
+  echo "  ⚠️  Save this key — it won't be shown again"
+fi
 if [[ -z "$HOG_IP" ]]; then echo "ERROR: --hog-ip required (HOG Tailscale IP)"; exit 1; fi
 
 echo "╔══════════════════════════════════════════╗"
