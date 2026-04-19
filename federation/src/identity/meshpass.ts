@@ -6,7 +6,7 @@
  */
 
 import * as ed25519 from '@noble/ed25519'
-import { randomBytes, createHash } from 'crypto'
+import { randomBytes, createHash, scryptSync, createCipheriv, createDecipheriv } from 'crypto'
 import { promises as fs } from 'fs'
 import { dirname } from 'path'
 import { homedir } from 'os'
@@ -28,10 +28,14 @@ export interface MeshPassKeyData {
 export interface MeshPassFileData {
   /** Public key as hex string */
   publicKey: string
-  /** Encrypted private key */
+  /** Encrypted private key (or plaintext if no passphrase) */
   encryptedPrivateKey: string
-  /** Encryption salt */
+  /** Encryption salt (empty if no passphrase) */
   salt: string
+  /** Initialization vector for AES-256-GCM (empty if no passphrase) */
+  iv: string
+  /** Authentication tag for AES-256-GCM (empty if no passphrase) */
+  authTag: string
   /** Creation timestamp */
   createdAt: string
   /** Version for future compatibility */
@@ -76,6 +80,9 @@ export class MeshPass {
 
   /**
    * Load a MeshPass from a specific file path.
+   * @security This method handles decryption of private key material using AES-256-GCM.
+   * The private key is only decrypted in memory and never stored in plaintext on disk
+   * unless no passphrase is provided (development/testing only).
    */
   static async loadFrom(path: string, passphrase?: string): Promise<MeshPass> {
     try {
@@ -89,11 +96,28 @@ export class MeshPass {
       const publicKey = new Uint8Array(Buffer.from(data.publicKey, 'hex'))
       
       let privateKey: Uint8Array
-      if (passphrase) {
-        // Decrypt private key (simple XOR with passphrase hash for now)
-        const passphraseHash = await this.hashPassphrase(passphrase, data.salt)
+      if (passphrase && data.salt && data.iv && data.authTag) {
+        // Decrypt private key using AES-256-GCM
+        const salt = Buffer.from(data.salt, 'hex')
+        const iv = Buffer.from(data.iv, 'hex')
+        const authTag = Buffer.from(data.authTag, 'hex')
         const encrypted = Buffer.from(data.encryptedPrivateKey, 'hex')
-        privateKey = new Uint8Array(encrypted.map((b, i) => b ^ passphraseHash[i % passphraseHash.length]))
+        
+        // Derive key using scrypt
+        const key = scryptSync(passphrase, salt, 32) // 256 bits
+        
+        // Decrypt using AES-256-GCM
+        const decipher = createDecipheriv('aes-256-gcm', key, iv)
+        decipher.setAuthTag(authTag)
+        
+        const decrypted = Buffer.concat([
+          decipher.update(encrypted),
+          decipher.final()
+        ])
+        
+        privateKey = new Uint8Array(decrypted)
+      } else if (passphrase) {
+        throw new Error('Passphrase provided but file is not encrypted (missing salt, iv, or authTag)')
       } else {
         // Unencrypted (for development/testing)
         privateKey = new Uint8Array(Buffer.from(data.encryptedPrivateKey, 'hex'))
@@ -101,6 +125,9 @@ export class MeshPass {
 
       return new MeshPass(publicKey, privateKey, data.createdAt)
     } catch (error) {
+      if (error instanceof Error && error.message.includes('bad decrypt')) {
+        throw new Error('Invalid passphrase or corrupted encryption')
+      }
       throw new Error(`Failed to load MeshPass from ${path}: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
@@ -115,6 +142,9 @@ export class MeshPass {
 
   /**
    * Save this MeshPass to a specific file path.
+   * @security This method handles encryption of private key material using AES-256-GCM.
+   * If no passphrase is provided, the private key is stored in plaintext (development/testing only).
+   * In production, always provide a passphrase to encrypt the private key.
    */
   async saveTo(path: string, passphrase?: string): Promise<void> {
     // Ensure directory exists
@@ -122,17 +152,32 @@ export class MeshPass {
 
     let encryptedPrivateKey: string
     let salt = ''
+    let iv = ''
+    let authTag = ''
     
     if (passphrase) {
-      // Generate random salt
-      salt = Buffer.from(randomBytes(16)).toString('hex')
+      // Generate random salt and IV
+      const saltBuffer = randomBytes(32) // 256 bits
+      const ivBuffer = randomBytes(16)   // 128 bits for AES-256-GCM
       
-      // Encrypt private key (simple XOR with passphrase hash)
-      const passphraseHash = await MeshPass.hashPassphrase(passphrase, salt)
-      const encrypted = Array.from(this.privateKey).map((b, i) => b ^ passphraseHash[i % passphraseHash.length])
-      encryptedPrivateKey = Buffer.from(encrypted).toString('hex')
+      salt = saltBuffer.toString('hex')
+      iv = ivBuffer.toString('hex')
+      
+      // Derive key using scrypt
+      const key = scryptSync(passphrase, saltBuffer, 32) // 256 bits
+      
+      // Encrypt private key using AES-256-GCM
+      const cipher = createCipheriv('aes-256-gcm', key, ivBuffer)
+      const encrypted = Buffer.concat([
+        cipher.update(Buffer.from(this.privateKey)),
+        cipher.final()
+      ])
+      
+      authTag = cipher.getAuthTag().toString('hex')
+      encryptedPrivateKey = encrypted.toString('hex')
     } else {
       // Store unencrypted (for development/testing)
+      console.warn('⚠️  MeshPass private key stored in PLAINTEXT. Use a passphrase for production!')
       encryptedPrivateKey = Buffer.from(this.privateKey).toString('hex')
     }
 
@@ -140,6 +185,8 @@ export class MeshPass {
       publicKey: Buffer.from(this.publicKey).toString('hex'),
       encryptedPrivateKey,
       salt,
+      iv,
+      authTag,
       createdAt: this.createdAt,
       version: 1
     }
@@ -200,15 +247,28 @@ export class MeshPass {
 
   /**
    * Export MeshPass data for import on another machine.
+   * @security This method handles encryption of private key material for secure transport.
+   * The exported data uses the same AES-256-GCM encryption as file storage.
    */
   export(passphrase?: string): MeshPassKeyData {
     let privateKey: string
     
     if (passphrase) {
-      // This is a simple implementation - in production, use proper encryption
-      const hash = Buffer.from(passphrase).toString('hex').padEnd(64, '0').slice(0, 64)
-      const encrypted = Array.from(this.privateKey).map((b, i) => b ^ parseInt(hash.slice(i % 32 * 2, (i % 32 + 1) * 2), 16))
-      privateKey = Buffer.from(encrypted).toString('hex')
+      // Use proper AES-256-GCM encryption for export
+      const salt = randomBytes(32)
+      const iv = randomBytes(16)
+      const key = scryptSync(passphrase, salt, 32)
+      
+      const cipher = createCipheriv('aes-256-gcm', key, iv)
+      const encrypted = Buffer.concat([
+        cipher.update(Buffer.from(this.privateKey)),
+        cipher.final()
+      ])
+      const authTag = cipher.getAuthTag()
+      
+      // Encode as: salt(64) + iv(32) + authTag(32) + encrypted
+      const combined = Buffer.concat([salt, iv, authTag, encrypted])
+      privateKey = combined.toString('hex')
     } else {
       privateKey = Buffer.from(this.privateKey).toString('hex')
     }
@@ -223,6 +283,7 @@ export class MeshPass {
 
   /**
    * Import MeshPass data from another machine.
+   * @security This method handles decryption of exported private key material.
    */
   static async import(data: MeshPassKeyData, passphrase?: string): Promise<MeshPass> {
     if (data.version !== 1) {
@@ -233,9 +294,33 @@ export class MeshPass {
     
     let privateKey: Uint8Array
     if (passphrase) {
-      const hash = Buffer.from(passphrase).toString('hex').padEnd(64, '0').slice(0, 64)
-      const encrypted = Buffer.from(data.privateKey, 'hex')
-      privateKey = new Uint8Array(Array.from(encrypted).map((b, i) => b ^ parseInt(hash.slice(i % 32 * 2, (i % 32 + 1) * 2), 16)))
+      const combined = Buffer.from(data.privateKey, 'hex')
+      
+      if (combined.length < 64 + 16 + 16) { // salt + iv + authTag minimum
+        throw new Error('Invalid encrypted private key format')
+      }
+      
+      // Extract components: salt(32) + iv(16) + authTag(16) + encrypted
+      const salt = combined.subarray(0, 32)
+      const iv = combined.subarray(32, 48)
+      const authTag = combined.subarray(48, 64)
+      const encrypted = combined.subarray(64)
+      
+      // Derive key and decrypt
+      const key = scryptSync(passphrase, salt, 32)
+      
+      const decipher = createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAuthTag(authTag)
+      
+      try {
+        const decrypted = Buffer.concat([
+          decipher.update(encrypted),
+          decipher.final()
+        ])
+        privateKey = new Uint8Array(decrypted)
+      } catch {
+        throw new Error('Invalid passphrase or corrupted encryption')
+      }
     } else {
       privateKey = new Uint8Array(Buffer.from(data.privateKey, 'hex'))
     }
@@ -243,24 +328,5 @@ export class MeshPass {
     return new MeshPass(publicKey, privateKey, data.createdAt)
   }
 
-  /**
-   * Hash a passphrase with salt for encryption.
-   */
-  private static async hashPassphrase(passphrase: string, salt: string): Promise<Uint8Array> {
-    // Simple implementation - in production, use proper PBKDF2 or scrypt
-    const combined = passphrase + salt
-    const encoder = new TextEncoder()
-    const data = encoder.encode(combined)
-    
-    // Use built-in crypto.subtle if available, otherwise simple hash
-    if (typeof crypto !== 'undefined' && crypto.subtle) {
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-      return new Uint8Array(hashBuffer)
-    } else {
-      // Fallback: simple hash for Node.js environments
-      const { createHash } = await import('crypto')
-      const hash = createHash('sha256').update(data).digest()
-      return new Uint8Array(hash)
-    }
-  }
+
 }
