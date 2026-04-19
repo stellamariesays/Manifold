@@ -307,6 +307,7 @@ export class ManifoldServer extends EventEmitter {
         this.capIndex.removeAgent(agentName, this.hub)
       }
       this._rebuildBloom()
+      this.meshSync.onLocalChange()
       this.log(`Runner agents removed from mesh: ${agents.join(', ')}`)
     })
 
@@ -526,6 +527,7 @@ export class ManifoldServer extends EventEmitter {
         }, true)
       }
       this._rebuildBloom()
+      this.meshSync.onLocalChange()
       this.log(`Runner agents registered in mesh: ${agentNames.join(', ')}`)
       return
     }
