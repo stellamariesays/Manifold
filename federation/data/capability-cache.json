@@ -1,1 +1,1 @@
-{"version":1,"hub":"client-test-hub","savedAt":1776559477507,"agents":[{"agent":{"name":"test-client","hub":"test-client","capabilities":["custom-skill","extra-skill"],"seams":[],"lastSeen":"2026-04-19T00:44:37.204Z"},"cachedAt":1776559477507,"isLocal":false}],"darkCircles":[]}
+{"version":1,"hub":"client-test-hub","savedAt":1776540168221,"agents":[{"agent":{"name":"test-client","hub":"test-client","capabilities":["custom-skill","extra-skill"],"seams":[],"lastSeen":"2026-04-18T19:22:47.913Z"},"cachedAt":1776540168220,"isLocal":false}],"darkCircles":[]}

@@ -297,9 +297,21 @@ class AgentRunner:
         return ws_url.replace("ws://", "http://").replace("8768", "8767")
 
     def _register_all(self) -> None:
-        """POST /agents/register for each agent in config."""
+        """Register agents via WebSocket agent_register messages."""
         for name, cfg in self.agents.items():
             capabilities = cfg.get("capabilities", ["task-execution"])
+            seams = cfg.get("seams", [])
+            try:
+                self._send({
+                    "type": "agent_register",
+                    "name": name,
+                    "capabilities": capabilities,
+                    "seams": seams,
+                })
+                self.log(f"WS register {name} sent ({len(capabilities)} caps)")
+            except Exception as e:
+                self.log(f"WS register {name} failed: {e}")
+            # Also try REST for backward compat with older servers
             try:
                 body = json.dumps({"name": name, "capabilities": capabilities}).encode()
                 req = Request(
@@ -311,8 +323,8 @@ class AgentRunner:
                 with urlopen(req, timeout=5) as resp:
                     result = json.loads(resp.read())
                     self.log(f"REST register {name}: {result.get('status', '?')} ({len(capabilities)} caps)")
-            except Exception as e:
-                self.log(f"REST register {name} failed: {e} (WS path still active)")
+            except Exception:
+                pass  # WS path is primary, REST is optional
 
     def _deregister_all(self) -> None:
         """DELETE /agents/:name for each agent on shutdown."""
