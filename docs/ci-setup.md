@@ -44,7 +44,6 @@ jobs:
       - name: Run tests
         run: |
           python -m pytest tests/ \
-            --ignore=tests/test_mri.py \
             -m "not integration" \
             -q
 ```
@@ -54,4 +53,4 @@ jobs:
 - Triggers on push to `main` and on PRs targeting `main`
 - Matrix: `ubuntu-latest` × Python `3.12`
 - Installs the package with `pip install -e .` + `pytest`
-- Runs all tests except `test_mri.py` (import error) and `integration`-marked tests
+- Runs all tests except `integration`-marked tests (which require federation setup)
