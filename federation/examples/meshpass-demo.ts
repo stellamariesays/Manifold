@@ -1,1 +1,369 @@
-/**\n * MeshPass Identity & Gate Demo\n * \n * This example demonstrates the complete MeshPass identity system and The Gate public gateway.\n * Run this to see how agents can authenticate with cryptographic identities and connect\n * through The Gate instead of requiring Tailscale.\n */\n\nimport { Gate } from '../src/gate/index.js'\nimport { GateClient } from '../src/gate/client.js'\nimport { MeshPass, MeshID, createAuthMessage } from '../src/identity/index.js'\nimport { ManifoldServer } from '../src/server/index.js'\n\n// Demo configuration\nconst DEMO_CONFIG = {\n  // Federation server (internal, Tailscale-based)\n  federationPort: 8766,\n  \n  // The Gate (public WebSocket gateway)\n  gatePort: 8765,\n  \n  // Hub name\n  hubName: 'demo-hub',\n  \n  // Debug logging\n  debug: true\n}\n\ninterface DemoAgent {\n  name: string\n  meshPass: MeshPass\n  meshId: string\n  capabilities: string[]\n}\n\nclass MeshPassDemo {\n  private federationServer: ManifoldServer | null = null\n  private gate: Gate | null = null\n  private agents: DemoAgent[] = []\n  private clients: GateClient[] = []\n\n  async start(): Promise<void> {\n    console.log('🚀 Starting MeshPass Identity & Gate Demo')\n    console.log('━'.repeat(60))\n    \n    // 1. Generate demo MeshPasses\n    await this.setupDemoIdentities()\n    \n    // 2. Start federation server (internal)\n    await this.startFederationServer()\n    \n    // 3. Start The Gate (public)\n    await this.startGate()\n    \n    // 4. Connect agents through The Gate\n    await this.connectAgents()\n    \n    // 5. Demonstrate mesh communication\n    await this.demonstrateMeshCommunication()\n    \n    console.log('\\n✅ Demo running! Press Ctrl+C to stop')\n    console.log('\\n📊 Try these:')\n    console.log('  - Check gate stats: curl http://localhost:8767/stats')\n    console.log('  - View mesh status: curl http://localhost:8767/mesh')\n    console.log('  - Send capability query via gate')\n  }\n\n  async stop(): Promise<void> {\n    console.log('\\n🛑 Stopping demo...')\n    \n    // Disconnect clients\n    for (const client of this.clients) {\n      client.disconnect()\n    }\n    \n    // Stop services\n    if (this.gate) await this.gate.stop()\n    if (this.federationServer) await this.federationServer.stop()\n    \n    console.log('✅ Demo stopped')\n  }\n\n  // ── Demo Setup ──────────────────────────────────────────────────────────────\n\n  private async setupDemoIdentities(): Promise<void> {\n    console.log('🔑 Generating demo MeshPass identities...')\n    \n    const agentConfigs = [\n      { name: 'stella', capabilities: ['solar-monitoring', 'data-analysis'] },\n      { name: 'eddie', capabilities: ['threat-detection', 'security-audit'] },\n      { name: 'alice', capabilities: ['mesh-coordination', 'load-balancing'] }\n    ]\n    \n    for (const config of agentConfigs) {\n      const meshPass = await MeshPass.generate()\n      const meshId = `${config.name}@${DEMO_CONFIG.hubName}`\n      \n      this.agents.push({\n        name: config.name,\n        meshPass,\n        meshId,\n        capabilities: config.capabilities\n      })\n      \n      console.log(`  ✓ ${meshId} (${meshPass.getFingerprint()}...)`)\n    }\n    \n    console.log(`\\n🆔 Generated ${this.agents.length} MeshPass identities`)\n  }\n\n  private async startFederationServer(): Promise<void> {\n    console.log('\\n🔗 Starting federation server (internal)...')\n    \n    this.federationServer = new ManifoldServer({\n      name: DEMO_CONFIG.hubName,\n      federationPort: DEMO_CONFIG.federationPort,\n      localPort: 8765,  // Not used in this demo\n      restPort: 8767,\n      debug: DEMO_CONFIG.debug\n    })\n    \n    await this.federationServer.start()\n    console.log(`  ✓ Federation server running on port ${DEMO_CONFIG.federationPort}`)\n    console.log(`  ✓ REST API available on port 8767`)\n  }\n\n  private async startGate(): Promise<void> {\n    console.log('\\n🚪 Starting The Gate (public gateway)...')\n    \n    this.gate = new Gate({\n      port: DEMO_CONFIG.gatePort,\n      hubName: DEMO_CONFIG.hubName,\n      federationServer: `ws://localhost:${DEMO_CONFIG.federationPort}`,\n      maxConnectionsPerIP: 10,\n      maxMessagesPerSecond: 50,\n      debug: DEMO_CONFIG.debug\n    })\n    \n    // Register demo MeshIDs\n    for (const agent of this.agents) {\n      this.gate!.registerMeshID(agent.meshId, agent.meshPass.getPublicKeyHex())\n      console.log(`  ✓ Registered ${agent.meshId}`)\n    }\n    \n    await this.gate.start()\n    console.log(`\\n✅ The Gate is open on port ${DEMO_CONFIG.gatePort}!`)\n  }\n\n  private async connectAgents(): Promise<void> {\n    console.log('\\n🤝 Connecting agents through The Gate...')\n    \n    for (const agent of this.agents) {\n      const client = new GateClient({\n        gateUrl: `ws://localhost:${DEMO_CONFIG.gatePort}`,\n        meshPass: agent.meshPass,\n        meshId: agent.meshId,\n        debug: DEMO_CONFIG.debug\n      })\n      \n      // Set up event handlers\n      client.on('authenticated', (session) => {\n        console.log(`  ✓ ${agent.meshId} authenticated (session: ${session.sessionId})`)\n      })\n      \n      client.on('auth_error', (error) => {\n        console.error(`  ✗ ${agent.meshId} auth failed: ${error}`)\n      })\n      \n      client.on('message', (message) => {\n        console.log(`  📨 ${agent.meshId} received: ${message.type}`)\n      })\n      \n      // Connect and wait for authentication\n      await client.connect()\n      await this.waitForAuthentication(client)\n      \n      this.clients.push(client)\n    }\n    \n    console.log(`\\n✅ ${this.clients.length} agents connected and authenticated`)\n  }\n\n  private async demonstrateMeshCommunication(): Promise<void> {\n    console.log('\\n💬 Demonstrating mesh communication...')\n    \n    if (this.clients.length < 2) {\n      console.log('  ⚠️  Need at least 2 clients for communication demo')\n      return\n    }\n    \n    const [stellaClient, eddieClient] = this.clients\n    \n    // Stella sends a capability query\n    console.log('  📤 stella sends capability query for \"threat-detection\"')\n    stellaClient.send({\n      type: 'capability_query',\n      capability: 'threat-detection',\n      requestId: 'demo-query-1',\n      timestamp: new Date().toISOString()\n    })\n    \n    // Eddie sends an agent request\n    setTimeout(() => {\n      console.log('  📤 eddie sends agent request to stella')\n      eddieClient.send({\n        type: 'agent_request',\n        target: 'stella@demo-hub',\n        task: {\n          type: 'solar-status',\n          query: 'current-output'\n        },\n        requestId: 'demo-request-1',\n        timestamp: new Date().toISOString()\n      })\n    }, 1000)\n    \n    // Demonstrate signed message\n    setTimeout(async () => {\n      console.log('  📤 alice sends signed mesh sync message')\n      const authMsg = await createAuthMessage(\n        this.agents[2].meshPass, \n        this.agents[2].meshId\n      )\n      \n      this.clients[2].send({\n        type: 'mesh_sync',\n        hub: DEMO_CONFIG.hubName,\n        agents: [{\n          name: 'alice',\n          hub: DEMO_CONFIG.hubName,\n          capabilities: ['mesh-coordination'],\n          pressure: 0.7,\n          lastSeen: new Date().toISOString()\n        }],\n        darkCircles: [],\n        timestamp: new Date().toISOString()\n      })\n    }, 2000)\n    \n    console.log('  ⏳ Messages sent, check logs for responses...')\n  }\n\n  // ── Helpers ──────────────────────────────────────────────────────────────────\n\n  private async waitForAuthentication(client: GateClient): Promise<void> {\n    return new Promise((resolve, reject) => {\n      const timeout = setTimeout(() => {\n        reject(new Error('Authentication timeout'))\n      }, 10000)\n      \n      client.on('authenticated', () => {\n        clearTimeout(timeout)\n        resolve()\n      })\n      \n      client.on('auth_error', (error) => {\n        clearTimeout(timeout)\n        reject(new Error(`Auth failed: ${error}`))\n      })\n    })\n  }\n}\n\n// ── CLI Runner ──────────────────────────────────────────────────────────────────\n\nasync function main(): Promise<void> {\n  const demo = new MeshPassDemo()\n  \n  // Handle graceful shutdown\n  process.on('SIGINT', async () => {\n    await demo.stop()\n    process.exit(0)\n  })\n  \n  process.on('SIGTERM', async () => {\n    await demo.stop()\n    process.exit(0)\n  })\n  \n  try {\n    await demo.start()\n    \n    // Keep running until interrupted\n    await new Promise(() => {})\n  } catch (error) {\n    console.error('Demo failed:', error)\n    await demo.stop()\n    process.exit(1)\n  }\n}\n\n// ── Interactive Demo Functions ──────────────────────────────────────────────────\n\n/**\n * Show how to manually create and use MeshPass credentials.\n */\nexport async function demonstrateMeshPassUsage(): Promise<void> {\n  console.log('🔑 MeshPass Usage Demo')\n  console.log('━'.repeat(30))\n  \n  // Generate a MeshPass\n  console.log('1. Generating MeshPass...')\n  const meshPass = await MeshPass.generate()\n  console.log(`   Public key: ${meshPass.getPublicKeyHex()}`)\n  console.log(`   Fingerprint: ${meshPass.getFingerprint()}`)\n  \n  // Create a MeshID\n  console.log('\\n2. Creating MeshID...')\n  const meshId = MeshID.fromMeshPass(meshPass, 'demo-user', 'demo-hub')\n  console.log(`   MeshID: ${meshId.toString()}`)\n  console.log(`   Display: ${meshId.toDisplayString()}`)\n  \n  // Sign a message\n  console.log('\\n3. Signing message...')\n  const message = 'Hello from the Manifold mesh!'\n  const signature = await meshPass.sign(message)\n  console.log(`   Message: \"${message}\"`)\n  console.log(`   Signature: ${signature.slice(0, 32)}...`)\n  \n  // Verify signature\n  console.log('\\n4. Verifying signature...')\n  const isValid = await meshPass.verify(message, signature)\n  console.log(`   Valid: ${isValid ? '✅' : '❌'}`)\n  \n  // Create auth message\n  console.log('\\n5. Creating auth message...')\n  const authMsg = await createAuthMessage(meshPass, meshId.toString())\n  console.log(`   MeshID: ${authMsg.meshId}`)\n  console.log(`   Nonce: ${authMsg.nonce}`)\n  console.log(`   Signature: ${authMsg.signature.slice(0, 32)}...`)\n  \n  console.log('\\n✅ MeshPass demo complete!')\n}\n\n/**\n * Show gate statistics and monitoring.\n */\nexport function demonstrateGateMonitoring(): void {\n  console.log('📊 Gate Monitoring Demo')\n  console.log('━'.repeat(30))\n  console.log('\\nThe Gate provides real-time statistics:')\n  console.log('\\n• Active sessions by MeshID')\n  console.log('• Connection counts by IP address')\n  console.log('• Authentication success/failure rates')\n  console.log('• Message throughput and rate limiting')\n  console.log('• MeshID registry status')\n  console.log('\\nAccess via:')\n  console.log('  curl http://localhost:8767/stats')\n  console.log('  curl http://localhost:8767/mesh')\n}\n\n// Run if called directly\nif (import.meta.url === `file://${process.argv[1]}`) {\n  const command = process.argv[2]\n  \n  switch (command) {\n    case 'meshpass':\n      demonstrateMeshPassUsage().catch(console.error)\n      break\n    case 'monitoring':\n      demonstrateGateMonitoring()\n      break\n    default:\n      main().catch(console.error)\n      break\n  }\n}\n\nexport { MeshPassDemo }"
+/**
+ * MeshPass Identity & Gate Demo
+ * 
+ * This example demonstrates the complete MeshPass identity system and The Gate public gateway.
+ * Run this to see how agents can authenticate with cryptographic identities and connect
+ * through The Gate instead of requiring Tailscale.
+ */
+
+import { Gate } from '../src/gate/index.js'
+import { GateClient } from '../src/gate/client.js'
+import { MeshPass, MeshID, createAuthMessage } from '../src/identity/index.js'
+import { ManifoldServer } from '../src/server/index.js'
+
+// Demo configuration
+const DEMO_CONFIG = {
+  // Federation server (internal, Tailscale-based)
+  federationPort: 8766,
+  
+  // The Gate (public WebSocket gateway)
+  gatePort: 8765,
+  
+  // Hub name
+  hubName: 'demo-hub',
+  
+  // Debug logging
+  debug: true
+}
+
+interface DemoAgent {
+  name: string
+  meshPass: MeshPass
+  meshId: string
+  capabilities: string[]
+}
+
+class MeshPassDemo {
+  private federationServer: ManifoldServer | null = null
+  private gate: Gate | null = null
+  private agents: DemoAgent[] = []
+  private clients: GateClient[] = []
+
+  async start(): Promise<void> {
+    console.log('🚀 Starting MeshPass Identity & Gate Demo')
+    console.log('━'.repeat(60))
+    
+    // 1. Generate demo MeshPasses
+    await this.setupDemoIdentities()
+    
+    // 2. Start federation server (internal)
+    await this.startFederationServer()
+    
+    // 3. Start The Gate (public)
+    await this.startGate()
+    
+    // 4. Connect agents through The Gate
+    await this.connectAgents()
+    
+    // 5. Demonstrate mesh communication
+    await this.demonstrateMeshCommunication()
+    
+    console.log('\n✅ Demo running! Press Ctrl+C to stop')
+    console.log('\n📊 Try these:')
+    console.log('  - Check gate stats: curl http://localhost:8767/stats')
+    console.log('  - View mesh status: curl http://localhost:8767/mesh')
+    console.log('  - Send capability query via gate')
+  }
+
+  async stop(): Promise<void> {
+    console.log('\n🛑 Stopping demo...')
+    
+    // Disconnect clients
+    for (const client of this.clients) {
+      client.disconnect()
+    }
+    
+    // Stop services
+    if (this.gate) await this.gate.stop()
+    if (this.federationServer) await this.federationServer.stop()
+    
+    console.log('✅ Demo stopped')
+  }
+
+  // ── Demo Setup ──────────────────────────────────────────────────────────────
+
+  private async setupDemoIdentities(): Promise<void> {
+    console.log('🔑 Generating demo MeshPass identities...')
+    
+    const agentConfigs = [
+      { name: 'stella', capabilities: ['solar-monitoring', 'data-analysis'] },
+      { name: 'eddie', capabilities: ['threat-detection', 'security-audit'] },
+      { name: 'alice', capabilities: ['mesh-coordination', 'load-balancing'] }
+    ]
+    
+    for (const config of agentConfigs) {
+      const meshPass = await MeshPass.generate()
+      const meshId = `${config.name}@${DEMO_CONFIG.hubName}`
+      
+      this.agents.push({
+        name: config.name,
+        meshPass,
+        meshId,
+        capabilities: config.capabilities
+      })
+      
+      console.log(`  ✓ ${meshId} (${meshPass.getFingerprint()}...)`)
+    }
+    
+    console.log(`\n🆔 Generated ${this.agents.length} MeshPass identities`)
+  }
+
+  private async startFederationServer(): Promise<void> {
+    console.log('\n🔗 Starting federation server (internal)...')
+    
+    this.federationServer = new ManifoldServer({
+      name: DEMO_CONFIG.hubName,
+      federationPort: DEMO_CONFIG.federationPort,
+      localPort: 8765,  // Not used in this demo
+      restPort: 8767,
+      debug: DEMO_CONFIG.debug
+    })
+    
+    await this.federationServer.start()
+    console.log(`  ✓ Federation server running on port ${DEMO_CONFIG.federationPort}`)
+    console.log(`  ✓ REST API available on port 8767`)
+  }
+
+  private async startGate(): Promise<void> {
+    console.log('\n🚪 Starting The Gate (public gateway)...')
+    
+    this.gate = new Gate({
+      port: DEMO_CONFIG.gatePort,
+      hubName: DEMO_CONFIG.hubName,
+      federationServer: `ws://localhost:${DEMO_CONFIG.federationPort}`,
+      maxConnectionsPerIP: 10,
+      maxMessagesPerSecond: 50,
+      debug: DEMO_CONFIG.debug
+    })
+    
+    // Register demo MeshIDs
+    for (const agent of this.agents) {
+      this.gate!.registerMeshID(agent.meshId, agent.meshPass.getPublicKeyHex())
+      console.log(`  ✓ Registered ${agent.meshId}`)
+    }
+    
+    await this.gate.start()
+    console.log(`\n✅ The Gate is open on port ${DEMO_CONFIG.gatePort}!`)
+  }
+
+  private async connectAgents(): Promise<void> {
+    console.log('\n🤝 Connecting agents through The Gate...')
+    
+    for (const agent of this.agents) {
+      const client = new GateClient({
+        gateUrl: `ws://localhost:${DEMO_CONFIG.gatePort}`,
+        meshPass: agent.meshPass,
+        meshId: agent.meshId,
+        debug: DEMO_CONFIG.debug
+      })
+      
+      // Set up event handlers
+      client.on('authenticated', (session) => {
+        console.log(`  ✓ ${agent.meshId} authenticated (session: ${session.sessionId})`)
+      })
+      
+      client.on('auth_error', (error) => {
+        console.error(`  ✗ ${agent.meshId} auth failed: ${error}`)
+      })
+      
+      client.on('message', (message) => {
+        console.log(`  📨 ${agent.meshId} received: ${message.type}`)
+      })
+      
+      // Connect and wait for authentication
+      await client.connect()
+      await this.waitForAuthentication(client)
+      
+      this.clients.push(client)
+    }
+    
+    console.log(`\n✅ ${this.clients.length} agents connected and authenticated`)
+  }
+
+  private async demonstrateMeshCommunication(): Promise<void> {
+    console.log('\n💬 Demonstrating mesh communication...')
+    
+    if (this.clients.length < 2) {
+      console.log('  ⚠️  Need at least 2 clients for communication demo')
+      return
+    }
+    
+    const [stellaClient, eddieClient] = this.clients
+    
+    // Stella sends a capability query
+    console.log('  📤 stella sends capability query for "threat-detection"')
+    stellaClient.send({
+      type: 'capability_query',
+      capability: 'threat-detection',
+      requestId: 'demo-query-1',
+      timestamp: new Date().toISOString()
+    })
+    
+    // Eddie sends an agent request
+    setTimeout(() => {
+      console.log('  📤 eddie sends agent request to stella')
+      eddieClient.send({
+        type: 'agent_request',
+        target: 'stella@demo-hub',
+        task: {
+          type: 'solar-status',
+          query: 'current-output'
+        },
+        requestId: 'demo-request-1',
+        timestamp: new Date().toISOString()
+      })
+    }, 1000)
+    
+    // Demonstrate signed message
+    setTimeout(async () => {
+      console.log('  📤 alice sends signed mesh sync message')
+      const authMsg = await createAuthMessage(
+        this.agents[2].meshPass, 
+        this.agents[2].meshId
+      )
+      
+      this.clients[2].send({
+        type: 'mesh_sync',
+        hub: DEMO_CONFIG.hubName,
+        agents: [{
+          name: 'alice',
+          hub: DEMO_CONFIG.hubName,
+          capabilities: ['mesh-coordination'],
+          pressure: 0.7,
+          lastSeen: new Date().toISOString()
+        }],
+        darkCircles: [],
+        timestamp: new Date().toISOString()
+      })
+    }, 2000)
+    
+    console.log('  ⏳ Messages sent, check logs for responses...')
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  private async waitForAuthentication(client: GateClient): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Authentication timeout'))
+      }, 10000)
+      
+      client.on('authenticated', () => {
+        clearTimeout(timeout)
+        resolve()
+      })
+      
+      client.on('auth_error', (error) => {
+        clearTimeout(timeout)
+        reject(new Error(`Auth failed: ${error}`))
+      })
+    })
+  }
+}
+
+// ── CLI Runner ──────────────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  const demo = new MeshPassDemo()
+  
+  // Handle graceful shutdown
+  process.on('SIGINT', async () => {
+    await demo.stop()
+    process.exit(0)
+  })
+  
+  process.on('SIGTERM', async () => {
+    await demo.stop()
+    process.exit(0)
+  })
+  
+  try {
+    await demo.start()
+    
+    // Keep running until interrupted
+    await new Promise(() => {})
+  } catch (error) {
+    console.error('Demo failed:', error)
+    await demo.stop()
+    process.exit(1)
+  }
+}
+
+// ── Interactive Demo Functions ──────────────────────────────────────────────────
+
+/**
+ * Show how to manually create and use MeshPass credentials.
+ */
+export async function demonstrateMeshPassUsage(): Promise<void> {
+  console.log('🔑 MeshPass Usage Demo')
+  console.log('━'.repeat(30))
+  
+  // Generate a MeshPass
+  console.log('1. Generating MeshPass...')
+  const meshPass = await MeshPass.generate()
+  console.log(`   Public key: ${meshPass.getPublicKeyHex()}`)
+  console.log(`   Fingerprint: ${meshPass.getFingerprint()}`)
+  
+  // Create a MeshID
+  console.log('\n2. Creating MeshID...')
+  const meshId = MeshID.fromMeshPass(meshPass, 'demo-user', 'demo-hub')
+  console.log(`   MeshID: ${meshId.toString()}`)
+  console.log(`   Display: ${meshId.toDisplayString()}`)
+  
+  // Sign a message
+  console.log('\n3. Signing message...')
+  const message = 'Hello from the Manifold mesh!'
+  const signature = await meshPass.sign(message)
+  console.log(`   Message: "${message}"`)
+  console.log(`   Signature: ${signature.slice(0, 32)}...`)
+  
+  // Verify signature
+  console.log('\n4. Verifying signature...')
+  const isValid = await meshPass.verify(message, signature)
+  console.log(`   Valid: ${isValid ? '✅' : '❌'}`)
+  
+  // Create auth message
+  console.log('\n5. Creating auth message...')
+  const authMsg = await createAuthMessage(meshPass, meshId.toString())
+  console.log(`   MeshID: ${authMsg.meshId}`)
+  console.log(`   Nonce: ${authMsg.nonce}`)
+  console.log(`   Signature: ${authMsg.signature.slice(0, 32)}...`)
+  
+  console.log('\n✅ MeshPass demo complete!')
+}
+
+/**
+ * Show gate statistics and monitoring.
+ */
+export function demonstrateGateMonitoring(): void {
+  console.log('📊 Gate Monitoring Demo')
+  console.log('━'.repeat(30))
+  console.log('\nThe Gate provides real-time statistics:')
+  console.log('\n• Active sessions by MeshID')
+  console.log('• Connection counts by IP address')
+  console.log('• Authentication success/failure rates')
+  console.log('• Message throughput and rate limiting')
+  console.log('• MeshID registry status')
+  console.log('\nAccess via:')
+  console.log('  curl http://localhost:8767/stats')
+  console.log('  curl http://localhost:8767/mesh')
+}
+
+// Run if called directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const command = process.argv[2]
+  
+  switch (command) {
+    case 'meshpass':
+      demonstrateMeshPassUsage().catch(console.error)
+      break
+    case 'monitoring':
+      demonstrateGateMonitoring()
+      break
+    default:
+      main().catch(console.error)
+      break
+  }
+}
+
+export { MeshPassDemo }
