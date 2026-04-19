@@ -95,6 +95,10 @@ export class MeshPass {
 
       const publicKey = new Uint8Array(Buffer.from(data.publicKey, 'hex'))
       
+      if (publicKey.length !== 32) {
+        throw new Error(`Invalid MeshPass public key length: expected 32 bytes, got ${publicKey.length}`)
+      }
+      
       let privateKey: Uint8Array
       if (passphrase && data.salt && data.iv && data.authTag) {
         // Decrypt private key using AES-256-GCM
@@ -121,6 +125,10 @@ export class MeshPass {
       } else {
         // Unencrypted (for development/testing)
         privateKey = new Uint8Array(Buffer.from(data.encryptedPrivateKey, 'hex'))
+      }
+
+      if (privateKey.length !== 32) {
+        throw new Error(`Invalid MeshPass private key length: expected 32 bytes, got ${privateKey.length}`)
       }
 
       return new MeshPass(publicKey, privateKey, data.createdAt)
@@ -292,6 +300,10 @@ export class MeshPass {
 
     const publicKey = new Uint8Array(Buffer.from(data.publicKey, 'hex'))
     
+    if (publicKey.length !== 32) {
+      throw new Error(`Invalid MeshPass public key length: expected 32 bytes, got ${publicKey.length}`)
+    }
+    
     let privateKey: Uint8Array
     if (passphrase) {
       const combined = Buffer.from(data.privateKey, 'hex')
@@ -323,6 +335,10 @@ export class MeshPass {
       }
     } else {
       privateKey = new Uint8Array(Buffer.from(data.privateKey, 'hex'))
+    }
+
+    if (privateKey.length !== 32) {
+      throw new Error(`Invalid MeshPass private key length: expected 32 bytes, got ${privateKey.length}`)
     }
 
     return new MeshPass(publicKey, privateKey, data.createdAt)
