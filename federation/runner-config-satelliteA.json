@@ -1,0 +1,85 @@
+{
+  "hub": "satelliteA",
+  "wsUrl": "ws://localhost:8768",
+  "restUrl": "http://localhost:8778",
+  "defaultTimeoutMs": 30000,
+  "agents": [
+    {
+      "name": "stella",
+      "script": "agents/stella-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "braid",
+      "script": "agents/braid-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "manifold",
+      "script": "agents/manifold-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "argue",
+      "script": "agents/argue-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "infra",
+      "script": "agents/infra-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "solar-sites",
+      "script": "agents/solar-sites-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "wake",
+      "script": "agents/wake-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "btc-signals",
+      "script": "agents/btc-signals-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "deploy",
+      "script": "agents/deploy-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "solar-detect",
+      "script": "solar-detect-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    },
+    {
+      "name": "data-detect",
+      "script": "data-detect-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
+    }
+  ]
+}
