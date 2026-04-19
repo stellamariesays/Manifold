@@ -5,6 +5,7 @@
   "agents": [
     {
       "name": "cron-monitor",
+      "capabilities": ["cron-monitoring", "schedule-management", "health-check", "alert-routing"],
       "script": "projects/cron-monitor-void/cron-monitor-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
       "timeout_ms": 60000,
@@ -12,6 +13,7 @@
     },
     {
       "name": "data-detect",
+      "capabilities": ["data-detection", "pipeline-health", "staleness-check", "anomaly-detection", "baseline-drift"],
       "script": "projects/data-detection-void/data-detect-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
       "timeout_ms": 60000,
@@ -19,6 +21,7 @@
     },
     {
       "name": "solar-detect",
+      "capabilities": ["solar-monitoring", "flare-detection", "cme-tracking", "geomagnetic-monitoring", "swpc-api"],
       "script": "projects/solar-detect-void/solar-detect-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
       "timeout_ms": 60000,
@@ -26,6 +29,7 @@
     },
     {
       "name": "dev-tooling",
+      "capabilities": ["development-tooling", "build-management", "test-runner", "debug-assist"],
       "script": "projects/dev-tooling-void/dev-tooling-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
       "timeout_ms": 60000,
@@ -33,6 +37,7 @@
     },
     {
       "name": "hog-deploy",
+      "capabilities": ["deployment", "surge-deploy", "git-operations", "manifest-management", "rollback", "validate", "plan"],
       "script": "projects/deploy-void/deploy-agent.py",
       "cwd": "/home/marvin/.openclaw/workspace",
       "timeout_ms": 120000,

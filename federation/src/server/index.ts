@@ -536,11 +536,22 @@ export class ManifoldServer extends EventEmitter {
       this.taskRouter.registerRunner(ws, agents)
 
       // Register runner agents in the capability index so they're mesh-visible
-      for (const agentName of agents) {
+      // Preserve full capabilities from the runner's registration message
+      for (let i = 0; i < agents.length; i++) {
+        const agentName = agents[i]
+        const rawAgent = rawAgents[i]
+        const newCaps = (typeof rawAgent === 'object' && Array.isArray(rawAgent.capabilities))
+          ? rawAgent.capabilities
+          : [agentName]
+        // Don't overwrite richer capabilities from a prior registration
+        const existing = this.capIndex.getAgent(agentName, this.hub)
+        const capabilities = (existing && existing.capabilities.length > newCaps.length)
+          ? existing.capabilities
+          : newCaps
         this.capIndex.upsertAgent({
           name: agentName,
           hub: this.hub,
-          capabilities: [agentName],  // agents are their own capability
+          capabilities,
           pressure: 0,
           isLocal: true,
         }, true)
