@@ -21,6 +21,7 @@ import type {
   FederationMessage,
   CapabilityQueryMessage,
   AgentRequestMessage,
+  MeshSyncMessageV2,
   MeshSyncMessage,
   TaskRequest,
   TaskResult,
@@ -307,7 +308,6 @@ export class ManifoldServer extends EventEmitter {
         this.capIndex.removeAgent(agentName, this.hub)
       }
       this._rebuildBloom()
-      this.meshSync.onLocalChange()
       this.log(`Runner agents removed from mesh: ${agents.join(', ')}`)
     })
 
@@ -335,7 +335,7 @@ export class ManifoldServer extends EventEmitter {
       const agents = this.capIndex.getAllAgents().map(a => ({
         agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
         cachedAt: Date.now(),
-        isLocal: a.isLocal ?? false,
+        isLocal: !!a.isLocal,
       }))
       const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
         name: dc.name,
@@ -511,24 +511,34 @@ export class ManifoldServer extends EventEmitter {
     }
 
     if (msgType === 'agent_runner_ready') {
-      const rawAgents = (msg as any).agents as Array<string | { name: string; capabilities?: string[] }>
-      const agentNames = rawAgents.map(a => typeof a === 'string' ? a : a.name)
-      this.taskRouter.registerRunner(ws, agentNames)
+      const rawAgents = (msg as any).agents
+      // Normalize: agents can be strings or {name, capabilities, seams} objects
+      const agents: string[] = rawAgents.map((a: any) => typeof a === 'string' ? a : a.name)
+      this.taskRouter.registerRunner(ws, agents)
 
       // Register runner agents in the capability index so they're mesh-visible
-      for (const entry of rawAgents) {
-        const name = typeof entry === 'string' ? entry : entry.name
-        const caps = typeof entry === 'string' ? [entry] : (entry.capabilities ?? [name])
+      for (const agentName of agents) {
         this.capIndex.upsertAgent({
-          name,
+          name: agentName,
           hub: this.hub,
-          capabilities: caps,
+          capabilities: [agentName],  // agents are their own capability
           pressure: 0,
+          isLocal: true,
         }, true)
       }
       this._rebuildBloom()
-      this.meshSync.onLocalChange()
-      this.log(`Runner agents registered in mesh: ${agentNames.join(', ')}`)
+      this.log(`Runner agents registered in mesh: ${agents.join(', ')}`)
+      return
+    }
+
+    if (msgType === 'agent_register') {
+      const { name, capabilities, seams } = msg as any
+      if (name && capabilities) {
+        this.registerAgent(name, capabilities, seams)
+        this._rebuildBloom()
+        const payload = JSON.stringify({ type: 'agent_register_ack', name, status: 'ok' })
+        ws.send(payload)
+      }
       return
     }
 
@@ -565,7 +575,7 @@ export class ManifoldServer extends EventEmitter {
     }
   }
 
-  private _handleMeshSync(msg: MeshSyncMessage): void {
+  private _handleMeshSync(msg: MeshSyncMessageV2 | MeshSyncMessage): void {
     for (const agent of msg.agents) {
       const isLocal = agent.hub === this.hub
       const { added, capChanges } = this.capIndex.upsertAgent(agent, isLocal)
@@ -583,7 +593,7 @@ export class ManifoldServer extends EventEmitter {
     this.emit('mesh:sync', msg.hub)
 
     // ACK the version if present (delta sync)
-    if (msg.version) {
+    if ('version' in msg && msg.version) {
       this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: msg.hub, version: msg.version })
     }
   }
@@ -742,7 +752,7 @@ export class ManifoldServer extends EventEmitter {
       }
 
       if (msgType === 'mesh_sync') {
-        this._handleMeshSync(msg as MeshSyncMessage)
+        this._handleMeshSync(msg as MeshSyncMessageV2 | MeshSyncMessage)
       }
     })
 
