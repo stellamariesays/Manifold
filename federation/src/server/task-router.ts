@@ -215,18 +215,14 @@ export class TaskRouter extends EventEmitter {
     }
 
     // Check if we already have this task (dedup)
-    // When a task arrives from a remote peer (sourceHub set) and targets this
-    // hub locally, we accept it even if pending has it — the existing entry was
-    // likely created by routeToRemote before the task was forwarded to us.
-    const isRemoteToLocal = !!sourceHub && resolvedHub === this.hub
-    if (this.pending.has(task.id) && !isRemoteToLocal) {
+    if (this.pending.has(task.id)) {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
         error: 'Duplicate task ID',
         completed_at: new Date().toISOString(),
       }
-      this.sendResult(result, replyTo)
+      this.sendResult(result, replyTo, sourceHub)
       this.emit('task:complete', { result, task })
       return
     }
@@ -678,10 +674,14 @@ export class TaskRouter extends EventEmitter {
       return
     }
 
-    // Try direct send to target
+    // Try direct send to target — use task_forward so the target's
+    // handleForward guard (origin check + dedup) applies
     const sent = this.peerRegistry.sendTo(targetHub, JSON.stringify({
-      type: 'task_request',
+      type: 'task_forward',
       task,
+      hopCount: hopCount + 1,
+      maxHops,
+      originHub,
     }))
     if (sent) {
       this.log(`Forwarded task ${task.id.substring(0, 8)}... to ${targetHub} (hop ${hopCount})`)
