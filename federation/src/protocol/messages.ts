@@ -31,7 +31,7 @@ export interface BaseMessage {
   type: MessageType
   requestId?: string
   timestamp?: string
-  /** Sender MeshID (name@hub) if authenticated */
+  /** Sender MeshID (name@hub#fingerprint) if authenticated */
   sender?: string
   /** Sender public key for signature verification */
   senderPublicKey?: string
@@ -357,7 +357,7 @@ export interface DetectionOutcomeMessage extends BaseMessage {
 // Cryptographic identity and mesh authentication using Ed25519 signatures.
 
 export interface MeshIdentityAnnounce {
-  /** MeshID in name@hub format */
+  /** MeshID in name@hub#fingerprint format */
   meshId: string
   /** Ed25519 public key (hex) */
   publicKey: string
