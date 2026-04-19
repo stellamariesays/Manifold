@@ -17,9 +17,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 const REST_URL = process.env.MANIFOLD_REST_URL || "http://localhost:8777";
+const API_KEY = process.env.MANIFOLD_API_KEY || "";
+
+function headers(): Record<string, string> {
+  return API_KEY ? { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
+}
 
 async function apiGet(path: string): Promise<any> {
-  const res = await fetch(`${REST_URL}${path}`);
+  const res = await fetch(`${REST_URL}${path}`, { headers: headers() });
   if (!res.ok) throw new Error(`GET ${path}: ${res.status} ${await res.text()}`);
   return res.json();
 }
@@ -27,7 +32,7 @@ async function apiGet(path: string): Promise<any> {
 async function apiPost(path: string, body: any): Promise<any> {
   const res = await fetch(`${REST_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: headers(),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`POST ${path}: ${res.status} ${await res.text()}`);
