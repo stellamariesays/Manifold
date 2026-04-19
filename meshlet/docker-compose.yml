@@ -1,0 +1,128 @@
+version: '3.8'
+
+# Anchor for common meshlet configuration to avoid repetition
+x-meshlet: &meshlet-common
+  build: .
+  restart: unless-stopped
+  environment:
+    - GATE_URL=ws://host.docker.internal:8777
+    - HUB_NAME=meshlet-hub
+    - LOG_LEVEL=info
+    - LLM_MODE=none
+    # Optional: Add GROQ_API_KEY if you want LLM responses
+    # - GROQ_API_KEY=${GROQ_API_KEY}
+    # - LLM_MODE=groq
+  networks:
+    - meshlet-net
+  deploy:
+    resources:
+      limits:
+        memory: 128M
+        cpus: '0.25'
+      reservations:
+        memory: 64M
+        cpus: '0.1'
+
+services:
+  meshlet-01:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-01
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,compute
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-02:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-02
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,storage
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-03:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-03
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,network
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-04:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-04
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,security
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-05:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-05
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,monitoring
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-06:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-06
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,compute,gpu
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-07:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-07
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,database
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-08:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-08
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,ml,inference
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-09:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-09
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,backup
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+  meshlet-10:
+    <<: *meshlet-common
+    environment:
+      - AGENT_NAME=meshlet-10
+      - GATE_URL=ws://host.docker.internal:8777
+      - CAPABILITIES=ping,test,api,webhook
+      - HUB_NAME=meshlet-hub
+      - LOG_LEVEL=info
+
+networks:
+  meshlet-net:
+    driver: bridge
+
+# To scale up to 50 agents (or any number):
+# docker compose up --scale meshlet-01=50
+# 
+# Note: When scaling, agent names will be auto-suffixed (meshlet-01_1, meshlet-01_2, etc.)
+# This is useful for load testing The Gate and federation server.
+# 
+# For unique agent names when scaling, use:
+# docker compose up --scale meshlet-01=10 --scale meshlet-02=10 --scale meshlet-03=10 ...
