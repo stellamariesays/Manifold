@@ -794,7 +794,7 @@ function getHubDescription(hubName) {
 // Easy parameter adjustment - modify these values to iterate on the system
 const CONSTRAINT_CONFIG = {
   // Motion
-  constraintRatio: 0,      // 0-1, higher = stronger constraints
+  constraintRatio: 0.8,    // 0-1, higher = stronger constraints (pull back to original positions)
   followMouse: true,       // Mouse interaction
   whiteNodes: true,        // Node color scheme
   mouseRadius: 2.0,        // Mouse influence radius
@@ -1089,17 +1089,17 @@ function animate() {
       if (!node.fixed) {
         // Apply constraint ratio (pulls back to original position)
         if (CONSTRAINT_CONFIG.constraintRatio > 0) {
-          const pullX = (node.ox - node.x) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
-          const pullY = (node.oy - node.y) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
-          const pullZ = (node.oz - node.z) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
+          const pullX = (node.ox - node.x) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
+          const pullY = (node.oy - node.y) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
+          const pullZ = (node.oz - node.z) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
           
           node.vx += pullX;
           node.vy += pullY;
           node.vz += pullZ;
         }
         
-        // Add slight downward gravity
-        node.vy -= 0.001;
+        // Add very slight upward force to counteract any drift (instead of downward gravity)
+        node.vy += 0.0002;
         
         // Update position
         node.x += node.vx;
@@ -1110,6 +1110,15 @@ function animate() {
         node.vx *= CONSTRAINT_CONFIG.damping;
         node.vy *= CONSTRAINT_CONFIG.damping;
         node.vz *= CONSTRAINT_CONFIG.damping;
+        
+        // Add boundaries to prevent excessive drift
+        const maxDrift = 5.0;
+        if (Math.abs(node.x) > maxDrift || Math.abs(node.y) > maxDrift || Math.abs(node.z) > maxDrift) {
+          // Strong pull back toward center if drifting too far
+          node.vx += (0 - node.x) * 0.01;
+          node.vy += (0 - node.y) * 0.01;
+          node.vz += (0 - node.z) * 0.01;
+        }
         
         // Update visual node position
         if (system.nodeInstances[i]) {
