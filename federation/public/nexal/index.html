@@ -1757,32 +1757,57 @@ function animateDataHighways(elapsed) {
     console.log(`Neural highways: ${highways.connections.length} active connections`);
   }
   
-  // Animate neural network connections  
+  // Animate web-routed connections with traveling pulses
   highways.connections = highways.connections.filter(connection => {
     const age = currentTime - connection.startTime;
     
     if (age <= connection.lifetime) {
-      // Simple pulsing effect for visibility test
-      const pulsePhase = Math.sin(currentTime * 0.003);
-      const opacity = 0.5 + 0.5 * pulsePhase; // Pulse between 0.5 and 1.0
+      // Advance pulse along web path
+      connection.progress += connection.speed;
       
-      if (connection.line && connection.line.material) {
-        connection.line.material.opacity = opacity;
-        connection.line.material.color.setHex(connection.color);
-        
-        // Debug every 120 frames
-        if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
-          console.log(`Neural line ${connection.capability} visible: opacity ${opacity.toFixed(2)} color: 0x${connection.color.toString(16)}`);
-          console.log(`Line position:`, connection.line.position, 'geometry points:', connection.points.length);
+      // Update traveling pulse sphere position along web path
+      if (connection.pulseSphere && connection.webPath) {
+        const webPosition = getWebPathPosition(connection.webPath, connection.progress);
+        if (webPosition) {
+          connection.pulseSphere.position.copy(webPosition);
+          
+          // Light up web segments as pulse passes through them
+          lightUpWebSegments(webPosition, connection.color, connection.intensity);
+          
+          // Pulse the sphere itself
+          const pulsePhase = Math.sin(currentTime * 0.008);
+          const baseIntensity = 0.5;
+          const pulseIntensity = baseIntensity + 0.3 * pulsePhase;
+          connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
+          connection.pulseSphere.material.opacity = 0.7 + 0.3 * pulsePhase;
         }
       }
       
-      return true; // Keep connection
+      // Fade the path line over time
+      const lifetimeProgress = age / connection.lifetime;
+      const fadeOpacity = connection.maxOpacity * (1 - lifetimeProgress * 0.5);
+      
+      if (connection.line && connection.line.material) {
+        connection.line.material.opacity = fadeOpacity;
+        connection.line.material.color.setHex(connection.color);
+      }
+      
+      // Debug every 120 frames
+      if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
+        console.log(`Web pulse ${connection.capability} progress: ${connection.progress.toFixed(2)} position:`, 
+          connection.pulseSphere ? connection.pulseSphere.position : 'none');
+      }
+      
+      // Keep connection until pulse completes path or lifetime expires
+      return connection.progress < 1.0 && age <= connection.lifetime;
     } else {
-      // Remove old connection
-      console.log(`Removing neural connection: ${connection.capability}`);
+      // Remove completed connection
+      console.log(`Completing web connection: ${connection.capability}`);
       if (connection.line && connection.line.parent) {
         connection.line.parent.remove(connection.line);
+      }
+      if (connection.pulseSphere && connection.pulseSphere.parent) {
+        connection.pulseSphere.parent.remove(connection.pulseSphere);
       }
       return false; // Remove connection
     }
@@ -1814,55 +1839,77 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     return;
   }
   
-  // Neural network style: Create flowing connection line instead of sphere
-  const sourcePos = highways.hubCenters[sourceHub];
-  const destPos = highways.hubCenters[destHub];
+  // Calculate web path that follows circular spider web infrastructure
+  const webPath = calculateWebPath(sourceHub, destHub);
+  console.log(`Creating web-routed pulse ${sourceHub} → ${destHub} via ${webPath.length} segments`);
   
-  console.log(`Creating connection ${sourceHub} (${sourcePos.x},${sourcePos.y},${sourcePos.z}) → ${destHub} (${destPos.x},${destPos.y},${destPos.z})`);
+  // Convert web path to 3D points for line geometry
+  const pathPoints = [];
+  for (let i = 0; i <= 20; i++) { // 20 segments for smooth curves
+    const progress = i / 20;
+    const webPosition = getWebPathPosition(webPath, progress);
+    if (webPosition) {
+      pathPoints.push(webPosition);
+    }
+  }
   
-  // Simple straight line for testing (curved lines might not be visible)
-  const points = [
-    new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
-    new THREE.Vector3(destPos.x, destPos.y, destPos.z)
-  ];
+  // Fallback to straight line if web path fails
+  if (pathPoints.length < 2) {
+    const sourcePos = highways.hubCenters[sourceHub];
+    const destPos = highways.hubCenters[destHub];
+    pathPoints.push(
+      new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
+      new THREE.Vector3(destPos.x, destPos.y, destPos.z)
+    );
+  }
   
-  const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  const lineGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
   
-  // Very visible material for testing
+  // Create animated pulse material that travels along the path
   const lineMaterial = new THREE.LineBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 1.0, // Maximum opacity
-    linewidth: 5 // Thick line (though this doesn't work in WebGL)
+    opacity: 0.8,
+    linewidth: 3
   });
   
   const connectionLine = new THREE.Line(lineGeometry, lineMaterial);
-  
-  // Add to main scene instead of web group for testing
   scene.add(connectionLine);
   
-  console.log(`Added connection line to scene: ${capabilityName} - color: 0x${color.toString(16)} from hub ${sourceHub} to ${destHub}`);
-  console.log(`Line points:`, points[0], points[1]);
+  // Create traveling pulse sphere that moves along the web path
+  const pulseGeometry = new THREE.SphereGeometry(0.3, 8, 6);
+  const pulseMaterial = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.9,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 0.5
+  });
   
-  // Create flowing pulse effect along the line
+  const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
+  scene.add(pulseSphere);
+  
+  console.log(`Web highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - ${pathPoints.length} path points`);
+  
+  // Create animated connection that travels along web infrastructure
   const connection = {
     line: connectionLine,
-    points: points,
+    pulseSphere: pulseSphere,
+    webPath: webPath,
+    pathPoints: pathPoints,
     progress: 0.0,
-    speed: 0.02 * (1 + pressure), // Neural pulse speed
+    speed: 0.015 * (1 + pressure), // Web travel speed
     color: color,
     intensity: pressure,
     capability: capabilityName,
     sourceHub: sourceHub,
     destHub: destHub,
-    maxOpacity: 1.0,
-    lifetime: 5000, // 5 seconds for testing
+    maxOpacity: 0.8,
+    lifetime: 8000, // 8 seconds to see full web routing
     startTime: performance.now()
   };
   
   highways.connections.push(connection);
-  
-  console.log(`Neural highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - connection added to scene`);
 }
 
 function calculateWebPath(sourceHub, destHub) {
@@ -1870,17 +1917,48 @@ function calculateWebPath(sourceHub, destHub) {
   const sourceZone = highways.hubZones[sourceHub];
   const destZone = highways.hubZones[destHub];
   
-  // Simple radial path: center → source direction → center → dest direction
-  const path = [
-    { ring: 0, angle: 0 },                    // Center
-    { ring: 1, angle: sourceZone.angle },    // Source hub zone
-    { ring: 2, angle: sourceZone.angle },    // Outer source zone
-    { ring: 3, angle: (sourceZone.angle + destZone.angle) / 2 }, // Midpoint routing
-    { ring: 2, angle: destZone.angle },      // Outer dest zone
-    { ring: 1, angle: destZone.angle },      // Dest hub zone
-    { ring: 0, angle: 0 }                    // Center
-  ];
+  if (!sourceZone || !destZone) {
+    console.log(`Missing zone data for ${sourceHub} or ${destHub}`);
+    return [];
+  }
   
+  // Calculate angular difference to determine routing strategy
+  const angleDiff = Math.abs(destZone.angle - sourceZone.angle);
+  const normalizedDiff = Math.min(angleDiff, 2 * Math.PI - angleDiff);
+  
+  // For nearby hubs, use direct outer ring routing
+  if (normalizedDiff < Math.PI / 2) {
+    const path = [
+      { ring: 0.5, angle: sourceZone.angle },    // Start near source hub
+      { ring: 2.5, angle: sourceZone.angle },    // Move out to outer ring
+      { ring: 2.5, angle: destZone.angle },      // Travel along outer ring
+      { ring: 0.5, angle: destZone.angle }       // Move in to dest hub
+    ];
+    return path;
+  }
+  
+  // For distant hubs, route through center with spiral pattern
+  const midAngle = (sourceZone.angle + destZone.angle) / 2;
+  const spiralSteps = 6;
+  const path = [];
+  
+  // Spiral inward from source
+  for (let i = 0; i <= spiralSteps; i++) {
+    const progress = i / spiralSteps;
+    const ring = 2.5 * (1 - progress); // From outer to center
+    const angle = sourceZone.angle + progress * (midAngle - sourceZone.angle);
+    path.push({ ring: Math.max(ring, 0.1), angle: angle });
+  }
+  
+  // Spiral outward to destination
+  for (let i = 1; i <= spiralSteps; i++) {
+    const progress = i / spiralSteps;
+    const ring = 2.5 * progress; // From center to outer
+    const angle = midAngle + progress * (destZone.angle - midAngle);
+    path.push({ ring: Math.max(ring, 0.1), angle: angle });
+  }
+  
+  console.log(`Web path ${sourceHub} → ${destHub}: ${path.length} segments, angular diff: ${normalizedDiff.toFixed(2)}`);
   return path;
 }
 
@@ -1897,7 +1975,7 @@ function getWebPathPosition(path, progress) {
     const lastPoint = path[path.length - 1];
     return new THREE.Vector3(
       Math.cos(lastPoint.angle) * lastPoint.ring * 3,
-      -3, // Web Y position
+      -2.5, // Slightly above web for visibility
       Math.sin(lastPoint.angle) * lastPoint.ring * 3
     );
   }
@@ -1909,15 +1987,27 @@ function getWebPathPosition(path, progress) {
   const currentRadius = currentPoint.ring * 3; // Scale to web size
   const nextRadius = nextPoint.ring * 3;
   const currentAngle = currentPoint.angle;
-  const nextAngle = nextPoint.angle;
+  let nextAngle = nextPoint.angle;
   
-  // Interpolate radius and angle
-  const radius = currentRadius + (nextRadius - currentRadius) * localProgress;
-  const angle = currentAngle + (nextAngle - currentAngle) * localProgress;
+  // Handle angle wrapping (shortest path)
+  const angleDiff = nextAngle - currentAngle;
+  if (angleDiff > Math.PI) {
+    nextAngle -= 2 * Math.PI;
+  } else if (angleDiff < -Math.PI) {
+    nextAngle += 2 * Math.PI;
+  }
+  
+  // Smooth interpolation with easing
+  const easedProgress = 0.5 - 0.5 * Math.cos(localProgress * Math.PI); // Sine ease
+  const radius = currentRadius + (nextRadius - currentRadius) * easedProgress;
+  const angle = currentAngle + (nextAngle - currentAngle) * easedProgress;
+  
+  // Add slight vertical movement for organic feel
+  const yOffset = Math.sin(progress * Math.PI * 4) * 0.5; // Subtle wave motion
   
   return new THREE.Vector3(
     Math.cos(angle) * radius,
-    -3, // Web Y position
+    -2.5 + yOffset, // Above web with gentle wave motion
     Math.sin(angle) * radius
   );
 }
