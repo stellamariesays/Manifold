@@ -516,6 +516,8 @@ async function loadAgentsAndBuild() {
     const meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
+      // Store mesh data globally for data highways
+      window._meshData = meshData;
     }
   } catch (e) {
     console.log('Using demo agents (API offline)');
@@ -584,10 +586,12 @@ function buildSpiderWeb() {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     
-    const material = new THREE.LineBasicMaterial({ 
+    const material = new THREE.MeshBasicMaterial({ 
       color: 0x2a4a6a, 
       transparent: true, 
-      opacity: 0.3 
+      opacity: 0.3,
+      emissive: 0x000000,
+      emissiveIntensity: 0
     });
     
     const line = new THREE.Line(geometry, material);
@@ -615,10 +619,12 @@ function buildSpiderWeb() {
     ];
     
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ 
+    const material = new THREE.MeshBasicMaterial({ 
       color: 0x1a3a5a, 
       transparent: true, 
-      opacity: 0.4 
+      opacity: 0.4,
+      emissive: 0x000000,
+      emissiveIntensity: 0
     });
     const line = new THREE.Line(geometry, material);
     webGroup.add(line);
@@ -626,9 +632,30 @@ function buildSpiderWeb() {
   
   scene.add(webGroup);
   
-  // Store references for wave animation
+  // Store references for wave animation and data highways
   window._webGroup = webGroup;
   window._webRings = webRings;
+  
+  // Initialize data highway system
+  window._dataHighways = {
+    pulses: [],
+    segmentActivity: new Map(), // Track which segments have data flowing
+    lastPulseTime: 0,
+    capabilityColors: {
+      'detection': 0xff3366,   // Red for detection capabilities
+      'data': 0x00e5ff,        // Cyan for data capabilities  
+      'deployment': 0x00ff88,  // Green for deployment capabilities
+      'strategy': 0xaa00ff,    // Purple for strategy capabilities
+      'solar': 0xffaa00,       // Orange for solar capabilities
+      'default': 0xffffff      // White for other capabilities
+    },
+    hubZones: {
+      'hog': { angle: 4.7, sectors: [3, 4, 5] },      // Bottom-left quadrants
+      'trillian': { angle: 0.8, sectors: [0, 1, 2] }, // Top-right quadrants  
+      'thefog': { angle: 2.4, sectors: [1, 2, 3] },   // Top-left quadrants
+      'relay': { angle: 5.5, sectors: [5, 6, 7] }     // Bottom-right quadrants
+    }
+  };
 }
 
 function buildAgentTopologies(agents) {
@@ -1631,6 +1658,9 @@ function animate() {
     }
   }
   
+  // Data Highway System - Create capability-based pulses
+  animateDataHighways(elapsed);
+  
   // Animate spider web waves
   if (window._webRings) {
     window._webRings.forEach(ring => {
@@ -1671,6 +1701,231 @@ function animate() {
   }
   
   renderer.render(scene, camera);
+}
+
+// ──────── DATA HIGHWAY SYSTEM ──────────────────────────────────
+
+function animateDataHighways(elapsed) {
+  const highways = window._dataHighways;
+  if (!highways || !window._meshData || !window._webGroup) return;
+  
+  const currentTime = performance.now();
+  
+  // Create new data pulses based on capability pressure (every 2 seconds)
+  if (currentTime - highways.lastPulseTime > 2000) {
+    highways.lastPulseTime = currentTime;
+    
+    // Find high-pressure capabilities from mesh data
+    const highPressureCapabilities = window._meshData.darkCircles
+      ? window._meshData.darkCircles.filter(cap => cap.pressure > 0.3)
+      : [];
+    
+    // Create pulses for each high-pressure capability
+    highPressureCapabilities.forEach(capability => {
+      // Determine capability type for coloring
+      const capType = getCapabilityType(capability.name);
+      const color = highways.capabilityColors[capType] || highways.capabilityColors.default;
+      
+      // Find source and destination hubs with highest pressure for this capability
+      const hubPressures = Object.entries(capability.byHub).sort((a, b) => b[1] - a[1]);
+      if (hubPressures.length >= 2) {
+        const sourceHub = hubPressures[0][0];
+        const destHub = hubPressures[1][0];
+        
+        createDataPulse(sourceHub, destHub, color, capability.pressure, capability.name);
+      }
+    });
+  }
+  
+  // Animate existing pulses along web segments
+  highways.pulses = highways.pulses.filter(pulse => {
+    pulse.progress += pulse.speed;
+    
+    if (pulse.progress <= 1.0) {
+      // Update pulse position along path
+      const position = getWebPathPosition(pulse.path, pulse.progress);
+      if (position && pulse.mesh) {
+        pulse.mesh.position.copy(position);
+        
+        // Light up web segments near pulse
+        lightUpWebSegments(position, color, pulse.intensity);
+      }
+      return true; // Keep pulse
+    } else {
+      // Remove completed pulse
+      if (pulse.mesh && pulse.mesh.parent) {
+        pulse.mesh.parent.remove(pulse.mesh);
+      }
+      return false; // Remove pulse
+    }
+  });
+  
+  // Fade web segment lighting
+  highways.segmentActivity.forEach((activity, segmentId) => {
+    activity.intensity *= 0.95; // Fade out
+    if (activity.intensity < 0.05) {
+      highways.segmentActivity.delete(segmentId);
+      resetWebSegmentColor(segmentId);
+    }
+  });
+}
+
+function getCapabilityType(capabilityName) {
+  if (capabilityName.includes('detection')) return 'detection';
+  if (capabilityName.includes('data')) return 'data';
+  if (capabilityName.includes('deployment')) return 'deployment';
+  if (capabilityName.includes('strategy')) return 'strategy';
+  if (capabilityName.includes('solar')) return 'solar';
+  return 'default';
+}
+
+function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
+  const highways = window._dataHighways;
+  if (!highways.hubZones[sourceHub] || !highways.hubZones[destHub]) return;
+  
+  // Create pulse mesh - glowing sphere
+  const pulseGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+  const pulseMaterial = new THREE.MeshBasicMaterial({
+    color: color,
+    transparent: true,
+    opacity: 0.8,
+    emissive: color,
+    emissiveIntensity: 0.6
+  });
+  const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
+  
+  // Add to web group
+  window._webGroup.add(pulseMesh);
+  
+  // Calculate path through spider web from source to dest hub zone
+  const path = calculateWebPath(sourceHub, destHub);
+  
+  // Create pulse object
+  const pulse = {
+    mesh: pulseMesh,
+    path: path,
+    progress: 0.0,
+    speed: 0.008 * (1 + pressure), // Speed based on capability pressure
+    color: color,
+    intensity: pressure,
+    capability: capabilityName,
+    sourceHub: sourceHub,
+    destHub: destHub
+  };
+  
+  highways.pulses.push(pulse);
+  
+  // Debug log high-activity capabilities
+  if (pressure > 0.7) {
+    console.log(`Data highway: ${capabilityName} (${pressure.toFixed(2)}) routing ${sourceHub} → ${destHub}`);
+  }
+}
+
+function calculateWebPath(sourceHub, destHub) {
+  const highways = window._dataHighways;
+  const sourceZone = highways.hubZones[sourceHub];
+  const destZone = highways.hubZones[destHub];
+  
+  // Simple radial path: center → source direction → center → dest direction
+  const path = [
+    { ring: 0, angle: 0 },                    // Center
+    { ring: 1, angle: sourceZone.angle },    // Source hub zone
+    { ring: 2, angle: sourceZone.angle },    // Outer source zone
+    { ring: 3, angle: (sourceZone.angle + destZone.angle) / 2 }, // Midpoint routing
+    { ring: 2, angle: destZone.angle },      // Outer dest zone
+    { ring: 1, angle: destZone.angle },      // Dest hub zone
+    { ring: 0, angle: 0 }                    // Center
+  ];
+  
+  return path;
+}
+
+function getWebPathPosition(path, progress) {
+  if (!path || path.length < 2) return null;
+  
+  // Find current segment based on progress
+  const segmentProgress = progress * (path.length - 1);
+  const segmentIndex = Math.floor(segmentProgress);
+  const localProgress = segmentProgress - segmentIndex;
+  
+  if (segmentIndex >= path.length - 1) {
+    // Use last point
+    const lastPoint = path[path.length - 1];
+    return new THREE.Vector3(
+      Math.cos(lastPoint.angle) * lastPoint.ring * 3,
+      -3, // Web Y position
+      Math.sin(lastPoint.angle) * lastPoint.ring * 3
+    );
+  }
+  
+  // Interpolate between current and next point
+  const currentPoint = path[segmentIndex];
+  const nextPoint = path[segmentIndex + 1];
+  
+  const currentRadius = currentPoint.ring * 3; // Scale to web size
+  const nextRadius = nextPoint.ring * 3;
+  const currentAngle = currentPoint.angle;
+  const nextAngle = nextPoint.angle;
+  
+  // Interpolate radius and angle
+  const radius = currentRadius + (nextRadius - currentRadius) * localProgress;
+  const angle = currentAngle + (nextAngle - currentAngle) * localProgress;
+  
+  return new THREE.Vector3(
+    Math.cos(angle) * radius,
+    -3, // Web Y position
+    Math.sin(angle) * radius
+  );
+}
+
+function lightUpWebSegments(position, color, intensity) {
+  // Find nearest web ring and light it up temporarily
+  if (!window._webRings) return;
+  
+  const highways = window._dataHighways;
+  const radius = Math.sqrt(position.x * position.x + position.z * position.z);
+  
+  // Find closest ring
+  let closestRing = null;
+  let minDistance = Infinity;
+  
+  window._webRings.forEach((ring, index) => {
+    const ringRadius = ring.userData.radius;
+    const distance = Math.abs(radius - ringRadius);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestRing = ring;
+    }
+  });
+  
+  if (closestRing && minDistance < 2.0) {
+    // Light up the ring segment temporarily
+    const segmentId = `ring_${closestRing.userData.ringIndex}`;
+    highways.segmentActivity.set(segmentId, {
+      intensity: intensity,
+      color: color,
+      ring: closestRing
+    });
+    
+    // Apply lighting effect
+    const material = closestRing.material;
+    material.color.setHex(color);
+    material.opacity = Math.min(0.8, 0.3 + intensity * 0.5);
+    material.emissive.setHex(color);
+    material.emissiveIntensity = intensity * 0.3;
+  }
+}
+
+function resetWebSegmentColor(segmentId) {
+  const highways = window._dataHighways;
+  const activity = highways.segmentActivity.get(segmentId);
+  if (activity && activity.ring) {
+    // Reset to default web colors
+    activity.ring.material.color.setHex(0x2a4a6a);
+    activity.ring.material.opacity = 0.3;
+    activity.ring.material.emissive.setHex(0x000000);
+    activity.ring.material.emissiveIntensity = 0;
+  }
 }
 
 // Event handlers
