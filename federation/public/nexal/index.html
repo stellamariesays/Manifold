@@ -1828,28 +1828,33 @@ function animateDataHighways(elapsed) {
           );
         }
         
-        connection.pulseSphere.position.copy(currentPos);
+        // Only animate if pulseSphere exists and is valid
+        if (connection.pulseSphere && connection.pulseSphere.material && connection.pulseSphere.scale) {
+          connection.pulseSphere.position.copy(currentPos);
+          
+          // Pulse the sphere itself with high intensity for particle beam effect
+          const pulsePhase = Math.sin(currentTime * 0.015);
+          const baseIntensity = 1.0; // Higher base intensity
+          const pulseIntensity = baseIntensity + 0.5 * pulsePhase;
+          connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
+          connection.pulseSphere.material.opacity = 0.9 + 0.1 * pulsePhase;
+          
+          // Scale sphere based on position - bigger in web, smaller when shooting
+          const isInWeb = Math.abs(currentPos.y + 2.5) < 1.0;
+          const targetScale = isInWeb ? 0.5 : 0.3; // Slightly bigger for better visibility
+          connection.pulseSphere.scale.setScalar(targetScale);
+          
+          // Add bloom effect for particle beam
+          const glowIntensity = 1.2 + 0.3 * pulsePhase;
+          if (connection.pulseSphere.material.emissive) {
+            connection.pulseSphere.material.emissive.setScalar(glowIntensity);
+          }
+        }
         
         // Light up web segments only when traveling through web (Y near -2.5)
         if (Math.abs(currentPos.y + 2.5) < 1.0) {
           lightUpWebSegments(currentPos, connection.color, connection.intensity);
         }
-        
-        // Pulse the sphere itself with high intensity for particle beam effect
-        const pulsePhase = Math.sin(currentTime * 0.015);
-        const baseIntensity = 1.0; // Higher base intensity
-        const pulseIntensity = baseIntensity + 0.5 * pulsePhase;
-        connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
-        connection.pulseSphere.material.opacity = 0.9 + 0.1 * pulsePhase;
-        
-        // Scale sphere based on position - bigger in web, smaller when shooting
-        const isInWeb = Math.abs(currentPos.y + 2.5) < 1.0;
-        const targetScale = isInWeb ? 0.5 : 0.3; // Slightly bigger for better visibility
-        connection.pulseSphere.scale.setScalar(targetScale);
-        
-        // Add bloom effect for particle beam
-        const glowIntensity = 1.2 + 0.3 * pulsePhase;
-        connection.pulseSphere.material.emissive.setScalar(glowIntensity);
       }
       
       // No persistent lines to fade - only particle beams
