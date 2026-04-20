@@ -659,6 +659,13 @@ function buildSpiderWeb() {
       'relay': { x: 6, y: 1, z: -8 }
     }
   };
+  
+  // TEST: Create a visible test connection immediately
+  setTimeout(() => {
+    console.log('Creating test neural connection...');
+    createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'TEST-CONNECTION');
+    createDataPulse('thefog', 'relay', 0x00ff00, 1.0, 'TEST-CONNECTION-2');
+  }, 2000);
 }
 
 function buildAgentTopologies(agents) {
@@ -1750,45 +1757,34 @@ function animateDataHighways(elapsed) {
     console.log(`Neural highways: ${highways.connections.length} active connections`);
   }
   
-  // Animate neural network connections
+  // Animate neural network connections  
   highways.connections = highways.connections.filter(connection => {
     const age = currentTime - connection.startTime;
     
     if (age <= connection.lifetime) {
-      // Neural flowing effect - pulse progress along curve
-      connection.progress += connection.speed;
-      if (connection.progress > 1.0) connection.progress = 0.0; // Loop the flow
+      // Simple pulsing effect for visibility test
+      const pulsePhase = Math.sin(currentTime * 0.003);
+      const opacity = 0.5 + 0.5 * pulsePhase; // Pulse between 0.5 and 1.0
       
-      // Create pulsing opacity effect
-      const pulsePhase = Math.sin(currentTime * 0.005 + connection.progress * Math.PI * 2);
-      const opacity = connection.maxOpacity * (0.3 + 0.7 * (pulsePhase * 0.5 + 0.5));
-      
-      connection.line.material.opacity = opacity;
-      
-      // Flowing gradient effect - brighten sections as pulse travels
-      const flowIntensity = Math.sin(connection.progress * Math.PI * 4) * 0.3 + 0.7;
-      connection.line.material.color.setHex(connection.color);
-      
-      // Debug flow every 120 frames for first few connections
-      if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
-        console.log(`Neural flow ${connection.capability} progress: ${connection.progress.toFixed(2)} opacity: ${opacity.toFixed(2)}`);
+      if (connection.line && connection.line.material) {
+        connection.line.material.opacity = opacity;
+        connection.line.material.color.setHex(connection.color);
+        
+        // Debug every 120 frames
+        if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
+          console.log(`Neural line ${connection.capability} visible: opacity ${opacity.toFixed(2)} color: 0x${connection.color.toString(16)}`);
+          console.log(`Line position:`, connection.line.position, 'geometry points:', connection.points.length);
+        }
       }
       
       return true; // Keep connection
     } else {
-      // Fade out and remove old connection
-      console.log(`Fading neural connection: ${connection.capability}`);
+      // Remove old connection
+      console.log(`Removing neural connection: ${connection.capability}`);
       if (connection.line && connection.line.parent) {
-        // Fade out over 500ms
-        const fadePhase = Math.max(0, 1.0 - (age - connection.lifetime) / 500);
-        connection.line.material.opacity *= fadePhase;
-        
-        if (fadePhase <= 0.01) {
-          connection.line.parent.remove(connection.line);
-          return false; // Remove connection
-        }
+        connection.line.parent.remove(connection.line);
       }
-      return true; // Keep during fade
+      return false; // Remove connection
     }
   });
   
@@ -1813,40 +1809,45 @@ function getCapabilityType(capabilityName) {
 
 function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   const highways = window._dataHighways;
-  if (!highways.hubCenters[sourceHub] || !highways.hubCenters[destHub]) return;
+  if (!highways.hubCenters[sourceHub] || !highways.hubCenters[destHub]) {
+    console.log(`Missing hub centers for ${sourceHub} or ${destHub}`);
+    return;
+  }
   
   // Neural network style: Create flowing connection line instead of sphere
   const sourcePos = highways.hubCenters[sourceHub];
   const destPos = highways.hubCenters[destHub];
   
-  // Create curved path between hubs
-  const curve = new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
-    new THREE.Vector3(0, 2, 0), // Arc through center point elevated
-    new THREE.Vector3(destPos.x, destPos.y, destPos.z)
-  );
+  console.log(`Creating connection ${sourceHub} (${sourcePos.x},${sourcePos.y},${sourcePos.z}) → ${destHub} (${destPos.x},${destPos.y},${destPos.z})`);
   
-  // Create line geometry from curve
-  const points = curve.getPoints(50);
+  // Simple straight line for testing (curved lines might not be visible)
+  const points = [
+    new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
+    new THREE.Vector3(destPos.x, destPos.y, destPos.z)
+  ];
+  
   const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
   
-  // Neural network style material - subtle gradient
+  // Very visible material for testing
   const lineMaterial = new THREE.LineBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 0.6 + pressure * 0.4, // Opacity based on pressure
-    linewidth: 2 + pressure * 3 // Thicker lines for higher pressure
+    opacity: 1.0, // Maximum opacity
+    linewidth: 5 // Thick line (though this doesn't work in WebGL)
   });
   
   const connectionLine = new THREE.Line(lineGeometry, lineMaterial);
-  window._webGroup.add(connectionLine);
   
-  console.log(`Neural connection: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - ${color.toString(16)}`);
+  // Add to main scene instead of web group for testing
+  scene.add(connectionLine);
+  
+  console.log(`Added connection line to scene: ${capabilityName} - color: 0x${color.toString(16)} from hub ${sourceHub} to ${destHub}`);
+  console.log(`Line points:`, points[0], points[1]);
   
   // Create flowing pulse effect along the line
   const connection = {
     line: connectionLine,
-    curve: curve,
+    points: points,
     progress: 0.0,
     speed: 0.02 * (1 + pressure), // Neural pulse speed
     color: color,
@@ -1854,17 +1855,14 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     capability: capabilityName,
     sourceHub: sourceHub,
     destHub: destHub,
-    maxOpacity: 0.6 + pressure * 0.4,
-    lifetime: 3000 + pressure * 2000, // Connection lasts longer for important capabilities
+    maxOpacity: 1.0,
+    lifetime: 5000, // 5 seconds for testing
     startTime: performance.now()
   };
   
   highways.connections.push(connection);
   
-  // Debug log high-activity capabilities
-  if (pressure > 0.7) {
-    console.log(`Neural highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
-  }
+  console.log(`Neural highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - connection added to scene`);
 }
 
 function calculateWebPath(sourceHub, destHub) {
