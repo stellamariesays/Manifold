@@ -468,6 +468,9 @@ function init() {
   camera.position.set(0, 8, 20);
   camera.lookAt(0, 0, 0);
   
+  // Store camera globally for mouse interaction
+  window.camera = camera;
+  
   // Camera controls
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(0, 0, 0);
@@ -970,7 +973,8 @@ function buildCentralNexus() {
     targetScale: 1.0,
     introDuration: 2000, // 2 seconds
     mouseInteractionEnabled: false, // Enabled after 2.2 seconds
-    mouseEnableTime: 2200 // 2.2 seconds
+    mouseEnableTime: 2200, // 2.2 seconds
+    frameCount: 0 // For debug logging
   };
 }
 
@@ -1052,6 +1056,9 @@ function animate() {
   // Animate constraint network physics
   if (window._constraintSystem) {
     const system = window._constraintSystem;
+    
+    // Increment frame counter for debug logging (needs to be outside intro check)
+    system.frameCount++;
     
     // Handle intro animation - shrink from huge to normal size
     if (system.introAnimation) {
@@ -1290,17 +1297,23 @@ window.addEventListener('mousemove', (event) => {
     system.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     system.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
     
-    // Raycast from camera through mouse position
-    system.raycaster.setFromCamera(system.mouse, camera);
-    
-    // Create invisible plane at center for mouse intersection
-    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-    const intersectPoint = new THREE.Vector3();
-    
-    if (system.raycaster.ray.intersectPlane(plane, intersectPoint)) {
-      system.mousePosition.copy(intersectPoint);
-      // Offset to constraint group position
-      system.mousePosition.add(system.group.position);
+    // Raycast from camera through mouse position - use window.camera to ensure scope
+    if (window.camera) {
+      system.raycaster.setFromCamera(system.mouse, window.camera);
+      
+      // Create invisible plane at center for mouse intersection
+      const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+      const intersectPoint = new THREE.Vector3();
+      
+      if (system.raycaster.ray.intersectPlane(plane, intersectPoint)) {
+        system.mousePosition.copy(intersectPoint);
+        // Offset to constraint group position
+        system.mousePosition.add(system.group.position);
+        // Debug: Log every 60 frames (1 second) to avoid spam
+        if (system.frameCount && system.frameCount % 60 === 0) {
+          console.log('Mouse black hole position:', system.mousePosition.x.toFixed(2), system.mousePosition.y.toFixed(2), system.mousePosition.z.toFixed(2));
+        }
+      }
     }
   }
 });
