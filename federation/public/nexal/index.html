@@ -1127,9 +1127,6 @@ function animate() {
           system.mouseInteractionEnabled = true;
           console.log('Mouse interaction enabled after intro completion');
         }
-      } else if (!system.introAnimation && CONSTRAINT_CONFIG.shrinkOnProximity) {
-        // Don't apply proximity shrinking during intro animation
-        // This will be handled in the separate proximity shrinking section
       }
     }
     const nodes = system.nodes;
