@@ -1763,6 +1763,11 @@ function animateDataHighways(elapsed) {
     });
   }
   
+  // Debug: Log pulse count every 60 frames
+  if (animationFrame % 60 === 0) {
+    console.log(`Data highways: ${highways.pulses.length} active pulses`);
+  }
+  
   // Animate existing pulses along web segments
   highways.pulses = highways.pulses.filter(pulse => {
     pulse.progress += pulse.speed;
@@ -1779,12 +1784,15 @@ function animateDataHighways(elapsed) {
                      position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1));
         }
         
-        // Light up web segments near pulse
-        lightUpWebSegments(position, pulse.color, pulse.intensity);
+        // Light up web segments near pulse (temporarily disabled for debugging)
+        // lightUpWebSegments(position, pulse.color, pulse.intensity);
+      } else {
+        console.log(`Pulse ${pulse.capability}: position or mesh missing`, !!position, !!pulse.mesh);
       }
       return true; // Keep pulse
     } else {
       // Remove completed pulse
+      console.log(`Removing completed pulse: ${pulse.capability}`);
       if (pulse.mesh && pulse.mesh.parent) {
         pulse.mesh.parent.remove(pulse.mesh);
       }
@@ -1815,23 +1823,28 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   const highways = window._dataHighways;
   if (!highways.hubZones[sourceHub] || !highways.hubZones[destHub]) return;
   
-  // Create pulse mesh - glowing sphere (very large and bright for visibility)
-  const pulseGeometry = new THREE.SphereGeometry(0.5, 16, 16); // Even larger
+  // Create pulse mesh - HUGE glowing sphere for testing
+  const pulseGeometry = new THREE.SphereGeometry(1.5, 20, 20); // HUGE for visibility
   const pulseMaterial = new THREE.MeshBasicMaterial({
     color: color,
     transparent: false, // No transparency
     emissive: color,
-    emissiveIntensity: 2.0 // Super bright
+    emissiveIntensity: 3.0 // Maximum brightness
   });
   
-  console.log(`Creating pulse mesh with color:`, color.toString(16), 'at position will be calculated');
+  console.log(`Creating HUGE pulse mesh with color: 0x${color.toString(16)} at position will be calculated`);
   const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
   
   // Add to web group
   window._webGroup.add(pulseMesh);
   
+  // Position pulse at start location for immediate visibility
+  pulseMesh.position.set(0, -3, 0); // Start at web center
+  
   // Calculate path through spider web from source to dest hub zone
   const path = calculateWebPath(sourceHub, destHub);
+  
+  console.log(`Pulse added to scene: ${capabilityName}, mesh parent:`, pulseMesh.parent ? 'yes' : 'no');
   
   // Create pulse object
   const pulse = {
