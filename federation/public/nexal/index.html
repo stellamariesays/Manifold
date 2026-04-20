@@ -840,7 +840,7 @@ function animate() {
   if (window._particleCloud && window._fogParticles) {
     const positions = window._particleCloud.geometry.attributes.position.array;
     
-    // Wave motion through fog particles
+    // Wave motion through fog particles (half speed)
     for (let i = 0; i < positions.length; i += 3) {
       const originalRadius = Math.sqrt(
         window._fogParticles[i] * window._fogParticles[i] +
@@ -848,9 +848,20 @@ function animate() {
         window._fogParticles[i + 2] * window._fogParticles[i + 2]
       );
       
-      const wave1 = Math.sin(elapsed * 0.5 + i * 0.01) * 0.1;
-      const wave2 = Math.cos(elapsed * 0.3 + i * 0.02) * 0.05;
-      const disturbance = 1 + wave1 + wave2;
+      const wave1 = Math.sin(elapsed * 0.25 + i * 0.01) * 0.1;
+      const wave2 = Math.cos(elapsed * 0.15 + i * 0.02) * 0.05;
+      let disturbance = 1 + wave1 + wave2;
+      
+      // Constrain most particles to stay within Klein bottle orbit (~6-8 radius)
+      // Only allow 10% of particles to extend beyond this boundary
+      const particleIndex = i / 3;
+      const isOutlier = (particleIndex % 10) === 0; // Every 10th particle can be outlier
+      const maxRadius = isOutlier ? 10.0 : 6.5; // Outliers can reach 10, others max 6.5
+      
+      const newRadius = originalRadius * disturbance;
+      if (newRadius > maxRadius) {
+        disturbance = maxRadius / originalRadius;
+      }
       
       positions[i] = window._fogParticles[i] * disturbance;
       positions[i + 1] = window._fogParticles[i + 1] * disturbance;
