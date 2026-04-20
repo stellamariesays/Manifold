@@ -449,6 +449,7 @@ function makeMobiusStripGeometry(radius = 1, width = 0.5, segments = 64) {
 // ──────── MAIN SETUP ────────────────────────────────────────
 let scene, camera, renderer;
 let agentGroups = [];
+window.agentGroups = agentGroups; // Make globally accessible for data highways
 let clickableObjects = [];
 
 function init() {
@@ -1807,15 +1808,14 @@ function animateDataHighways(elapsed) {
       
       // Debug every 120 frames
       if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
-        console.log(`Web pulse ${connection.capability} progress: ${connection.progress.toFixed(2)} position:`, 
-          connection.pulseSphere ? connection.pulseSphere.position : 'none');
+        console.log(`Web pulse ${connection.capability}: ${connection.sourceAgent} → ${connection.destAgent} progress: ${connection.progress.toFixed(2)}`);
       }
       
       // Keep connection until pulse completes path or lifetime expires
       return connection.progress < 1.0 && age <= connection.lifetime;
     } else {
       // Remove completed connection
-      console.log(`Completing web connection: ${connection.capability}`);
+      console.log(`Completing web connection: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
       if (connection.line && connection.line.parent) {
         connection.line.parent.remove(connection.line);
       }
@@ -1852,13 +1852,48 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     return;
   }
   
+  // Find actual agents from source and destination hubs
+  const sourceAgents = window.agentGroups?.filter(group => 
+    group.userData && group.userData.agent && group.userData.agent.hub === sourceHub
+  ) || [];
+  
+  const destAgents = window.agentGroups?.filter(group => 
+    group.userData && group.userData.agent && group.userData.agent.hub === destHub
+  ) || [];
+  
+  // Pick random agents from each hub, fallback to hub centers if no agents
+  let sourcePos, destPos, sourceAgentName, destAgentName;
+  
+  if (sourceAgents.length > 0) {
+    const sourceAgent = sourceAgents[Math.floor(Math.random() * sourceAgents.length)];
+    sourcePos = sourceAgent.position;
+    sourceAgentName = sourceAgent.userData.agent.name;
+  } else {
+    sourcePos = highways.hubCenters[sourceHub];
+    sourceAgentName = `${sourceHub}-center`;
+  }
+  
+  if (destAgents.length > 0) {
+    const destAgent = destAgents[Math.floor(Math.random() * destAgents.length)];
+    destPos = destAgent.position;
+    destAgentName = destAgent.userData.agent.name;
+  } else {
+    destPos = highways.hubCenters[destHub];
+    destAgentName = `${destHub}-center`;
+  }
+  
   // Calculate web path that follows circular spider web infrastructure
   const webPath = calculateWebPath(sourceHub, destHub);
-  console.log(`Creating web-routed pulse ${sourceHub} → ${destHub} via ${webPath.length} segments`);
+  console.log(`Creating web-routed pulse ${capabilityName} (${pressure.toFixed(2)}) ${sourceAgentName} → ${destAgentName}`);
   
   // Convert web path to 3D points for line geometry
   const pathPoints = [];
-  for (let i = 0; i <= 20; i++) { // 20 segments for smooth curves
+  
+  // Start from actual agent position
+  pathPoints.push(new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z));
+  
+  // Add web routing points (but skip first and last to maintain agent connections)
+  for (let i = 1; i < 20; i++) { // Skip i=0 and i=20 to connect to actual agents
     const progress = i / 20;
     const webPosition = getWebPathPosition(webPath, progress);
     if (webPosition) {
@@ -1866,10 +1901,11 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     }
   }
   
-  // Fallback to straight line if web path fails
+  // End at actual destination agent position  
+  pathPoints.push(new THREE.Vector3(destPos.x, destPos.y, destPos.z));
+  
+  // Fallback to direct agent-to-agent line if web path fails
   if (pathPoints.length < 2) {
-    const sourcePos = highways.hubCenters[sourceHub];
-    const destPos = highways.hubCenters[destHub];
     pathPoints.push(
       new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
       new THREE.Vector3(destPos.x, destPos.y, destPos.z)
@@ -1902,7 +1938,7 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
   scene.add(pulseSphere);
   
-  console.log(`Web highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - ${pathPoints.length} path points`);
+  console.log(`Web highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceAgentName} → ${destAgentName} - ${pathPoints.length} path points`);
   
   // Create animated connection that travels along web infrastructure
   const connection = {
@@ -1917,6 +1953,8 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     capability: capabilityName,
     sourceHub: sourceHub,
     destHub: destHub,
+    sourceAgent: sourceAgentName,
+    destAgent: destAgentName,
     maxOpacity: 0.8,
     lifetime: 8000, // 8 seconds to see full web routing
     startTime: performance.now()
