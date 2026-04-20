@@ -803,9 +803,13 @@ const CONSTRAINT_CONFIG = {
   // System
   nodeCount: 200,          // Number of nodes
   connectionDistance: 1.2, // Distance to create connections
-  springStrength: 0.05,    // Spring force strength
-  damping: 0.98,          // Velocity damping (0-1)
+  springStrength: 0.05,    // Spring force strength (will be reduced after intro)
+  damping: 0.98,          // Velocity damping (0-1, will be increased after intro)
   nodeSize: 0.02,         // Visual node size
+  
+  // Post-intro stability
+  stableSpringStrength: 0.02, // Reduced spring strength after intro
+  stableDamping: 0.95         // Increased damping after intro for stillness
   
   // Rendering
   reflectedGround: true,   // Ground reflection
@@ -875,8 +879,7 @@ function buildCentralNexus() {
         constraints.push({
           nodeA: i,
           nodeB: j,
-          restLength: distance,
-          strength: CONSTRAINT_CONFIG.springStrength
+          restLength: distance
         });
       }
     }
@@ -942,6 +945,10 @@ function buildCentralNexus() {
     constraintGroup.add(ground);
   }
   
+  // Initial dramatic scale - starts huge and shrinks down
+  const initialScale = 15.0; // Start 15x larger than normal
+  constraintGroup.scale.setScalar(initialScale);
+  
   scene.add(constraintGroup);
   
   // Store references for animation and mouse interaction
@@ -953,7 +960,14 @@ function buildCentralNexus() {
     constraintLines: constraintLines,
     mousePosition: new THREE.Vector3(),
     raycaster: new THREE.Raycaster(),
-    mouse: new THREE.Vector2()
+    mouse: new THREE.Vector2(),
+    
+    // Animation state
+    startTime: performance.now(),
+    introAnimation: true,
+    initialScale: initialScale,
+    targetScale: 1.0,
+    introDuration: 1300 // 1.3 seconds
   };
 }
 
@@ -1035,6 +1049,28 @@ function animate() {
   // Animate constraint network physics
   if (window._constraintSystem) {
     const system = window._constraintSystem;
+    
+    // Handle intro animation - shrink from huge to normal size
+    if (system.introAnimation) {
+      const currentTime = performance.now();
+      const elapsedIntro = currentTime - system.startTime;
+      
+      if (elapsedIntro < system.introDuration) {
+        // Smooth easing from initial scale to target scale
+        const progress = elapsedIntro / system.introDuration;
+        const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
+        const currentScale = system.initialScale + (system.targetScale - system.initialScale) * easeOut;
+        system.group.scale.setScalar(currentScale);
+      } else {
+        // Animation complete - set final scale and switch to stable mode
+        system.group.scale.setScalar(system.targetScale);
+        system.introAnimation = false;
+        
+        // Make physics more stable/still after intro
+        CONSTRAINT_CONFIG.springStrength = CONSTRAINT_CONFIG.stableSpringStrength;
+        CONSTRAINT_CONFIG.damping = CONSTRAINT_CONFIG.stableDamping;
+      }
+    }
     const nodes = system.nodes;
     const constraints = system.constraints;
     
@@ -1078,7 +1114,7 @@ function animate() {
       
       if (distance > 0) {
         const difference = (constraint.restLength - distance) / distance;
-        const force = difference * constraint.strength;
+        const force = difference * CONSTRAINT_CONFIG.springStrength;
         
         const offsetX = dx * force * 0.5;
         const offsetY = dy * force * 0.5;
