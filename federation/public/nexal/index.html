@@ -518,6 +518,8 @@ async function loadAgentsAndBuild() {
       agents = meshData.agents;
       // Store mesh data globally for data highways
       window._meshData = meshData;
+      console.log('Mesh data loaded:', meshData.agents.length, 'agents,', 
+                  meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
     }
   } catch (e) {
     console.log('Using demo agents (API offline)');
@@ -1124,8 +1126,12 @@ function updateStatusPanel(agents) {
 }
 
 // Animation loop
+// Global frame counter for debugging
+let animationFrame = 0;
+
 function animate() {
   requestAnimationFrame(animate);
+  animationFrame++;
   
   const elapsed = performance.now() / 1000;
   
@@ -1707,18 +1713,37 @@ function animate() {
 
 function animateDataHighways(elapsed) {
   const highways = window._dataHighways;
-  if (!highways || !window._meshData || !window._webGroup) return;
+  if (!highways) {
+    console.log('Data highways: No highway system');
+    return;
+  }
+  if (!window._meshData) {
+    console.log('Data highways: No mesh data available');
+    return;
+  }
+  if (!window._webGroup) {
+    console.log('Data highways: No web group');
+    return;
+  }
   
   const currentTime = performance.now();
   
-  // Create new data pulses based on capability pressure (every 2 seconds)
-  if (currentTime - highways.lastPulseTime > 2000) {
+  // Create new data pulses based on capability pressure (every 500ms for testing)
+  if (currentTime - highways.lastPulseTime > 500) {
     highways.lastPulseTime = currentTime;
+    
+    console.log('Data highways: Checking for capabilities...', window._meshData.darkCircles ? window._meshData.darkCircles.length : 'undefined');
     
     // Find high-pressure capabilities from mesh data
     const highPressureCapabilities = window._meshData.darkCircles
       ? window._meshData.darkCircles.filter(cap => cap.pressure > 0.3)
       : [];
+    
+    console.log('Data highways: Found', highPressureCapabilities.length, 'high-pressure capabilities');
+    
+    // TEST: Create a visible test pulse regardless of data
+    console.log('Data highways: Creating test pulse');
+    createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'test-capability');
     
     // Create pulses for each high-pressure capability
     highPressureCapabilities.forEach(capability => {
@@ -1732,6 +1757,7 @@ function animateDataHighways(elapsed) {
         const sourceHub = hubPressures[0][0];
         const destHub = hubPressures[1][0];
         
+        console.log(`Data highway: Creating pulse ${capability.name} (${capability.pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
         createDataPulse(sourceHub, destHub, color, capability.pressure, capability.name);
       }
     });
@@ -1747,8 +1773,14 @@ function animateDataHighways(elapsed) {
       if (position && pulse.mesh) {
         pulse.mesh.position.copy(position);
         
+        // Debug position every 30 frames for first few pulses
+        if (animationFrame % 30 === 0 && highways.pulses.indexOf(pulse) < 3) {
+          console.log(`Pulse ${pulse.capability} at progress ${pulse.progress.toFixed(2)} position:`, 
+                     position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1));
+        }
+        
         // Light up web segments near pulse
-        lightUpWebSegments(position, color, pulse.intensity);
+        lightUpWebSegments(position, pulse.color, pulse.intensity);
       }
       return true; // Keep pulse
     } else {
@@ -1783,15 +1815,16 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   const highways = window._dataHighways;
   if (!highways.hubZones[sourceHub] || !highways.hubZones[destHub]) return;
   
-  // Create pulse mesh - glowing sphere
-  const pulseGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+  // Create pulse mesh - glowing sphere (very large and bright for visibility)
+  const pulseGeometry = new THREE.SphereGeometry(0.5, 16, 16); // Even larger
   const pulseMaterial = new THREE.MeshBasicMaterial({
     color: color,
-    transparent: true,
-    opacity: 0.8,
+    transparent: false, // No transparency
     emissive: color,
-    emissiveIntensity: 0.6
+    emissiveIntensity: 2.0 // Super bright
   });
+  
+  console.log(`Creating pulse mesh with color:`, color.toString(16), 'at position will be calculated');
   const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
   
   // Add to web group
