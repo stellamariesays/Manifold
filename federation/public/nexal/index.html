@@ -296,6 +296,12 @@
       #scene {
         touch-action: manipulation;
       }
+      
+      /* Mobile brightness enhancement - global brightness boost */
+      #scene {
+        filter: brightness(1.4) contrast(1.2);
+        -webkit-filter: brightness(1.4) contrast(1.2);
+      }
     }
 
     /* For very small mobile devices */
@@ -303,6 +309,12 @@
       /* Ensure minimal UI interference */
       #hud {
         display: none;
+      }
+      
+      /* Extra brightness boost for small screens */
+      #scene {
+        filter: brightness(1.6) contrast(1.3);
+        -webkit-filter: brightness(1.6) contrast(1.3);
       }
     }
   </style>
@@ -526,19 +538,28 @@ function init() {
   // Store controls globally for animation loop
   window.cameraControls = controls;
   
-  // Lighting - High contrast white lighting against black background
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2); // Pure white ambient, lower intensity
+  // Mobile detection for enhanced brightness
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                   || window.innerWidth <= 768;
+  const mobileBrightnessBoost = isMobile ? 2.0 : 1.0; // 2x brighter on mobile
+  window.isMobile = isMobile;
+  window.mobileBrightnessBoost = mobileBrightnessBoost;
+  
+  console.log(`Mobile device detected: ${isMobile}, brightness boost: ${mobileBrightnessBoost}x`);
+  
+  // Lighting - High contrast white lighting against black background (mobile-enhanced)
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2 * mobileBrightnessBoost); // Enhanced ambient on mobile
   scene.add(ambientLight);
   
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Bright white directional
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2 * mobileBrightnessBoost); // Enhanced directional on mobile
   directionalLight.position.set(10, 10, 5);
   directionalLight.castShadow = true;
   directionalLight.shadow.mapSize.width = 2048;
   directionalLight.shadow.mapSize.height = 2048;
   scene.add(directionalLight);
   
-  // Add second directional light from opposite side for better contrast
-  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6); // Secondary white light
+  // Add second directional light from opposite side for better contrast (mobile-enhanced)
+  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6 * mobileBrightnessBoost); // Enhanced secondary on mobile
   directionalLight2.position.set(-10, -10, -5);
   scene.add(directionalLight2);
   
@@ -758,10 +779,10 @@ function buildAgentTopologies(agents) {
       agent.topologyType = 'mobiusStrip';
     }
     
-    // Main form - much brighter for high contrast
+    // Main form - much brighter for high contrast (mobile-enhanced)
     const formMat = new THREE.MeshPhongMaterial({
       color: 0xcccccc, // Bright light gray base
-      emissive: new THREE.Color(hubColor).multiplyScalar(0.15), // 5x brighter emissive 
+      emissive: new THREE.Color(hubColor).multiplyScalar(0.15 * window.mobileBrightnessBoost), // Enhanced emissive on mobile
       transparent: true,
       opacity: 0.8, // Slightly more opaque
       side: THREE.DoubleSide,
@@ -782,12 +803,12 @@ function buildAgentTopologies(agents) {
     const wfMesh = new THREE.Mesh(formGeo, wfMat);
     group.add(wfMesh);
     
-    // Central core
+    // Central core (mobile-enhanced)
     const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
     const coreMat = new THREE.MeshPhongMaterial({
       color: hubColor,
       emissive: hubColor,
-      emissiveIntensity: 0.6,
+      emissiveIntensity: 0.6 * window.mobileBrightnessBoost, // Enhanced core glow on mobile
     });
     const core = new THREE.Mesh(coreGeo, coreMat);
     group.add(core);
@@ -854,7 +875,7 @@ function buildAgentTopologies(agents) {
     const hubMarkerMat = new THREE.MeshPhongMaterial({
       color: hubColor,
       emissive: hubColor,
-      emissiveIntensity: 0.8, // Much brighter hub glow
+      emissiveIntensity: 0.8 * window.mobileBrightnessBoost, // Enhanced hub glow on mobile
       transparent: true,
       opacity: 0.9, // More solid hub markers
     });
@@ -1026,7 +1047,7 @@ function buildCentralNexus() {
   const nodeMaterial = new THREE.MeshPhongMaterial({
     color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
     emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x222222 : 0x220044,
-    emissiveIntensity: CONSTRAINT_CONFIG.whiteNodes ? 0.1 : 0.1,
+    emissiveIntensity: (CONSTRAINT_CONFIG.whiteNodes ? 0.1 : 0.1) * (window.mobileBrightnessBoost || 1.0), // Enhanced on mobile
     transparent: true,
     opacity: CONSTRAINT_CONFIG.nodeOpacity,
   });
@@ -2039,7 +2060,7 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     transparent: true,
     opacity: 0.95,
     emissive: new THREE.Color(color),
-    emissiveIntensity: 0.8  // Brighter since it's the only visible element
+    emissiveIntensity: 0.8 * (window.mobileBrightnessBoost || 1.0)  // Enhanced brightness on mobile
   });
   
   const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
@@ -2206,7 +2227,7 @@ function lightUpWebSegments(position, color, intensity) {
       material.color.setHex(color);
       material.opacity = Math.min(0.8, 0.3 + intensity * 0.5);
       material.emissive.setHex(color);
-      material.emissiveIntensity = intensity * 0.3;
+      material.emissiveIntensity = intensity * 0.3 * (window.mobileBrightnessBoost || 1.0); // Enhanced on mobile
     } else {
       console.log('Material properties not available for web segment lighting');
     }
