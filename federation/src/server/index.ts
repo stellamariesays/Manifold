@@ -177,6 +177,7 @@ export class ManifoldServer extends EventEmitter {
       hub: this.hub,
       port: this.config.restPort,
       debug: this.config.debug,
+      apiKey: this.config.security?.apiKey ?? undefined,
     })
 
     this.taskRouter = new TaskRouter({
