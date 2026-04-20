@@ -2056,22 +2056,29 @@ function lightUpWebSegments(position, color, intensity) {
     
     // Apply lighting effect
     const material = closestRing.material;
-    material.color.setHex(color);
-    material.opacity = Math.min(0.8, 0.3 + intensity * 0.5);
-    material.emissive.setHex(color);
-    material.emissiveIntensity = intensity * 0.3;
+    if (material && material.color && material.emissive) {
+      material.color.setHex(color);
+      material.opacity = Math.min(0.8, 0.3 + intensity * 0.5);
+      material.emissive.setHex(color);
+      material.emissiveIntensity = intensity * 0.3;
+    } else {
+      console.log('Material properties not available for web segment lighting');
+    }
   }
 }
 
 function resetWebSegmentColor(segmentId) {
   const highways = window._dataHighways;
   const activity = highways.segmentActivity.get(segmentId);
-  if (activity && activity.ring) {
-    // Reset to default web colors
-    activity.ring.material.color.setHex(0x2a4a6a);
-    activity.ring.material.opacity = 0.3;
-    activity.ring.material.emissive.setHex(0x000000);
-    activity.ring.material.emissiveIntensity = 0;
+  if (activity && activity.ring && activity.ring.material) {
+    const material = activity.ring.material;
+    // Reset to default web colors with safety checks
+    if (material.color && material.emissive) {
+      material.color.setHex(0x2a4a6a);
+      material.opacity = 0.3;
+      material.emissive.setHex(0x000000);
+      material.emissiveIntensity = 0;
+    }
   }
 }
 
