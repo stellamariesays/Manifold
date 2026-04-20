@@ -790,103 +790,171 @@ function getHubDescription(hubName) {
   return descriptions[hubName] || 'Unknown hub configuration.';
 }
 
+// ──────── CONSTRAINT SYSTEM PARAMETERS ────────────────────────
+// Easy parameter adjustment - modify these values to iterate on the system
+const CONSTRAINT_CONFIG = {
+  // Motion
+  constraintRatio: 0,      // 0-1, higher = stronger constraints
+  followMouse: true,       // Mouse interaction
+  whiteNodes: true,        // Node color scheme
+  mouseRadius: 2.0,        // Mouse influence radius
+  mouseForce: 0.8,         // Mouse force strength
+  
+  // System
+  nodeCount: 200,          // Number of nodes
+  connectionDistance: 1.2, // Distance to create connections
+  springStrength: 0.05,    // Spring force strength
+  damping: 0.98,          // Velocity damping (0-1)
+  nodeSize: 0.02,         // Visual node size
+  
+  // Rendering
+  reflectedGround: true,   // Ground reflection
+  whiteTheme: false,       // Color scheme
+  nodeOpacity: 0.8,        // Node transparency
+  lineOpacity: 0.3,        // Connection line transparency
+  
+  // Post-Processing (for future)
+  fxaa: false,            // Anti-aliasing
+  motionBlur: false,      // Motion blur effect
+  bloom: false            // Bloom effect
+};
+
 function buildCentralNexus() {
-  // Sophia's Realm: The Fog with Dark Spheres
-  const fogGroup = new THREE.Group();
-  fogGroup.position.set(0, 1, 0);
+  // Sophia's Realm: Dynamic Constraint Network
+  const constraintGroup = new THREE.Group();
+  constraintGroup.position.set(0, 1, 0);
+  // Initialize constraint network nodes
+  const nodes = [];
+  const constraints = [];
   
-  // Create particle cloud points for "thefog"
-  const particleCount = 4000;
-  const positions = new Float32Array(particleCount * 3);
-  const colors = new Float32Array(particleCount * 3);
-  const sizes = new Float32Array(particleCount);
-  
-  // Generate particles in spherical cloud formation
-  for (let i = 0; i < particleCount; i++) {
-    const i3 = i * 3;
-    
-    // Spherical distribution with some randomness
-    const radius = 1.5 + Math.random() * 2.0;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(Math.random() * 2 - 1);
-    
-    positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
-    positions[i3 + 1] = radius * Math.cos(phi);
-    positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
-    
-    // Fog colors: purples, violets, dark blues (brighter)
-    const intensity = 0.6 + Math.random() * 0.8;
-    colors[i3] = 0.4 * intensity;     // Red
-    colors[i3 + 1] = 0.0 * intensity; // Green  
-    colors[i3 + 2] = 0.8 * intensity; // Blue
-    
-    sizes[i] = 0.5 + Math.random() * 1.5;
-  }
-  
-  const particlesGeometry = new THREE.BufferGeometry();
-  particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-  
-  const particlesMaterial = new THREE.PointsMaterial({
-    size: 0.12,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.8,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  
-  const particleCloud = new THREE.Points(particlesGeometry, particlesMaterial);
-  fogGroup.add(particleCloud);
-  
-  // Create "darkspheres" - small dark orbs floating within the fog
-  const darkSphereCount = 12;
-  const darkSpheres = [];
-  
-  for (let i = 0; i < darkSphereCount; i++) {
-    const darkGeo = new THREE.SphereGeometry(0.08 + Math.random() * 0.12, 8, 8);
-    const darkMat = new THREE.MeshPhongMaterial({
-      color: 0x110022,
-      emissive: 0x440066,
-      emissiveIntensity: 0.4,
-      transparent: true,
-      opacity: 0.8,
-    });
-    
-    const darkSphere = new THREE.Mesh(darkGeo, darkMat);
-    
-    // Position within the fog cloud
-    const radius = 0.8 + Math.random() * 1.5;
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(Math.random() * 2 - 1);
-    
-    darkSphere.position.set(
-      radius * Math.sin(phi) * Math.cos(theta),
-      radius * Math.cos(phi) * 0.5,
-      radius * Math.sin(phi) * Math.sin(theta)
-    );
-    
-    // Store animation params
-    darkSphere.userData = {
-      originalPos: darkSphere.position.clone(),
-      floatSpeed: 0.5 + Math.random() * 0.5,
-      floatRadius: 0.2 + Math.random() * 0.3,
-      rotationSpeed: (Math.random() - 0.5) * 0.02,
-      phaseOffset: Math.random() * Math.PI * 2,
+  // Create nodes in organic formation
+  for (let i = 0; i < CONSTRAINT_CONFIG.nodeCount; i++) {
+    // Create node with physics properties
+    const node = {
+      // Position
+      x: (Math.random() - 0.5) * 4,
+      y: (Math.random() - 0.5) * 3,
+      z: (Math.random() - 0.5) * 4,
+      
+      // Velocity
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      
+      // Original position (for constraints)
+      ox: 0,
+      oy: 0,
+      oz: 0,
+      
+      // Properties
+      mass: 1,
+      fixed: false,
+      id: i
     };
     
-    darkSpheres.push(darkSphere);
-    fogGroup.add(darkSphere);
+    // Set original position
+    node.ox = node.x;
+    node.oy = node.y;
+    node.oz = node.z;
+    
+    nodes.push(node);
   }
   
-  scene.add(fogGroup);
+  // Create constraints between nearby nodes
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const nodeA = nodes[i];
+      const nodeB = nodes[j];
+      
+      const dx = nodeA.x - nodeB.x;
+      const dy = nodeA.y - nodeB.y;
+      const dz = nodeA.z - nodeB.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      
+      if (distance < CONSTRAINT_CONFIG.connectionDistance) {
+        constraints.push({
+          nodeA: i,
+          nodeB: j,
+          restLength: distance,
+          strength: CONSTRAINT_CONFIG.springStrength
+        });
+      }
+    }
+  }
   
-  // Store references for animation
-  window._centralSphere = fogGroup;
-  window._particleCloud = particleCloud;
-  window._darkSpheres = darkSpheres;
-  window._fogParticles = positions;
+  // Create visual nodes
+  const nodeGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.nodeSize, 8, 8);
+  const nodeMaterial = new THREE.MeshPhongMaterial({
+    color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
+    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x222222 : 0x220044,
+    emissiveIntensity: 0.1,
+    transparent: true,
+    opacity: CONSTRAINT_CONFIG.nodeOpacity,
+  });
+  
+  const nodeInstances = [];
+  nodes.forEach((node, i) => {
+    const nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial.clone());
+    nodeMesh.position.set(node.x, node.y, node.z);
+    nodeInstances.push(nodeMesh);
+    constraintGroup.add(nodeMesh);
+  });
+  
+  // Create constraint lines
+  const lineGeometry = new THREE.BufferGeometry();
+  const linePositions = new Float32Array(constraints.length * 6); // 2 points per constraint * 3 coords
+  
+  const lineMaterial = new THREE.LineBasicMaterial({
+    color: CONSTRAINT_CONFIG.whiteTheme ? 0xffffff : 0x4400aa,
+    transparent: true,
+    opacity: CONSTRAINT_CONFIG.lineOpacity,
+  });
+  
+  constraints.forEach((constraint, i) => {
+    const nodeA = nodes[constraint.nodeA];
+    const nodeB = nodes[constraint.nodeB];
+    const i6 = i * 6;
+    
+    linePositions[i6] = nodeA.x;
+    linePositions[i6 + 1] = nodeA.y;
+    linePositions[i6 + 2] = nodeA.z;
+    linePositions[i6 + 3] = nodeB.x;
+    linePositions[i6 + 4] = nodeB.y;
+    linePositions[i6 + 5] = nodeB.z;
+  });
+  
+  lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+  const constraintLines = new THREE.LineSegments(lineGeometry, lineMaterial);
+  constraintGroup.add(constraintLines);
+  
+  // Create ground reflection if enabled
+  if (CONSTRAINT_CONFIG.reflectedGround) {
+    const groundGeometry = new THREE.PlaneGeometry(20, 20);
+    const groundMaterial = new THREE.MeshPhongMaterial({
+      color: 0x001122,
+      transparent: true,
+      opacity: 0.1,
+      side: THREE.DoubleSide,
+    });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -2;
+    constraintGroup.add(ground);
+  }
+  
+  scene.add(constraintGroup);
+  
+  // Store references for animation and mouse interaction
+  window._constraintSystem = {
+    group: constraintGroup,
+    nodes: nodes,
+    constraints: constraints,
+    nodeInstances: nodeInstances,
+    constraintLines: constraintLines,
+    mousePosition: new THREE.Vector3(),
+    raycaster: new THREE.Raycaster(),
+    mouse: new THREE.Vector2()
+  };
 }
 
 function updateAgentsList(agents) {
@@ -964,60 +1032,109 @@ function animate() {
     window._centralSphere.rotation.x += 0.001;
   }
   
-  // Animate particle cloud
-  if (window._particleCloud && window._fogParticles) {
-    const positions = window._particleCloud.geometry.attributes.position.array;
+  // Animate constraint network physics
+  if (window._constraintSystem) {
+    const system = window._constraintSystem;
+    const nodes = system.nodes;
+    const constraints = system.constraints;
     
-    // Wave motion through fog particles (half speed)
-    for (let i = 0; i < positions.length; i += 3) {
-      const originalRadius = Math.sqrt(
-        window._fogParticles[i] * window._fogParticles[i] +
-        window._fogParticles[i + 1] * window._fogParticles[i + 1] +
-        window._fogParticles[i + 2] * window._fogParticles[i + 2]
-      );
-      
-      const wave1 = Math.sin(elapsed * 0.25 + i * 0.01) * 0.1;
-      const wave2 = Math.cos(elapsed * 0.15 + i * 0.02) * 0.05;
-      let disturbance = 1 + wave1 + wave2;
-      
-      // Constrain most particles to stay within Klein bottle orbit (~6-8 radius)
-      // Only allow 10% of particles to extend beyond this boundary
-      const particleIndex = i / 3;
-      const isOutlier = (particleIndex % 10) === 0; // Every 10th particle can be outlier
-      const maxRadius = isOutlier ? 10.0 : 6.5; // Outliers can reach 10, others max 6.5
-      
-      const newRadius = originalRadius * disturbance;
-      if (newRadius > maxRadius) {
-        disturbance = maxRadius / originalRadius;
-      }
-      
-      positions[i] = window._fogParticles[i] * disturbance;
-      positions[i + 1] = window._fogParticles[i + 1] * disturbance;
-      positions[i + 2] = window._fogParticles[i + 2] * disturbance;
+    // Mouse interaction (if enabled)
+    if (CONSTRAINT_CONFIG.followMouse && system.mousePosition) {
+      // Apply mouse forces to nearby nodes
+      nodes.forEach(node => {
+        const dx = system.mousePosition.x - node.x;
+        const dy = system.mousePosition.y - node.y;
+        const dz = system.mousePosition.z - node.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        if (distance < CONSTRAINT_CONFIG.mouseRadius && distance > 0.1) {
+          const force = CONSTRAINT_CONFIG.mouseForce / (distance * distance + 1);
+          node.vx += dx * force * 0.01;
+          node.vy += dy * force * 0.01;
+          node.vz += dz * force * 0.01;
+        }
+      });
     }
     
-    window._particleCloud.geometry.attributes.position.needsUpdate = true;
-  }
-  
-  // Animate dark spheres floating within the fog
-  if (window._darkSpheres) {
-    window._darkSpheres.forEach((sphere, idx) => {
-      const userData = sphere.userData;
-      const time = elapsed * userData.floatSpeed + userData.phaseOffset;
+    // Apply constraint forces
+    constraints.forEach(constraint => {
+      const nodeA = nodes[constraint.nodeA];
+      const nodeB = nodes[constraint.nodeB];
       
-      // Floating motion
-      sphere.position.x = userData.originalPos.x + Math.sin(time) * userData.floatRadius;
-      sphere.position.y = userData.originalPos.y + Math.cos(time * 1.1) * userData.floatRadius * 0.5;
-      sphere.position.z = userData.originalPos.z + Math.sin(time * 0.8) * userData.floatRadius;
+      const dx = nodeB.x - nodeA.x;
+      const dy = nodeB.y - nodeA.y;
+      const dz = nodeB.z - nodeA.z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       
-      // Slow rotation
-      sphere.rotation.y += userData.rotationSpeed;
-      sphere.rotation.x += userData.rotationSpeed * 0.7;
-      
-      // Subtle pulsing
-      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.1;
-      sphere.scale.setScalar(pulse);
+      if (distance > 0) {
+        const difference = (constraint.restLength - distance) / distance;
+        const force = difference * constraint.strength;
+        
+        const offsetX = dx * force * 0.5;
+        const offsetY = dy * force * 0.5;
+        const offsetZ = dz * force * 0.5;
+        
+        nodeA.vx -= offsetX;
+        nodeA.vy -= offsetY;
+        nodeA.vz -= offsetZ;
+        
+        nodeB.vx += offsetX;
+        nodeB.vy += offsetY;
+        nodeB.vz += offsetZ;
+      }
     });
+    
+    // Update node positions
+    nodes.forEach((node, i) => {
+      if (!node.fixed) {
+        // Apply constraint ratio (pulls back to original position)
+        if (CONSTRAINT_CONFIG.constraintRatio > 0) {
+          const pullX = (node.ox - node.x) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
+          const pullY = (node.oy - node.y) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
+          const pullZ = (node.oz - node.z) * CONSTRAINT_CONFIG.constraintRatio * 0.01;
+          
+          node.vx += pullX;
+          node.vy += pullY;
+          node.vz += pullZ;
+        }
+        
+        // Add slight downward gravity
+        node.vy -= 0.001;
+        
+        // Update position
+        node.x += node.vx;
+        node.y += node.vy;
+        node.z += node.vz;
+        
+        // Apply damping
+        node.vx *= CONSTRAINT_CONFIG.damping;
+        node.vy *= CONSTRAINT_CONFIG.damping;
+        node.vz *= CONSTRAINT_CONFIG.damping;
+        
+        // Update visual node position
+        if (system.nodeInstances[i]) {
+          system.nodeInstances[i].position.set(node.x, node.y, node.z);
+        }
+      }
+    });
+    
+    // Update constraint lines
+    if (system.constraintLines) {
+      const linePositions = system.constraintLines.geometry.attributes.position.array;
+      constraints.forEach((constraint, i) => {
+        const nodeA = nodes[constraint.nodeA];
+        const nodeB = nodes[constraint.nodeB];
+        const i6 = i * 6;
+        
+        linePositions[i6] = nodeA.x;
+        linePositions[i6 + 1] = nodeA.y;
+        linePositions[i6 + 2] = nodeA.z;
+        linePositions[i6 + 3] = nodeB.x;
+        linePositions[i6 + 4] = nodeB.y;
+        linePositions[i6 + 5] = nodeB.z;
+      });
+      system.constraintLines.geometry.attributes.position.needsUpdate = true;
+    }
   }
   
   // Animate spider web waves
@@ -1089,6 +1206,30 @@ window.addEventListener('click', (event) => {
     }
   } else {
     hideDetailPanel();
+  }
+});
+
+// Mouse movement tracking for constraint system
+window.addEventListener('mousemove', (event) => {
+  if (window._constraintSystem && CONSTRAINT_CONFIG.followMouse) {
+    const system = window._constraintSystem;
+    
+    // Convert mouse coordinates to normalized device coordinates
+    system.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    system.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    // Raycast from camera through mouse position
+    system.raycaster.setFromCamera(system.mouse, camera);
+    
+    // Create invisible plane at center for mouse intersection
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const intersectPoint = new THREE.Vector3();
+    
+    if (system.raycaster.ray.intersectPlane(plane, intersectPoint)) {
+      system.mousePosition.copy(intersectPoint);
+      // Offset to constraint group position
+      system.mousePosition.add(system.group.position);
+    }
   }
 });
 
