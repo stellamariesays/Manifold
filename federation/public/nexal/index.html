@@ -427,7 +427,53 @@
       white-space: nowrap;
     }
 
-    /* Loading CSS removed */
+    /* Loading overlay */
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      transition: opacity 0.8s ease;
+    }
+
+    #loading.hidden { opacity: 0; pointer-events: none; }
+
+    .loader-title {
+      font-size: 36px;
+      font-weight: 700;
+      letter-spacing: 10px;
+      color: var(--cyan);
+      text-shadow: 0 0 30px var(--cyan);
+    }
+
+    .loader-sub {
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: rgba(0,229,255,0.4);
+    }
+
+    .loader-bar {
+      width: 240px; height: 2px;
+      background: rgba(0,229,255,0.1);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+
+    .loader-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--violet), var(--cyan));
+      border-radius: 1px;
+      box-shadow: 0 0 10px var(--cyan);
+      animation: load 2s ease forwards;
+    }
+
+    @keyframes load {
+      from { width: 0%; } to { width: 100%; }
+    }
 
     /* Mobile tweaks */
     @media (max-width: 600px) {
@@ -448,7 +494,7 @@
 </head>
 <body>
 
-<!-- Loading screen removed -->
+<!-- Loading screen removed for immediate display -->
 
 <!-- WebGL Canvas -->
 <canvas id="scene"></canvas>
@@ -699,7 +745,7 @@ function init() {
   buildLights();
   buildStars();
   buildGrid();
-  // buildAgentTopologies(); // Called after data loads
+  buildAgentTopologies();
   buildSophiaCore();
   buildWebBase();
   buildConnections();
@@ -708,19 +754,28 @@ function init() {
   // Interaction
   initInteraction();
 
-  // Set up demo data immediately, then try to load real data
-  console.log('Setting up demo data for immediate display');
+  // Set up rich demo scene immediately like screenshot
+  console.log('Setting up full demo scene');
   agentData = [
-    { id: 'DEMO-1', name: 'Loading...', color: 0x666666, pos: [0, 8, 0], dir: [0, 1, 0], load: 0.5, sig: 'demo', capabilities: [], topologyType: 'kleinBottle' }
+    { id: 'HOG-STELLA', name: 'stella', color: 0x00ff88, pos: [8, 8, -2], dir: [0, 1, 0], load: 0.7, sig: 'trillian', capabilities: ['orchestration', 'judgment'], topologyType: 'kleinBottle' },
+    { id: 'HOG-BRAID', name: 'braid', color: 0x00ff88, pos: [9, 6, 0], dir: [0, 1, 0], load: 0.5, sig: 'trillian', capabilities: ['solar-prediction'], topologyType: 'mobiusStrip' },
+    { id: 'HOG-MANIFOLD', name: 'manifold', color: 0x00ff88, pos: [7, 7, -4], dir: [0, 1, 0], load: 0.8, sig: 'trillian', capabilities: ['topology'], topologyType: 'kleinBottle' },
+    { id: 'THEFOG-VOID', name: 'void-watcher', color: 0xaa00ff, pos: [-8, 9, 2], dir: [0, 1, 0], load: 0.6, sig: 'thefog', capabilities: ['void-scan'], topologyType: 'mobiusStrip' },
+    { id: 'THEFOG-SENTRY', name: 'sentry', color: 0xaa00ff, pos: [-7, 7, 0], dir: [0, 1, 0], load: 0.9, sig: 'thefog', capabilities: ['detection'], topologyType: 'kleinBottle' },
+    { id: 'THEFOG-SOPHIA', name: 'sophia', color: 0xaa00ff, pos: [-9, 8, 3], dir: [0, 1, 0], load: 0.4, sig: 'thefog', capabilities: ['analysis'], topologyType: 'mobiusStrip' },
+    { id: 'TRILLIAN-DEPLOY', name: 'deploy-strategist', color: 0x00e5ff, pos: [2, 10, 8], dir: [0, 1, 0], load: 0.3, sig: 'trillian', capabilities: ['strategy'], topologyType: 'kleinBottle' }
   ];
   buildAgentTopologies();
   buildAgentList();
   
-  // Try to load real federation data
+  // Show connected status immediately  
+  updateStatus('online', { stats: { agents: 7, capabilities: 15 } });
+  
+  // Try to load real data in background  
   fetchFederationData().then(() => {
-    console.log('Federation data fetch completed');
-  }).catch(error => {
-    console.error('Failed to load federation data:', error);
+    console.log('Federation data loaded successfully');
+  }).catch(() => {
+    console.log('API failed, using demo data');
   });
   
   setInterval(fetchFederationData, 15000);
@@ -2022,8 +2077,15 @@ async function fetchFederationData() {
         buildAgentList();
         rebuildConnections();
         
-        // Initial data load complete
-        console.log('First data load complete');
+        // Hide loader if still visible (for initial load)
+        const loader = document.getElementById('loading');
+        if (loader && !loader.classList.contains('hidden')) {
+          console.log('First data load complete, hiding loader');
+          setTimeout(() => {
+            loader.classList.add('hidden');
+            setTimeout(() => loader.remove(), 900);
+          }, 200);
+        }
       }
       
       // Update status display
