@@ -733,13 +733,36 @@ function buildAgentTopologies(agents) {
     const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
     hubMarker.position.set(center.x, center.y, center.z);
     
-    // Add subtle pulsing animation reference
-    hubMarker.userData = { hubName, isHubCenter: true };
+    // Add subtle pulsing animation reference and hub info
+    hubMarker.userData = { 
+      type: 'hub', 
+      hubName, 
+      isHubCenter: true,
+      hubInfo: {
+        name: hubName,
+        color: `#${hubColor.toString(16).padStart(6, '0')}`,
+        center: center,
+        description: getHubDescription(hubName)
+      }
+    };
+    
+    // Make hub markers clickable
+    clickableObjects.push(hubMarker);
     scene.add(hubMarker);
     
     // Store hub markers for potential animation
     agentGroups.push(hubMarker);
   });
+}
+
+function getHubDescription(hubName) {
+  const descriptions = {
+    'hog': 'Development & Monitoring Hub - System health, data detection, solar monitoring, and deployment management.',
+    'trillian': 'Guidance & Strategy Hub - Leadership, decision-making, manifold topology, and strategic coordination.',
+    'thefog': 'Mystical Computation Hub - Void scanning, deep analysis, and advanced computational research within Sophia\'s realm.',
+    'relay': 'Network Coordination Hub - Federation relay, communications, and inter-hub connectivity management.'
+  };
+  return descriptions[hubName] || 'Unknown hub configuration.';
 }
 
 function buildCentralNexus() {
@@ -1002,9 +1025,11 @@ window.addEventListener('click', (event) => {
     const obj = intersects[0].object;
     if (obj.userData && obj.userData.agent) {
       showAgentDetails(obj.userData.agent);
+    } else if (obj.userData && obj.userData.type === 'hub') {
+      showHubDetails(obj.userData.hubInfo);
     }
   } else {
-    hideAgentDetails();
+    hideDetailPanel();
   }
 });
 
@@ -1023,7 +1048,27 @@ function showAgentDetails(agent) {
     '<span style="color: #666;">No capabilities listed</span>';
 }
 
-function hideAgentDetails() {
+function showHubDetails(hubInfo) {
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('visible');
+  
+  // Use the same detail panel but populate with hub information
+  document.getElementById('detail-agent-name').textContent = `${hubInfo.name.toUpperCase()} HUB`;
+  document.getElementById('detail-agent-hub').textContent = `Type: Federation Hub`;
+  
+  // Show hub position instead of random messages
+  const pos = hubInfo.center;
+  document.getElementById('detail-messages').textContent = `${pos.x}, ${pos.y}, ${pos.z}`;
+  
+  // Show hub status
+  document.getElementById('detail-uptime').textContent = 'ACTIVE';
+  
+  // Show hub description as capabilities
+  const capsDiv = document.getElementById('detail-capabilities');
+  capsDiv.innerHTML = `<span style="color: ${hubInfo.color}; font-size: 11px; line-height: 1.4;">${hubInfo.description}</span>`;
+}
+
+function hideDetailPanel() {
   document.getElementById('detail-panel').classList.remove('visible');
 }
 
