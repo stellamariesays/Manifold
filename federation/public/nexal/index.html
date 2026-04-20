@@ -1087,12 +1087,12 @@ function animate() {
         // Make physics more stable/still after intro
         CONSTRAINT_CONFIG.springStrength = CONSTRAINT_CONFIG.stableSpringStrength;
         CONSTRAINT_CONFIG.damping = CONSTRAINT_CONFIG.stableDamping;
-      }
-      
-      // Enable mouse interaction after 2.2 seconds
-      if (!system.mouseInteractionEnabled && elapsedIntro >= system.mouseEnableTime) {
-        system.mouseInteractionEnabled = true;
-        console.log('Mouse interaction enabled');
+        
+        // Enable mouse interaction immediately after intro completes
+        if (!system.mouseInteractionEnabled) {
+          system.mouseInteractionEnabled = true;
+          console.log('Mouse interaction enabled after intro completion');
+        }
       }
     }
     const nodes = system.nodes;
@@ -1100,6 +1100,8 @@ function animate() {
     
     // Black hole mouse interaction (if enabled and after delay)
     if (CONSTRAINT_CONFIG.followMouse && system.mousePosition && system.mouseInteractionEnabled) {
+      let nodesAffected = 0;
+      
       // Create black hole effect - strong attractive force toward mouse
       nodes.forEach(node => {
         const dx = system.mousePosition.x - node.x;
@@ -1108,6 +1110,8 @@ function animate() {
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         
         if (distance < CONSTRAINT_CONFIG.mouseRadius && distance > 0.1) {
+          nodesAffected++;
+          
           // Strong attractive force (black hole effect)
           // Force increases as nodes get closer to the "event horizon"
           const eventHorizon = 0.5;
@@ -1124,6 +1128,11 @@ function animate() {
           node.vz += normalizedDz * force * 0.05;
         }
       });
+      
+      // Debug: Log affected nodes count every 60 frames
+      if (system.frameCount % 60 === 0 && nodesAffected > 0) {
+        console.log('Black hole affecting', nodesAffected, 'nodes');
+      }
     }
     
     // Apply constraint forces
@@ -1290,6 +1299,11 @@ window.addEventListener('click', (event) => {
 
 // Mouse movement tracking for constraint system
 window.addEventListener('mousemove', (event) => {
+  // Debug: Simple test that mouse events are firing (throttled)
+  if (window._constraintSystem && window._constraintSystem.frameCount % 120 === 0) {
+    console.log('Mouse event fired - system exists:', !!window._constraintSystem, 'enabled:', !!window._constraintSystem.mouseInteractionEnabled);
+  }
+  
   if (window._constraintSystem && CONSTRAINT_CONFIG.followMouse && window._constraintSystem.mouseInteractionEnabled) {
     const system = window._constraintSystem;
     
@@ -1313,8 +1327,15 @@ window.addEventListener('mousemove', (event) => {
         if (system.frameCount && system.frameCount % 60 === 0) {
           console.log('Mouse black hole position:', system.mousePosition.x.toFixed(2), system.mousePosition.y.toFixed(2), system.mousePosition.z.toFixed(2));
         }
+      } else if (system.frameCount && system.frameCount % 120 === 0) {
+        console.log('Mouse raycast not intersecting plane');
       }
+    } else if (system.frameCount && system.frameCount % 120 === 0) {
+      console.log('No camera available for mouse tracking');
     }
+  } else if (window._constraintSystem && system.frameCount % 120 === 0) {
+    // Debug why mouse isn't being tracked
+    console.log('Mouse not tracked - followMouse:', CONSTRAINT_CONFIG.followMouse, 'enabled:', window._constraintSystem.mouseInteractionEnabled);
   }
 });
 
