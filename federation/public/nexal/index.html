@@ -361,6 +361,7 @@
 
 <script type="module">
 import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
 window.THREE = THREE;
 
 // ──────── GEOMETRY FUNCTIONS ────────────────────────────────────
@@ -466,6 +467,23 @@ function init() {
   // Camera position
   camera.position.set(0, 8, 20);
   camera.lookAt(0, 0, 0);
+  
+  // Camera controls
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 5;
+  controls.maxDistance = 50;
+  controls.minPolarAngle = 0;
+  controls.maxPolarAngle = Math.PI;
+  controls.autoRotate = false;
+  controls.enablePan = true;
+  controls.enableZoom = true;
+  controls.enableRotate = true;
+  
+  // Store controls globally for animation loop
+  window.cameraControls = controls;
   
   // Lighting
   const ambientLight = new THREE.AmbientLight(0x1a2a40, 0.4);
@@ -734,6 +752,11 @@ function animate() {
     const pulse = 1 + Math.sin(elapsed * 1.5) * 0.1;
     window._centralSphere.scale.setScalar(pulse);
     window._centralSphere.rotation.y += 0.01;
+  }
+  
+  // Update camera controls
+  if (window.cameraControls) {
+    window.cameraControls.update();
   }
   
   renderer.render(scene, camera);
