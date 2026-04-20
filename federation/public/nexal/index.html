@@ -718,7 +718,7 @@ function updateAgentsList(agents) {
     
     item.innerHTML = `
       <div class="agent-dot" style="background: ${hubColor}"></div>
-      <span class="agent-name">${agent.id}</span>
+      <span class="agent-name">${agent.name || agent.id}</span>
       <span class="agent-caps">${agent.capabilities ? agent.capabilities.length : 1} caps</span>
     `;
     
@@ -794,7 +794,7 @@ function showAgentDetails(agent) {
   const panel = document.getElementById('detail-panel');
   panel.classList.add('visible');
   
-  document.getElementById('detail-agent-name').textContent = agent.id;
+  document.getElementById('detail-agent-name').textContent = agent.name || agent.id;
   document.getElementById('detail-agent-hub').textContent = `Hub: ${agent.hub}`;
   document.getElementById('detail-messages').textContent = Math.floor(Math.random() * 999);
   document.getElementById('detail-uptime').textContent = '99%';
