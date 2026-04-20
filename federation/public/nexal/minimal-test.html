@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal 3D Test</title>
+  <style>
+    body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+    #scene { position: fixed; inset: 0; }
+    #debug { position: absolute; top: 10px; left: 10px; color: #0ff; font: 14px monospace; z-index: 100; }
+  </style>
+</head>
+<body>
+  <div id="debug">Loading Three.js test...</div>
+  <canvas id="scene"></canvas>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <script>
+    const debug = document.getElementById('debug');
+    
+    try {
+      debug.innerHTML = 'Creating scene...';
+      
+      // Basic Three.js setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('scene'), antialias: true });
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000510);
+      
+      debug.innerHTML = 'Adding cube...';
+      
+      // Simple cube
+      const geometry = new THREE.BoxGeometry(2, 2, 2);
+      const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00ffff, 
+        wireframe: true 
+      });
+      const cube = new THREE.Mesh(geometry, material);
+      scene.add(cube);
+      
+      debug.innerHTML = 'Adding lights...';
+      
+      // Basic lighting
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 5, 5);
+      scene.add(light);
+      
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+      scene.add(ambientLight);
+      
+      // Camera position
+      camera.position.set(0, 0, 5);
+      camera.lookAt(0, 0, 0);
+      
+      debug.innerHTML = 'Starting animation...';
+      
+      // Animation loop
+      let frame = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        frame++;
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.01;
+        
+        renderer.render(scene, camera);
+        
+        if (frame % 60 === 0) {
+          debug.innerHTML = `Frame ${frame} - Cube rotating`;
+        }
+      }
+      
+      // Handle resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      animate();
+      
+    } catch (error) {
+      debug.innerHTML = 'ERROR: ' + error.message;
+      console.error('Three.js error:', error);
+    }
+  </script>
+</body>
+</html>

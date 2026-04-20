@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal Network - Minimal Test</title>
+  <style>
+    body { margin: 0; background: #000510; overflow: hidden; font-family: monospace; }
+    #scene { position: fixed; inset: 0; }
+    #debug { 
+      position: absolute; top: 20px; left: 20px; 
+      color: #00e5ff; font-size: 16px; z-index: 100;
+      background: rgba(0,5,16,0.8); padding: 10px; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="debug">MINIMAL TEST: Loading...</div>
+  <canvas id="scene"></canvas>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <script>
+    const debug = document.getElementById('debug');
+    
+    try {
+      debug.innerHTML = 'MINIMAL TEST: Creating scene...';
+      
+      // Basic setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ 
+        canvas: document.getElementById('scene'), 
+        antialias: true 
+      });
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000510);
+      
+      debug.innerHTML = 'MINIMAL TEST: Adding objects...';
+      
+      // Simple glowing cube - no complex geometry
+      const cubeGeo = new THREE.BoxGeometry(2, 2, 2);
+      const cubeMat = new THREE.MeshPhongMaterial({ 
+        color: 0x00ffff,
+        emissive: 0x004444,
+        emissiveIntensity: 0.5,
+        wireframe: false
+      });
+      const cube = new THREE.Mesh(cubeGeo, cubeMat);
+      scene.add(cube);
+      
+      // Simple sphere
+      const sphereGeo = new THREE.SphereGeometry(1, 16, 16);
+      const sphereMat = new THREE.MeshPhongMaterial({ 
+        color: 0xff4400,
+        emissive: 0x441100,
+        emissiveIntensity: 0.3,
+      });
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+      sphere.position.set(4, 0, 0);
+      scene.add(sphere);
+      
+      // Basic lighting
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(5, 5, 5);
+      scene.add(light);
+      
+      const ambientLight = new THREE.AmbientLight(0x333366, 0.4);
+      scene.add(ambientLight);
+      
+      // Camera position
+      camera.position.set(0, 0, 8);
+      camera.lookAt(0, 0, 0);
+      
+      debug.innerHTML = 'MINIMAL TEST: Starting animation...';
+      
+      // Simple animation
+      let frame = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        frame++;
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.02;
+        
+        sphere.rotation.z += 0.015;
+        sphere.position.y = Math.sin(frame * 0.02) * 0.5;
+        
+        renderer.render(scene, camera);
+        
+        if (frame % 60 === 0) {
+          debug.innerHTML = `MINIMAL TEST: Frame ${frame} - Animating successfully! ✓`;
+        }
+      }
+      
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      animate();
+      
+    } catch (error) {
+      debug.innerHTML = 'MINIMAL TEST ERROR: ' + error.message;
+      console.error('Three.js error:', error);
+    }
+  </script>
+</body>
+</html>
