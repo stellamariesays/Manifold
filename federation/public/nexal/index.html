@@ -946,8 +946,9 @@ function buildCentralNexus() {
   }
   
   // Initial dramatic scale - starts huge and shrinks down
-  const initialScale = 15.0; // Start 15x larger than normal
+  const initialScale = 25.0; // Start 25x larger than normal (more dramatic)
   constraintGroup.scale.setScalar(initialScale);
+  console.log('Constraint group initialized with scale:', initialScale);
   
   scene.add(constraintGroup);
   
@@ -963,7 +964,7 @@ function buildCentralNexus() {
     mouse: new THREE.Vector2(),
     
     // Animation state
-    startTime: performance.now(),
+    startTime: null, // Will be set when animation loop first runs
     introAnimation: true,
     initialScale: initialScale,
     targetScale: 1.0,
@@ -1053,6 +1054,13 @@ function animate() {
     // Handle intro animation - shrink from huge to normal size
     if (system.introAnimation) {
       const currentTime = performance.now();
+      
+      // Initialize start time on first frame
+      if (system.startTime === null) {
+        system.startTime = currentTime;
+        console.log('Starting intro animation at scale:', system.initialScale);
+      }
+      
       const elapsedIntro = currentTime - system.startTime;
       
       if (elapsedIntro < system.introDuration) {
@@ -1065,6 +1073,7 @@ function animate() {
         // Animation complete - set final scale and switch to stable mode
         system.group.scale.setScalar(system.targetScale);
         system.introAnimation = false;
+        console.log('Intro animation complete - switching to stable mode');
         
         // Make physics more stable/still after intro
         CONSTRAINT_CONFIG.springStrength = CONSTRAINT_CONFIG.stableSpringStrength;
