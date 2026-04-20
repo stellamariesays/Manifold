@@ -1739,8 +1739,8 @@ function animateDataHighways(elapsed) {
   
   const currentTime = performance.now();
   
-  // Create new neural connections based on capability pressure (every 3 seconds)
-  if (currentTime - highways.lastPulseTime > 3000) {
+  // Create new neural connections based on capability pressure (every 2 seconds for more activity)
+  if (currentTime - highways.lastPulseTime > 2000) {
     highways.lastPulseTime = currentTime;
     
     // Find high-pressure capabilities from mesh data
@@ -1771,6 +1771,29 @@ function animateDataHighways(elapsed) {
     console.log(`Neural highways: ${highways.connections.length} active connections`);
   }
   
+  // Check for pulse meetings in the web
+  highways.connections.forEach((connectionA, indexA) => {
+    highways.connections.forEach((connectionB, indexB) => {
+      if (indexA < indexB && connectionA.pulseSphere && connectionB.pulseSphere) {
+        const posA = connectionA.pulseSphere.position;
+        const posB = connectionB.pulseSphere.position;
+        const distance = posA.distanceTo(posB);
+        
+        // If both pulses are in web layer and close together
+        const bothInWeb = Math.abs(posA.y + 2.5) < 1.0 && Math.abs(posB.y + 2.5) < 1.0;
+        if (bothInWeb && distance < 2.0) {
+          // Create meeting effect - brief bright flash
+          connectionA.pulseSphere.material.emissiveIntensity = 2.0;
+          connectionB.pulseSphere.material.emissiveIntensity = 2.0;
+          connectionA.pulseSphere.scale.setScalar(0.6);
+          connectionB.pulseSphere.scale.setScalar(0.6);
+          
+          console.log(`Pulse meeting: ${connectionA.sourceAgent} meets ${connectionB.sourceAgent} in web`);
+        }
+      }
+    });
+  });
+  
   // Animate web-routed connections with traveling pulses
   highways.connections = highways.connections.filter(connection => {
     const age = currentTime - connection.startTime;
@@ -1779,22 +1802,48 @@ function animateDataHighways(elapsed) {
       // Advance pulse along web path
       connection.progress += connection.speed;
       
-      // Update traveling pulse sphere position along web path
-      if (connection.pulseSphere && connection.webPath) {
-        const webPosition = getWebPathPosition(connection.webPath, connection.progress);
-        if (webPosition) {
-          connection.pulseSphere.position.copy(webPosition);
+      // Update traveling pulse sphere position along path
+      if (connection.pulseSphere && connection.pathPoints && connection.pathPoints.length > 1) {
+        // Calculate position along the full path (agent → web → agent)
+        const totalSegments = connection.pathPoints.length - 1;
+        const scaledProgress = connection.progress * totalSegments;
+        const segmentIndex = Math.floor(scaledProgress);
+        const localProgress = scaledProgress - segmentIndex;
+        
+        let currentPos;
+        if (segmentIndex >= totalSegments) {
+          // Use last point
+          currentPos = connection.pathPoints[connection.pathPoints.length - 1];
+        } else {
+          // Interpolate between current and next point
+          const currentPoint = connection.pathPoints[segmentIndex];
+          const nextPoint = connection.pathPoints[segmentIndex + 1];
           
-          // Light up web segments as pulse passes through them
-          lightUpWebSegments(webPosition, connection.color, connection.intensity);
-          
-          // Pulse the sphere itself
-          const pulsePhase = Math.sin(currentTime * 0.008);
-          const baseIntensity = 0.5;
-          const pulseIntensity = baseIntensity + 0.3 * pulsePhase;
-          connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
-          connection.pulseSphere.material.opacity = 0.7 + 0.3 * pulsePhase;
+          currentPos = new THREE.Vector3(
+            currentPoint.x + (nextPoint.x - currentPoint.x) * localProgress,
+            currentPoint.y + (nextPoint.y - currentPoint.y) * localProgress,
+            currentPoint.z + (nextPoint.z - currentPoint.z) * localProgress
+          );
         }
+        
+        connection.pulseSphere.position.copy(currentPos);
+        
+        // Light up web segments only when traveling through web (Y near -2.5)
+        if (Math.abs(currentPos.y + 2.5) < 1.0) {
+          lightUpWebSegments(currentPos, connection.color, connection.intensity);
+        }
+        
+        // Pulse the sphere itself with higher intensity
+        const pulsePhase = Math.sin(currentTime * 0.01);
+        const baseIntensity = 0.7;
+        const pulseIntensity = baseIntensity + 0.4 * pulsePhase;
+        connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
+        connection.pulseSphere.material.opacity = 0.8 + 0.2 * pulsePhase;
+        
+        // Scale sphere based on position - bigger in web, smaller when shooting
+        const isInWeb = Math.abs(currentPos.y + 2.5) < 1.0;
+        const targetScale = isInWeb ? 0.4 : 0.25; // Bigger in web
+        connection.pulseSphere.scale.setScalar(targetScale);
       }
       
       // Fade the path line over time
@@ -1892,14 +1941,34 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   // Start from actual agent position
   pathPoints.push(new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z));
   
-  // Add web routing points (but skip first and last to maintain agent connections)
-  for (let i = 1; i < 20; i++) { // Skip i=0 and i=20 to connect to actual agents
+  // Shoot DOWN into web: Find closest web point below source agent
+  const sourceRadius = Math.sqrt(sourcePos.x * sourcePos.x + sourcePos.z * sourcePos.z);
+  const sourceAngle = Math.atan2(sourcePos.z, sourcePos.x);
+  const sourceWebEntry = new THREE.Vector3(
+    Math.cos(sourceAngle) * Math.min(sourceRadius, 8), // Clamp to web radius
+    -2.5, // Web level
+    Math.sin(sourceAngle) * Math.min(sourceRadius, 8)
+  );
+  pathPoints.push(sourceWebEntry);
+  
+  // Travel through web infrastructure 
+  for (let i = 0; i <= 20; i++) {
     const progress = i / 20;
     const webPosition = getWebPathPosition(webPath, progress);
     if (webPosition) {
       pathPoints.push(webPosition);
     }
   }
+  
+  // Exit web and shoot UP to destination agent
+  const destRadius = Math.sqrt(destPos.x * destPos.x + destPos.z * destPos.z);
+  const destAngle = Math.atan2(destPos.z, destPos.x);
+  const destWebExit = new THREE.Vector3(
+    Math.cos(destAngle) * Math.min(destRadius, 8), // Clamp to web radius
+    -2.5, // Web level
+    Math.sin(destAngle) * Math.min(destRadius, 8)
+  );
+  pathPoints.push(destWebExit);
   
   // End at actual destination agent position  
   pathPoints.push(new THREE.Vector3(destPos.x, destPos.y, destPos.z));
@@ -1947,7 +2016,7 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     webPath: webPath,
     pathPoints: pathPoints,
     progress: 0.0,
-    speed: 0.015 * (1 + pressure), // Web travel speed
+    speed: 0.025 * (1 + pressure), // Faster travel speed
     color: color,
     intensity: pressure,
     capability: capabilityName,
@@ -1955,9 +2024,10 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     destHub: destHub,
     sourceAgent: sourceAgentName,
     destAgent: destAgentName,
-    maxOpacity: 0.8,
-    lifetime: 8000, // 8 seconds to see full web routing
-    startTime: performance.now()
+    maxOpacity: 0.9,
+    lifetime: 6000, // Shorter lifetime for cleaner appearance
+    startTime: performance.now(),
+    phase: 'shooting_down' // Track beam phase: shooting_down -> web_travel -> shooting_up -> disappear
   };
   
   highways.connections.push(connection);
