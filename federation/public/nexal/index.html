@@ -548,28 +548,49 @@ function buildSpiderWeb() {
   const spokes = 8;
   const rings = 4;
   const outerR = 12;
+  const webRings = [];
   
-  // Concentric rings
+  // Concentric rings with wave capability
   for (let r = 1; r <= rings; r++) {
     const radius = (r / rings) * outerR;
-    const points = [];
+    const segmentCount = 64;
+    const positions = new Float32Array((segmentCount + 1) * 3);
+    const originalPositions = new Float32Array((segmentCount + 1) * 3);
     
-    for (let i = 0; i <= 64; i++) {
-      const angle = (i / 64) * Math.PI * 2;
-      points.push(new THREE.Vector3(
-        Math.cos(angle) * radius,
-        0,
-        Math.sin(angle) * radius
-      ));
+    for (let i = 0; i <= segmentCount; i++) {
+      const angle = (i / segmentCount) * Math.PI * 2;
+      const x = Math.cos(angle) * radius;
+      const y = 0; // Will be modified by waves
+      const z = Math.sin(angle) * radius;
+      
+      const i3 = i * 3;
+      positions[i3] = x;
+      positions[i3 + 1] = y;
+      positions[i3 + 2] = z;
+      
+      originalPositions[i3] = x;
+      originalPositions[i3 + 1] = y;
+      originalPositions[i3 + 2] = z;
     }
     
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
     const material = new THREE.LineBasicMaterial({ 
       color: 0x2a4a6a, 
       transparent: true, 
       opacity: 0.3 
     });
+    
     const line = new THREE.Line(geometry, material);
+    line.userData = { 
+      originalPositions,
+      radius,
+      segmentCount,
+      ringIndex: r
+    };
+    
+    webRings.push(line);
     webGroup.add(line);
   }
   
@@ -596,6 +617,10 @@ function buildSpiderWeb() {
   }
   
   scene.add(webGroup);
+  
+  // Store references for wave animation
+  window._webGroup = webGroup;
+  window._webRings = webRings;
 }
 
 function buildAgentTopologies(agents) {
@@ -992,6 +1017,40 @@ function animate() {
       // Subtle pulsing
       const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.1;
       sphere.scale.setScalar(pulse);
+    });
+  }
+  
+  // Animate spider web waves
+  if (window._webRings) {
+    window._webRings.forEach(ring => {
+      const userData = ring.userData;
+      const positions = ring.geometry.attributes.position.array;
+      const originalPos = userData.originalPositions;
+      
+      // Multiple wave parameters for organic motion
+      const waveSpeed1 = elapsed * 0.8;
+      const waveSpeed2 = elapsed * 1.2;
+      const waveSpeed3 = elapsed * 0.6;
+      
+      // Wave amplitude decreases toward center (inner rings have smaller waves)
+      const waveAmp = 0.15 * (userData.radius / 12); // Scale by distance from center
+      
+      for (let i = 0; i <= userData.segmentCount; i++) {
+        const i3 = i * 3;
+        const angle = (i / userData.segmentCount) * Math.PI * 2;
+        
+        // Combine multiple sine waves for natural water-like motion
+        const wave1 = Math.sin(waveSpeed1 + angle * 3) * waveAmp;
+        const wave2 = Math.sin(waveSpeed2 + angle * 2 + userData.ringIndex * 0.5) * (waveAmp * 0.6);
+        const wave3 = Math.cos(waveSpeed3 + angle * 4 + userData.radius * 0.1) * (waveAmp * 0.4);
+        
+        // Apply wave height to Y coordinate
+        positions[i3] = originalPos[i3];     // X unchanged
+        positions[i3 + 1] = wave1 + wave2 + wave3; // Y with waves
+        positions[i3 + 2] = originalPos[i3 + 2];   // Z unchanged
+      }
+      
+      ring.geometry.attributes.position.needsUpdate = true;
     });
   }
   
