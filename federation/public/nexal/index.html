@@ -794,11 +794,11 @@ function getHubDescription(hubName) {
 // Easy parameter adjustment - modify these values to iterate on the system
 const CONSTRAINT_CONFIG = {
   // Motion
-  constraintRatio: 0.8,    // 0-1, higher = stronger constraints (pull back to original positions)
+  constraintRatio: 0.3,    // 0-1, higher = stronger constraints (reduced for black hole effect)
   followMouse: true,       // Mouse interaction
   whiteNodes: true,        // Node color scheme
-  mouseRadius: 3.0,        // Mouse influence radius (increased for more visible effect)
-  mouseForce: 1.5,         // Mouse force strength (increased for more responsive interaction)
+  mouseRadius: 4.0,        // Black hole influence radius
+  mouseForce: 2.5,         // Black hole attraction strength
   
   // System
   nodeCount: 200,          // Number of nodes
@@ -886,8 +886,8 @@ function buildCentralNexus() {
   const nodeGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.nodeSize, 8, 8);
   const nodeMaterial = new THREE.MeshPhongMaterial({
     color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
-    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x444444 : 0x220044,
-    emissiveIntensity: CONSTRAINT_CONFIG.whiteNodes ? 0.3 : 0.1,
+    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x222222 : 0x220044,
+    emissiveIntensity: CONSTRAINT_CONFIG.whiteNodes ? 0.1 : 0.1,
     transparent: true,
     opacity: CONSTRAINT_CONFIG.nodeOpacity,
   });
@@ -1038,9 +1038,9 @@ function animate() {
     const nodes = system.nodes;
     const constraints = system.constraints;
     
-    // Mouse interaction (if enabled)
+    // Black hole mouse interaction (if enabled)
     if (CONSTRAINT_CONFIG.followMouse && system.mousePosition) {
-      // Apply mouse forces to nearby nodes
+      // Create black hole effect - strong attractive force toward mouse
       nodes.forEach(node => {
         const dx = system.mousePosition.x - node.x;
         const dy = system.mousePosition.y - node.y;
@@ -1048,10 +1048,20 @@ function animate() {
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         
         if (distance < CONSTRAINT_CONFIG.mouseRadius && distance > 0.1) {
-          const force = CONSTRAINT_CONFIG.mouseForce / (distance * distance + 1);
-          node.vx += dx * force * 0.02;
-          node.vy += dy * force * 0.02;
-          node.vz += dz * force * 0.02;
+          // Strong attractive force (black hole effect)
+          // Force increases as nodes get closer to the "event horizon"
+          const eventHorizon = 0.5;
+          const forceMultiplier = distance < eventHorizon ? 10.0 : 1.0;
+          const force = (CONSTRAINT_CONFIG.mouseForce / (distance + 0.5)) * forceMultiplier;
+          
+          // Pull nodes toward mouse position (attractive force)
+          const normalizedDx = dx / distance;
+          const normalizedDy = dy / distance;
+          const normalizedDz = dz / distance;
+          
+          node.vx += normalizedDx * force * 0.05;
+          node.vy += normalizedDy * force * 0.05;
+          node.vz += normalizedDz * force * 0.05;
         }
       });
     }
