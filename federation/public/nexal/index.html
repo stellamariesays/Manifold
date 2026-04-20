@@ -745,7 +745,7 @@ function buildAgentTopologies(agents) {
     'bobiverse': 0xff6600  // Orange for bobiverse
   };
   
-  // Define hub center positions in 3D space
+  // Define hub center positions in 3D space  
   const hubCenters = {
     'hog': { x: -8, y: 2, z: -6 },
     'trillian': { x: 8, y: 3, z: 2 },
@@ -753,6 +753,9 @@ function buildAgentTopologies(agents) {
     'relay': { x: 6, y: 1, z: -8 },
     'bobiverse': { x: 0, y: 6, z: -10 }
   };
+  
+  // Store globally for orbital animation updates
+  window.hubCenters = hubCenters;
   
   // Group agents by hub for orbital assignment
   const agentsByHub = {};
@@ -868,8 +871,8 @@ function buildAgentTopologies(agents) {
     agentGroups.push(group);
   });
   
-  // Create visual markers for hub centers
-  Object.entries(hubCenters).forEach(([hubName, center]) => {
+  // Create visual markers for hub centers with orbital motion parameters
+  Object.entries(hubCenters).forEach(([hubName, center], idx) => {
     const hubMarkerGeo = new THREE.SphereGeometry(0.3, 16, 16);
     const hubColor = hubColors[hubName] || 0x666666;
     const hubMarkerMat = new THREE.MeshPhongMaterial({
@@ -881,13 +884,28 @@ function buildAgentTopologies(agents) {
     });
     
     const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
+    
+    // Calculate orbital parameters around central fog (0,0,0)
+    const baseOrbitRadius = Math.sqrt(center.x * center.x + center.z * center.z);
+    const baseOrbitAngle = Math.atan2(center.z, center.x);
+    const baseOrbitHeight = center.y;
+    
+    // Store orbital parameters
+    const orbitSpeed = 0.05 + (idx % 3) * 0.01; // Slightly different speeds for each hub
+    
     hubMarker.position.set(center.x, center.y, center.z);
     
-    // Add subtle pulsing animation reference and hub info
+    // Add orbital motion parameters and hub info
     hubMarker.userData = { 
       type: 'hub', 
       hubName, 
       isHubCenter: true,
+      isOrbitingHub: true,
+      orbitRadius: baseOrbitRadius,
+      orbitAngle: baseOrbitAngle,
+      orbitHeight: baseOrbitHeight,
+      orbitSpeed: orbitSpeed,
+      baseCenter: { x: center.x, y: center.y, z: center.z }, // Store original position
       hubInfo: {
         name: hubName,
         color: `#${hubColor.toString(16).padStart(6, '0')}`,
@@ -1219,20 +1237,55 @@ function animate() {
   agentGroups.forEach((group, idx) => {
     const userData = group.userData;
     
-    if (userData && userData.isHubCenter) {
-      // Animate hub center markers with subtle pulsing
+    if (userData && userData.isHubCenter && userData.isOrbitingHub) {
+      // Animate hub orbital motion around central fog
+      const orbitTime = elapsed * userData.orbitSpeed;
+      const currentAngle = userData.orbitAngle + orbitTime;
+      
+      // Calculate new orbital position
+      const orbitalX = Math.cos(currentAngle) * userData.orbitRadius;
+      const orbitalZ = Math.sin(currentAngle) * userData.orbitRadius;
+      const orbitalY = userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2; // Gentle vertical oscillation
+      
+      group.position.set(orbitalX, orbitalY, orbitalZ);
+      
+      // Update the hubCenters data for data highways to follow
+      const hubName = userData.hubName;
+      if (window._dataHighways && window._dataHighways.hubCenters[hubName]) {
+        window._dataHighways.hubCenters[hubName] = new THREE.Vector3(orbitalX, orbitalY, orbitalZ);
+      }
+      
+      // Also update the main hubCenters reference if it exists
+      if (window.hubCenters && window.hubCenters[hubName]) {
+        window.hubCenters[hubName] = { x: orbitalX, y: orbitalY, z: orbitalZ };
+      }
+      
+      // Subtle pulsing animation
+      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.1;
+      group.scale.setScalar(pulse);
+      
+    } else if (userData && userData.isHubCenter) {
+      // Static hub centers (fallback for non-orbital hubs)
       const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.15;
       group.scale.setScalar(pulse);
       
     } else if (userData && userData.hubCenter) {
-      // Animate agents in orbital motion around hub centers
+      // Animate agents in orbital motion around hub centers (following moving hubs)
       const orbitTime = elapsed * userData.orbitSpeed * userData.orbitDirection;
       const currentAngle = userData.baseOrbitAngle + orbitTime;
       
-      // Update orbital position
-      const orbitalX = userData.hubCenter.x + Math.cos(currentAngle) * userData.orbitRadius;
-      const orbitalZ = userData.hubCenter.z + Math.sin(currentAngle) * userData.orbitRadius;
-      const orbitalY = userData.hubCenter.y + userData.orbitHeight + Math.sin(elapsed * 0.5 + userData.agentIndexInHub) * 0.1;
+      // Get current hub position (may be moving due to hub orbital motion)
+      let currentHubPos = userData.hubCenter;
+      
+      // Check if hub is orbiting and get its current position
+      if (window.hubCenters && window.hubCenters[userData.agent.hub]) {
+        currentHubPos = window.hubCenters[userData.agent.hub];
+      }
+      
+      // Update orbital position around current hub position
+      const orbitalX = currentHubPos.x + Math.cos(currentAngle) * userData.orbitRadius;
+      const orbitalZ = currentHubPos.z + Math.sin(currentAngle) * userData.orbitRadius;
+      const orbitalY = currentHubPos.y + userData.orbitHeight + Math.sin(elapsed * 0.5 + userData.agentIndexInHub) * 0.1;
       
       group.position.set(orbitalX, orbitalY, orbitalZ);
       
