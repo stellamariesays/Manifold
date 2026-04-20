@@ -683,20 +683,102 @@ function buildAgentTopologies(agents) {
 }
 
 function buildCentralNexus() {
-  // Simple central sphere (no custom shaders)
-  const centralGeo = new THREE.SphereGeometry(1.2, 32, 32);
-  const centralMat = new THREE.MeshPhongMaterial({
-    color: 0x4400aa,
-    emissive: 0x220044,
-    emissiveIntensity: 0.4,
-    transparent: true,
-    opacity: 0.8,
-  });
-  const centralSphere = new THREE.Mesh(centralGeo, centralMat);
-  centralSphere.position.set(0, 1, 0);
-  scene.add(centralSphere);
+  // Sophia's Realm: The Fog with Dark Spheres
+  const fogGroup = new THREE.Group();
+  fogGroup.position.set(0, 1, 0);
   
-  window._centralSphere = centralSphere;
+  // Create particle cloud points for "thefog"
+  const particleCount = 800;
+  const positions = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+  const sizes = new Float32Array(particleCount);
+  
+  // Generate particles in spherical cloud formation
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3;
+    
+    // Spherical distribution with some randomness
+    const radius = 1.5 + Math.random() * 2.0;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+    
+    positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+    positions[i3 + 1] = radius * Math.cos(phi);
+    positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+    
+    // Fog colors: purples, violets, dark blues
+    const intensity = 0.3 + Math.random() * 0.4;
+    colors[i3] = 0.4 * intensity;     // Red
+    colors[i3 + 1] = 0.0 * intensity; // Green  
+    colors[i3 + 2] = 0.8 * intensity; // Blue
+    
+    sizes[i] = 0.5 + Math.random() * 1.5;
+  }
+  
+  const particlesGeometry = new THREE.BufferGeometry();
+  particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  
+  const particlesMaterial = new THREE.PointsMaterial({
+    size: 0.1,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.6,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  
+  const particleCloud = new THREE.Points(particlesGeometry, particlesMaterial);
+  fogGroup.add(particleCloud);
+  
+  // Create "darkspheres" - small dark orbs floating within the fog
+  const darkSphereCount = 12;
+  const darkSpheres = [];
+  
+  for (let i = 0; i < darkSphereCount; i++) {
+    const darkGeo = new THREE.SphereGeometry(0.08 + Math.random() * 0.12, 8, 8);
+    const darkMat = new THREE.MeshPhongMaterial({
+      color: 0x110022,
+      emissive: 0x330044,
+      emissiveIntensity: 0.2,
+      transparent: true,
+      opacity: 0.8,
+    });
+    
+    const darkSphere = new THREE.Mesh(darkGeo, darkMat);
+    
+    // Position within the fog cloud
+    const radius = 0.8 + Math.random() * 1.5;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(Math.random() * 2 - 1);
+    
+    darkSphere.position.set(
+      radius * Math.sin(phi) * Math.cos(theta),
+      radius * Math.cos(phi) * 0.5,
+      radius * Math.sin(phi) * Math.sin(theta)
+    );
+    
+    // Store animation params
+    darkSphere.userData = {
+      originalPos: darkSphere.position.clone(),
+      floatSpeed: 0.5 + Math.random() * 0.5,
+      floatRadius: 0.2 + Math.random() * 0.3,
+      rotationSpeed: (Math.random() - 0.5) * 0.02,
+      phaseOffset: Math.random() * Math.PI * 2,
+    };
+    
+    darkSpheres.push(darkSphere);
+    fogGroup.add(darkSphere);
+  }
+  
+  scene.add(fogGroup);
+  
+  // Store references for animation
+  window._centralSphere = fogGroup;
+  window._particleCloud = particleCloud;
+  window._darkSpheres = darkSpheres;
+  window._fogParticles = positions;
 }
 
 function updateAgentsList(agents) {
@@ -747,11 +829,56 @@ function animate() {
     group.position.y += Math.sin(elapsed + idx) * 0.001;
   });
   
-  // Animate central sphere
+  // Animate Sophia's Realm (The Fog)
   if (window._centralSphere) {
-    const pulse = 1 + Math.sin(elapsed * 1.5) * 0.1;
-    window._centralSphere.scale.setScalar(pulse);
-    window._centralSphere.rotation.y += 0.01;
+    // Gentle rotation of entire fog system
+    window._centralSphere.rotation.y += 0.003;
+    window._centralSphere.rotation.x += 0.001;
+  }
+  
+  // Animate particle cloud
+  if (window._particleCloud && window._fogParticles) {
+    const positions = window._particleCloud.geometry.attributes.position.array;
+    
+    // Wave motion through fog particles
+    for (let i = 0; i < positions.length; i += 3) {
+      const originalRadius = Math.sqrt(
+        window._fogParticles[i] * window._fogParticles[i] +
+        window._fogParticles[i + 1] * window._fogParticles[i + 1] +
+        window._fogParticles[i + 2] * window._fogParticles[i + 2]
+      );
+      
+      const wave1 = Math.sin(elapsed * 0.5 + i * 0.01) * 0.1;
+      const wave2 = Math.cos(elapsed * 0.3 + i * 0.02) * 0.05;
+      const disturbance = 1 + wave1 + wave2;
+      
+      positions[i] = window._fogParticles[i] * disturbance;
+      positions[i + 1] = window._fogParticles[i + 1] * disturbance;
+      positions[i + 2] = window._fogParticles[i + 2] * disturbance;
+    }
+    
+    window._particleCloud.geometry.attributes.position.needsUpdate = true;
+  }
+  
+  // Animate dark spheres floating within the fog
+  if (window._darkSpheres) {
+    window._darkSpheres.forEach((sphere, idx) => {
+      const userData = sphere.userData;
+      const time = elapsed * userData.floatSpeed + userData.phaseOffset;
+      
+      // Floating motion
+      sphere.position.x = userData.originalPos.x + Math.sin(time) * userData.floatRadius;
+      sphere.position.y = userData.originalPos.y + Math.cos(time * 1.1) * userData.floatRadius * 0.5;
+      sphere.position.z = userData.originalPos.z + Math.sin(time * 0.8) * userData.floatRadius;
+      
+      // Slow rotation
+      sphere.rotation.y += userData.rotationSpeed;
+      sphere.rotation.x += userData.rotationSpeed * 0.7;
+      
+      // Subtle pulsing
+      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.1;
+      sphere.scale.setScalar(pulse);
+    });
   }
   
   // Update camera controls
