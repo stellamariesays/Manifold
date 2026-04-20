@@ -24,10 +24,14 @@ interface StandaloneConfig {
   localPort?: number;
   /** REST API port. Default: 8777 */
   restPort?: number;
+  /** Advertised address for federation (e.g. "ws://100.x.x.x:8766") */
+  advertiseAddress?: string;
   /** Peer addresses to connect to on startup */
   peers?: string[];
   /** Path to atlas JSON file */
   atlasPath?: string;
+  /** Security config (API key auth, rate limits, allowlists) */
+  security?: { apiKey?: string; rateLimitPerHub?: number; allowedTargets?: Record<string, string[]> };
   /** Enable debug logging. Default: false */
   debug?: boolean;
 }
@@ -89,8 +93,10 @@ async function main() {
     federationPort: config.federationPort ?? 8766,
     localPort: config.localPort ?? 8768,
     restPort: config.restPort ?? 8777,
+    advertiseAddress: config.advertiseAddress,
     peers: config.peers ?? [],
     atlasPath: config.atlasPath,
+    security: config.security,
     debug: config.debug ?? false,
   });
 
