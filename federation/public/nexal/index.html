@@ -1864,11 +1864,21 @@ function animateDataHighways(elapsed) {
         console.log(`Web pulse ${connection.capability}: ${connection.sourceAgent} → ${connection.destAgent} progress: ${connection.progress.toFixed(2)}`);
       }
       
-      // Keep connection until pulse completes path or lifetime expires
-      return connection.progress < 1.0 && age <= connection.lifetime;
+      // Check if pulse completed path OR lifetime expired
+      if (connection.progress >= 1.0 || age > connection.lifetime) {
+        // Remove completed particle beam
+        console.log(`Completing particle beam: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
+        if (connection.pulseSphere && connection.pulseSphere.parent) {
+          connection.pulseSphere.parent.remove(connection.pulseSphere);
+        }
+        return false; // Remove connection
+      }
+      
+      // Keep connection - still traveling
+      return true;
     } else {
-      // Remove completed particle beam
-      console.log(`Completing particle beam: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
+      // Age exceeded lifetime - remove
+      console.log(`Expired particle beam: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
       if (connection.pulseSphere && connection.pulseSphere.parent) {
         connection.pulseSphere.parent.remove(connection.pulseSphere);
       }
@@ -2007,7 +2017,7 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     webPath: webPath,
     pathPoints: pathPoints,
     progress: 0.0,
-    speed: 0.025 * (1 + pressure), // Faster travel speed
+    speed: 0.003125 * (1 + pressure), // 8x slower travel speed (0.025 / 8)
     color: color,
     intensity: pressure,
     capability: capabilityName,
