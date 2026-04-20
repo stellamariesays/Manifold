@@ -454,7 +454,7 @@ let clickableObjects = [];
 function init() {
   // Scene setup
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000510);
+  scene.background = new THREE.Color(0x000000); // Pure black background for higher contrast
   
   const canvas = document.getElementById('scene');
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -488,16 +488,21 @@ function init() {
   // Store controls globally for animation loop
   window.cameraControls = controls;
   
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0x1a2a40, 0.4);
+  // Lighting - High contrast white lighting against black background
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2); // Pure white ambient, lower intensity
   scene.add(ambientLight);
   
-  const directionalLight = new THREE.DirectionalLight(0x4499ff, 0.8);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Bright white directional
   directionalLight.position.set(10, 10, 5);
   directionalLight.castShadow = true;
   directionalLight.shadow.mapSize.width = 2048;
   directionalLight.shadow.mapSize.height = 2048;
   scene.add(directionalLight);
+  
+  // Add second directional light from opposite side for better contrast
+  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6); // Secondary white light
+  directionalLight2.position.set(-10, -10, -5);
+  scene.add(directionalLight2);
   
   // Load agents and build scene
   loadAgentsAndBuild();
@@ -667,12 +672,12 @@ function buildAgentTopologies(agents) {
       agent.topologyType = 'mobiusStrip';
     }
     
-    // Main form
+    // Main form - much brighter for high contrast
     const formMat = new THREE.MeshPhongMaterial({
-      color: 0x1a3a55,
-      emissive: new THREE.Color(hubColor).multiplyScalar(0.03),
+      color: 0xcccccc, // Bright light gray base
+      emissive: new THREE.Color(hubColor).multiplyScalar(0.15), // 5x brighter emissive 
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.8, // Slightly more opaque
       side: THREE.DoubleSide,
     });
     const formMesh = new THREE.Mesh(formGeo, formMat);
@@ -681,12 +686,12 @@ function buildAgentTopologies(agents) {
     clickableObjects.push(formMesh);
     group.add(formMesh);
     
-    // Wireframe
+    // Wireframe - brighter for high contrast
     const wfMat = new THREE.MeshBasicMaterial({
       color: hubColor,
       wireframe: true,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.9, // Much more visible wireframe
     });
     const wfMesh = new THREE.Mesh(formGeo, wfMat);
     group.add(wfMesh);
@@ -763,9 +768,9 @@ function buildAgentTopologies(agents) {
     const hubMarkerMat = new THREE.MeshPhongMaterial({
       color: hubColor,
       emissive: hubColor,
-      emissiveIntensity: 0.3,
+      emissiveIntensity: 0.8, // Much brighter hub glow
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.9, // More solid hub markers
     });
     
     const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
