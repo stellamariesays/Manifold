@@ -606,6 +606,23 @@ function buildAgentTopologies(agents) {
     'thefog': 0x8800ff
   };
   
+  // Define hub center positions in 3D space
+  const hubCenters = {
+    'hog': { x: -8, y: 2, z: -6 },
+    'trillian': { x: 8, y: 3, z: 2 },
+    'thefog': { x: -2, y: 5, z: 8 },
+    'relay': { x: 6, y: 1, z: -8 }
+  };
+  
+  // Group agents by hub for orbital assignment
+  const agentsByHub = {};
+  agents.forEach(agent => {
+    if (!agentsByHub[agent.hub]) {
+      agentsByHub[agent.hub] = [];
+    }
+    agentsByHub[agent.hub].push(agent);
+  });
+  
   agents.forEach((agent, idx) => {
     const group = new THREE.Group();
     
@@ -656,18 +673,27 @@ function buildAgentTopologies(agents) {
     const core = new THREE.Mesh(coreGeo, coreMat);
     group.add(core);
     
-    // Position
-    if (agent.position) {
-      group.position.set(...agent.position);
-    } else {
-      const angle = (idx / agents.length) * Math.PI * 2;
-      const radius = 6 + Math.sin(idx) * 2;
-      group.position.set(
-        Math.cos(angle) * radius,
-        2 + Math.random() * 3,
-        Math.sin(angle) * radius
-      );
-    }
+    // Orbital positioning around hub centers
+    const hubCenter = hubCenters[agent.hub] || { x: 0, y: 0, z: 0 };
+    const hubAgents = agentsByHub[agent.hub];
+    const agentIndexInHub = hubAgents.indexOf(agent);
+    const agentsInHub = hubAgents.length;
+    
+    // Orbital parameters
+    const orbitRadius = 1.5 + (agentIndexInHub % 3) * 0.8; // Varied orbit distances
+    const orbitAngle = (agentIndexInHub / agentsInHub) * Math.PI * 2;
+    const orbitHeight = Math.sin(agentIndexInHub * 0.7) * 0.5;
+    
+    // Calculate orbital position
+    const orbitalX = hubCenter.x + Math.cos(orbitAngle) * orbitRadius;
+    const orbitalY = hubCenter.y + orbitHeight;
+    const orbitalZ = hubCenter.z + Math.sin(orbitAngle) * orbitRadius;
+    
+    group.position.set(orbitalX, orbitalY, orbitalZ);
+    
+    // Store orbital parameters for animation
+    const orbitSpeed = 0.2 + Math.random() * 0.3; // Varied orbital speeds
+    const orbitDirection = Math.random() > 0.5 ? 1 : -1; // Random direction
     
     // Random orientation
     group.rotation.set(
@@ -676,9 +702,43 @@ function buildAgentTopologies(agents) {
       Math.random() * Math.PI
     );
     
-    group.userData = { agent, idx };
+    group.userData = { 
+      agent, 
+      idx,
+      hubCenter,
+      orbitRadius,
+      baseOrbitAngle: orbitAngle,
+      orbitHeight,
+      orbitSpeed,
+      orbitDirection,
+      agentIndexInHub
+    };
+    
     scene.add(group);
     agentGroups.push(group);
+  });
+  
+  // Create visual markers for hub centers
+  Object.entries(hubCenters).forEach(([hubName, center]) => {
+    const hubMarkerGeo = new THREE.SphereGeometry(0.3, 16, 16);
+    const hubColor = hubColors[hubName] || 0x666666;
+    const hubMarkerMat = new THREE.MeshPhongMaterial({
+      color: hubColor,
+      emissive: hubColor,
+      emissiveIntensity: 0.3,
+      transparent: true,
+      opacity: 0.6,
+    });
+    
+    const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
+    hubMarker.position.set(center.x, center.y, center.z);
+    
+    // Add subtle pulsing animation reference
+    hubMarker.userData = { hubName, isHubCenter: true };
+    scene.add(hubMarker);
+    
+    // Store hub markers for potential animation
+    agentGroups.push(hubMarker);
   });
 }
 
@@ -822,11 +882,31 @@ function animate() {
   
   const elapsed = performance.now() / 1000;
   
-  // Animate agents
+  // Animate agents and hub centers
   agentGroups.forEach((group, idx) => {
-    group.rotation.y += 0.005 + idx * 0.001;
-    group.rotation.x += 0.003;
-    group.position.y += Math.sin(elapsed + idx) * 0.001;
+    const userData = group.userData;
+    
+    if (userData && userData.isHubCenter) {
+      // Animate hub center markers with subtle pulsing
+      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.15;
+      group.scale.setScalar(pulse);
+      
+    } else if (userData && userData.hubCenter) {
+      // Animate agents in orbital motion around hub centers
+      const orbitTime = elapsed * userData.orbitSpeed * userData.orbitDirection;
+      const currentAngle = userData.baseOrbitAngle + orbitTime;
+      
+      // Update orbital position
+      const orbitalX = userData.hubCenter.x + Math.cos(currentAngle) * userData.orbitRadius;
+      const orbitalZ = userData.hubCenter.z + Math.sin(currentAngle) * userData.orbitRadius;
+      const orbitalY = userData.hubCenter.y + userData.orbitHeight + Math.sin(elapsed * 0.5 + userData.agentIndexInHub) * 0.1;
+      
+      group.position.set(orbitalX, orbitalY, orbitalZ);
+      
+      // Continue topology rotation
+      group.rotation.y += 0.005 + idx * 0.001;
+      group.rotation.x += 0.003;
+    }
   });
   
   // Animate Sophia's Realm (The Fog)
