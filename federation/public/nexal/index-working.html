@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal Network — Working Test</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #000510; overflow: hidden; }
+    #scene { position: fixed; inset: 0; width: 100%; height: 100%; }
+    #debug { 
+      position: absolute; top: 20px; left: 20px; 
+      color: #00e5ff; font: 14px monospace; z-index: 100;
+      background: rgba(0,5,16,0.8); padding: 10px; border-radius: 4px;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="debug">WORKING TEST: Loading Three.js...</div>
+  <canvas id="scene"></canvas>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    window.THREE = THREE;
+    
+    const debug = document.getElementById('debug');
+    
+    try {
+      debug.innerHTML = 'WORKING TEST: Creating scene...';
+      
+      // Basic setup - same structure as working solar sphere
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000510);
+      
+      const canvas = document.getElementById('scene');
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      
+      debug.innerHTML = 'WORKING TEST: Adding simple objects...';
+      
+      // Simple cube - using MeshBasicMaterial like solar sphere
+      const cubeGeo = new THREE.BoxGeometry(2, 2, 2);
+      const cubeMat = new THREE.MeshBasicMaterial({ 
+        color: 0x00ffff,
+        wireframe: true
+      });
+      const cube = new THREE.Mesh(cubeGeo, cubeMat);
+      scene.add(cube);
+      
+      // Simple sphere with glow effect
+      const sphereGeo = new THREE.SphereGeometry(1, 32, 32);
+      const sphereMat = new THREE.MeshBasicMaterial({ 
+        color: new THREE.Color(1.0, 0.4, 0.1),
+        transparent: true,
+        opacity: 0.8
+      });
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+      sphere.position.set(4, 0, 0);
+      scene.add(sphere);
+      
+      // Glow halo using AdditiveBlending (like solar sphere)
+      const haloGeo = new THREE.SphereGeometry(1.5, 16, 16);
+      const haloMat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(1.0, 0.4, 0.1),
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.BackSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const halo = new THREE.Mesh(haloGeo, haloMat);
+      halo.position.copy(sphere.position);
+      scene.add(halo);
+      
+      // Camera position
+      camera.position.set(0, 0, 8);
+      camera.lookAt(0, 0, 0);
+      
+      debug.innerHTML = 'WORKING TEST: Starting animation...';
+      
+      // Animation loop
+      let frame = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        frame++;
+        cube.rotation.x += 0.01;
+        cube.rotation.y += 0.02;
+        
+        sphere.rotation.z += 0.015;
+        sphere.position.y = Math.sin(frame * 0.02) * 0.5;
+        halo.position.copy(sphere.position);
+        halo.rotation.x += 0.005;
+        
+        renderer.render(scene, camera);
+        
+        if (frame % 60 === 0) {
+          debug.innerHTML = `WORKING TEST: Frame ${frame} ✓ ES6 modules working!`;
+        }
+      }
+      
+      // Handle resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      animate();
+      
+    } catch (error) {
+      debug.innerHTML = 'WORKING TEST ERROR: ' + error.message;
+      console.error('Three.js ES6 module error:', error);
+    }
+  </script>
+</body>
+</html>

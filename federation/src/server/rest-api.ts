@@ -1,4 +1,7 @@
 import express, { type Request, type Response, type Router } from 'express'
+import { readFileSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import type { CapabilityIndex } from './capability-index.js'
 import type { PeerRegistry } from './peer-registry.js'
 import type { MeshSync } from './mesh-sync.js'
@@ -86,12 +89,33 @@ export class RestApi {
       next()
     })
 
-    // Auth middleware — must be before router
-    if (this.apiKey) {
-      this.app.use(createAuthMiddleware({ apiKey: this.apiKey }))
-    }
+    // Static file serving for web interfaces (before auth middleware)
+    this.app.use(express.static('public'))
+
+    // Public nexal interface route (before auth middleware)
+    this.app.get('/nexal', this._nexalInterfaceHandler.bind(this))
+    this.app.get('/nexal/', this._nexalInterfaceHandler.bind(this))
+    
+    // Test nexal interface with topological forms (before auth middleware)
+    this.app.get('/nexal_test', this._nexalTestInterface.bind(this))
+    this.app.get('/nexal_test/', this._nexalTestInterface.bind(this))
+    
+    // Alternative paths for topological interface
+    this.app.get('/nexal-topology', this._nexalTestInterface.bind(this))
+    this.app.get('/nexal-topology/', this._nexalTestInterface.bind(this))
+    this.app.get('/topology', this._nexalTestInterface.bind(this))
+    this.app.get('/topology/', this._nexalTestInterface.bind(this))
+    
+    // Public API endpoint for topology interface (before auth middleware)
+    this.app.get('/api/topology', this._nexalTestInterface.bind(this))
+    this.app.get('/api/topology/', this._nexalTestInterface.bind(this))
 
     const router: Router = express.Router()
+
+    // Auth middleware — apply only to router, not entire app
+    if (this.apiKey) {
+      router.use(createAuthMiddleware({ apiKey: this.apiKey }))
+    }
 
     router.get('/status', this._status.bind(this))
     router.get('/peers', this._peers.bind(this))
@@ -150,6 +174,53 @@ export class RestApi {
       darkCircles: stats.darkCircles,
       timestamp: new Date().toISOString(),
     })
+  }
+
+  private _nexalInterfaceHandler(req: Request, res: Response): void {
+    // Check if we should serve the topological forms version
+    const useTopology = req.query.topology === 'true' || req.query.v === 'topology'
+    
+    try {
+      const __filename = fileURLToPath(import.meta.url)
+      const __dirname = dirname(__filename)
+      const filePath = useTopology 
+        ? join(__dirname, '../../public/nexal_test/index.html')
+        : join(__dirname, '../../public/nexal/index.html')
+      const html = readFileSync(filePath, 'utf-8')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.send(html)
+    } catch (error) {
+      this.log(`Failed to serve nexal interface: ${error}`)
+      res.status(500).json({ error: 'Failed to load nexal interface' })
+    }
+  }
+
+  private _nexalInterface(_req: Request, res: Response): void {
+    try {
+      const __filename = fileURLToPath(import.meta.url)
+      const __dirname = dirname(__filename)
+      const filePath = join(__dirname, '../../public/nexal/index.html')
+      const html = readFileSync(filePath, 'utf-8')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.send(html)
+    } catch (error) {
+      this.log(`Failed to serve nexal interface: ${error}`)
+      res.status(500).json({ error: 'Failed to load nexal interface' })
+    }
+  }
+
+  private _nexalTestInterface(_req: Request, res: Response): void {
+    try {
+      const __filename = fileURLToPath(import.meta.url)
+      const __dirname = dirname(__filename)
+      const filePath = join(__dirname, '../../public/nexal_test/index.html')
+      const html = readFileSync(filePath, 'utf-8')
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.send(html)
+    } catch (error) {
+      this.log(`Failed to serve nexal test interface: ${error}`)
+      res.status(500).json({ error: 'Failed to load nexal test interface' })
+    }
   }
 
   private _peers(_req: Request, res: Response): void {

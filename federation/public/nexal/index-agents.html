@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal Network — Agent Mesh</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #000510; overflow: hidden; }
+    #scene { position: fixed; inset: 0; width: 100%; height: 100%; }
+    #debug { 
+      position: absolute; top: 20px; left: 20px; 
+      color: #00e5ff; font: 14px monospace; z-index: 100;
+      background: rgba(0,5,16,0.8); padding: 10px; border-radius: 4px;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="debug">AGENT MESH: Loading...</div>
+  <canvas id="scene"></canvas>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    window.THREE = THREE;
+    
+    const debug = document.getElementById('debug');
+    
+    // Klein Bottle geometry
+    function makeKleinBottleGeometry(scale = 1, segments = 32) {
+      const geometry = new THREE.BufferGeometry();
+      const vertices = [];
+      const indices = [];
+      
+      const uSteps = segments;
+      const vSteps = segments;
+      
+      for (let i = 0; i <= uSteps; i++) {
+        for (let j = 0; j <= vSteps; j++) {
+          const u = (i / uSteps) * Math.PI * 2;
+          const v = (j / vSteps) * Math.PI * 2;
+          
+          const a = 3, n = 2;
+          const x = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.cos(u / n);
+          const y = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.sin(u / n);
+          const z = Math.sin(u / 2) * Math.sin(v) + Math.cos(u / 2) * Math.sin(2 * v);
+          
+          vertices.push(x * scale * 0.3, y * scale * 0.3, z * scale * 0.3);
+        }
+      }
+      
+      for (let i = 0; i < uSteps; i++) {
+        for (let j = 0; j < vSteps; j++) {
+          const a = i * (vSteps + 1) + j;
+          const b = (i + 1) * (vSteps + 1) + j;
+          const c = (i + 1) * (vSteps + 1) + j + 1;
+          const d = i * (vSteps + 1) + j + 1;
+          
+          indices.push(a, b, d);
+          indices.push(b, c, d);
+        }
+      }
+      
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      
+      return geometry;
+    }
+    
+    // Möbius Strip geometry
+    function makeMobiusStripGeometry(radius = 1, width = 0.5, segments = 64) {
+      const geometry = new THREE.BufferGeometry();
+      const vertices = [];
+      const indices = [];
+      
+      const uSteps = segments;
+      const vSteps = 8;
+      
+      for (let i = 0; i <= uSteps; i++) {
+        for (let j = 0; j <= vSteps; j++) {
+          const u = (i / uSteps) * Math.PI * 2;
+          const v = ((j / vSteps) - 0.5) * width;
+          
+          const x = (radius + v * Math.cos(u / 2)) * Math.cos(u);
+          const y = (radius + v * Math.cos(u / 2)) * Math.sin(u);
+          const z = v * Math.sin(u / 2);
+          
+          vertices.push(x, y, z);
+        }
+      }
+      
+      for (let i = 0; i < uSteps; i++) {
+        for (let j = 0; j < vSteps; j++) {
+          const a = i * (vSteps + 1) + j;
+          const b = (i + 1) * (vSteps + 1) + j;
+          const c = (i + 1) * (vSteps + 1) + j + 1;
+          const d = i * (vSteps + 1) + j + 1;
+          
+          indices.push(a, b, d);
+          indices.push(b, c, d);
+        }
+      }
+      
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      
+      return geometry;
+    }
+    
+    try {
+      debug.innerHTML = 'AGENT MESH: Creating scene...';
+      
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000510);
+      
+      const canvas = document.getElementById('scene');
+      const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      
+      debug.innerHTML = 'AGENT MESH: Loading mesh data...';
+      
+      // Fetch real mesh data
+      let agents = [];
+      try {
+        const response = await fetch('/api/mesh');
+        const meshData = await response.json();
+        if (meshData && meshData.agents) {
+          agents = meshData.agents;
+          debug.innerHTML = `AGENT MESH: Loaded ${agents.length} agents`;
+        }
+      } catch (e) {
+        debug.innerHTML = 'AGENT MESH: Using demo agents (API offline)';
+        // Demo agent data
+        agents = [
+          { id: 'stella', hub: 'trillian', position: [0, 0, 0], capabilities: ['guidance'] },
+          { id: 'manifold', hub: 'trillian', position: [4, 0, 0], capabilities: ['topology'] },
+          { id: 'argue', hub: 'trillian', position: [-3, 2, 1], capabilities: ['debate'] },
+          { id: 'solar-detect', hub: 'hog', position: [2, -3, 0], capabilities: ['monitoring'] },
+          { id: 'void-watcher', hub: 'thefog', position: [-2, 1, -3], capabilities: ['void-scan'] },
+          { id: 'reach-scanner', hub: 'thefog', position: [1, 3, 2], capabilities: ['mesh-probe'] }
+        ];
+      }
+      
+      debug.innerHTML = `AGENT MESH: Building ${agents.length} topologies...`;
+      
+      // Hub colors
+      const hubColors = {
+        'relay': 0x00e5ff,
+        'hog': 0x00ff88,
+        'trillian': 0xaa00ff,
+        'thefog': 0x8800ff
+      };
+      
+      // Create agent topologies
+      const agentGroups = [];
+      agents.forEach((agent, idx) => {
+        const group = new THREE.Group();
+        
+        const hubColor = hubColors[agent.hub] || 0x666666;
+        const scale = 0.8 + Math.random() * 0.4;
+        
+        // Alternate between Klein bottles and Möbius strips
+        let formGeo;
+        if (idx % 2 === 0) {
+          formGeo = makeKleinBottleGeometry(scale, 16);
+          agent.topologyType = 'kleinBottle';
+        } else {
+          formGeo = makeMobiusStripGeometry(scale * 1.5, scale * 0.6, 32);
+          agent.topologyType = 'mobiusStrip';
+        }
+        
+        // Main topology - solid with transparency
+        const formMat = new THREE.MeshBasicMaterial({
+          color: 0x1a3a55,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide,
+        });
+        const formMesh = new THREE.Mesh(formGeo, formMat);
+        group.add(formMesh);
+        
+        // Wireframe overlay with hub color
+        const wfMat = new THREE.MeshBasicMaterial({
+          color: hubColor,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.8,
+        });
+        const wfMesh = new THREE.Mesh(formGeo, wfMat);
+        group.add(wfMesh);
+        
+        // Central glowing core
+        const coreGeo = new THREE.SphereGeometry(0.15, 8, 8);
+        const coreMat = new THREE.MeshBasicMaterial({
+          color: hubColor,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const core = new THREE.Mesh(coreGeo, coreMat);
+        group.add(core);
+        
+        // Position agents in circular pattern if no position data
+        if (agent.position) {
+          group.position.set(...agent.position);
+        } else {
+          const angle = (idx / agents.length) * Math.PI * 2;
+          const radius = 6 + Math.sin(idx) * 2;
+          group.position.set(
+            Math.cos(angle) * radius,
+            (Math.random() - 0.5) * 4,
+            Math.sin(angle) * radius
+          );
+        }
+        
+        // Random orientation for variety
+        group.rotation.set(
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2,
+          Math.random() * Math.PI * 2
+        );
+        
+        group.userData = { agent, idx };
+        scene.add(group);
+        agentGroups.push(group);
+      });
+      
+      // Central sphere (simplified, no complex fog)
+      const centralGeo = new THREE.SphereGeometry(1.5, 32, 32);
+      const centralMat = new THREE.MeshBasicMaterial({
+        color: 0x4400aa,
+        transparent: true,
+        opacity: 0.4,
+      });
+      const centralSphere = new THREE.Mesh(centralGeo, centralMat);
+      centralSphere.position.set(0, 0, 0);
+      scene.add(centralSphere);
+      
+      // Simple lighting
+      const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+      scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 5, 5);
+      scene.add(directionalLight);
+      
+      // Camera position
+      camera.position.set(0, 5, 15);
+      camera.lookAt(0, 0, 0);
+      
+      debug.innerHTML = `AGENT MESH: Animating ${agents.length} agents...`;
+      
+      // Animation loop
+      let frame = 0;
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        frame++;
+        
+        // Animate agent topologies
+        agentGroups.forEach((group, idx) => {
+          group.rotation.y += 0.005 + idx * 0.001;
+          group.rotation.x += 0.003;
+          
+          // Gentle floating motion
+          group.position.y += Math.sin(frame * 0.01 + idx) * 0.002;
+        });
+        
+        // Animate central sphere
+        centralSphere.rotation.y += 0.01;
+        const pulse = 1 + Math.sin(frame * 0.02) * 0.1;
+        centralSphere.scale.setScalar(pulse);
+        
+        renderer.render(scene, camera);
+        
+        if (frame % 120 === 0) {
+          debug.innerHTML = `AGENT MESH: Frame ${frame} ✓ ${agents.length} agents active`;
+        }
+      }
+      
+      // Handle resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+      
+      animate();
+      
+    } catch (error) {
+      debug.innerHTML = 'AGENT MESH ERROR: ' + error.message;
+      console.error('Agent mesh error:', error);
+    }
+  </script>
+</body>
+</html>
