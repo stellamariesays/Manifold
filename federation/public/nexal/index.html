@@ -815,6 +815,12 @@ const CONSTRAINT_CONFIG = {
   particleSpeed: 0.02,     // Speed of particle travel to hubs
   particleSize: 0.05,      // Visual size of particles
   
+  // Mesh stretching during emissions
+  meshStretch: true,       // Enable mesh stretching toward emission targets
+  stretchMagnitude: 0.8,   // How far nodes stretch toward targets
+  stretchDuration: 800,    // How long stretch effect lasts (ms)
+  stretchRecovery: 0.08,   // How quickly mesh returns to original shape
+  
   // System
   nodeCount: 200,          // Number of nodes
   connectionDistance: 1.2, // Distance to create connections
@@ -1004,7 +1010,12 @@ function buildCentralNexus() {
     particles: [],
     lastEmissionTime: 0,
     hubPositions: Object.values(hubCenters).map(pos => new THREE.Vector3(pos.x, pos.y, pos.z)),
-    particleGroup: new THREE.Group() // Container for particle meshes
+    particleGroup: new THREE.Group(), // Container for particle meshes
+    
+    // Mesh stretching system
+    originalNodePositions: nodes.map(node => ({ x: node.x, y: node.y, z: node.z })), // Store original positions
+    activeStretchEffects: [], // Array of active stretch effects { direction, strength, decay, startTime }
+    stretchTargets: [] // Current stretch target positions for smooth interpolation
   };
   
   // Add particle group to scene
@@ -1203,11 +1214,15 @@ function animate() {
       if (currentTime - system.lastEmissionTime >= CONSTRAINT_CONFIG.emissionInterval) {
         system.lastEmissionTime = currentTime;
         
+        // Collect unique target hubs for this emission burst
+        const targetHubs = [];
+        
         // Create particles for this emission burst
         for (let i = 0; i < CONSTRAINT_CONFIG.particlesPerEmission; i++) {
           // Pick random hub as target
           const targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
           const targetHub = system.hubPositions[targetHubIndex];
+          targetHubs.push({ index: targetHubIndex, position: targetHub });
           
           // Create particle mesh
           const particleGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.particleSize, 8, 6);
@@ -1235,6 +1250,29 @@ function animate() {
           system.particleGroup.add(particleMesh);
         }
         
+        // Create mesh stretch effects toward emission targets
+        if (CONSTRAINT_CONFIG.meshStretch && targetHubs.length > 0) {
+          targetHubs.forEach(targetHub => {
+            // Calculate direction from constraint center to hub
+            const systemCenter = system.group.position;
+            const stretchDirection = new THREE.Vector3()
+              .copy(targetHub.position)
+              .sub(systemCenter)
+              .normalize();
+            
+            // Create stretch effect
+            const stretchEffect = {
+              direction: stretchDirection,
+              strength: CONSTRAINT_CONFIG.stretchMagnitude,
+              startTime: currentTime,
+              duration: CONSTRAINT_CONFIG.stretchDuration,
+              decay: 1.0 // Will decay from 1.0 to 0.0
+            };
+            
+            system.activeStretchEffects.push(stretchEffect);
+          });
+        }
+        
         // Debug: Log particle emission
         if (system.frameCount % 300 === 0) { // Every 5 seconds
           console.log('Emitted', CONSTRAINT_CONFIG.particlesPerEmission, 'particles. Active:', system.particles.length);
@@ -1254,6 +1292,70 @@ function animate() {
           particle.mesh.position.lerpVectors(particle.startPos, particle.targetPos, particle.progress);
           return true;
         }
+      });
+    }
+    
+    // Mesh stretching animation (apply before constraint physics)
+    if (CONSTRAINT_CONFIG.meshStretch && system.activeStretchEffects.length > 0) {
+      const currentTime = performance.now();
+      
+      // Update and filter active stretch effects
+      system.activeStretchEffects = system.activeStretchEffects.filter(effect => {
+        const elapsed = currentTime - effect.startTime;
+        const progress = elapsed / effect.duration;
+        
+        if (progress >= 1.0) {
+          // Effect expired
+          return false;
+        } else {
+          // Update decay (smooth ease-out curve)
+          effect.decay = 1.0 - (progress * progress); // Quadratic ease-out
+          return true;
+        }
+      });
+      
+      // Apply stretch effects to node positions
+      system.nodes.forEach((node, i) => {
+        const originalPos = system.originalNodePositions[i];
+        
+        // Calculate total stretch displacement from all active effects
+        let totalStretchX = 0;
+        let totalStretchY = 0;
+        let totalStretchZ = 0;
+        
+        // Apply all active stretch effects
+        system.activeStretchEffects.forEach(effect => {
+          // Calculate how much this node should be displaced
+          // Nodes further in the stretch direction get displaced more
+          const nodeFromCenter = new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z);
+          const dot = nodeFromCenter.dot(effect.direction);
+          
+          // Only stretch nodes that are in the positive direction of stretch
+          if (dot > 0) {
+            const stretchAmount = dot * effect.strength * effect.decay;
+            totalStretchX += effect.direction.x * stretchAmount;
+            totalStretchY += effect.direction.y * stretchAmount;
+            totalStretchZ += effect.direction.z * stretchAmount;
+          }
+        });
+        
+        // Apply stretch displacement as offset from physics position
+        node.stretchX = totalStretchX;
+        node.stretchY = totalStretchY;
+        node.stretchZ = totalStretchZ;
+      });
+      
+      // Debug: Log active stretch effects
+      if (system.frameCount % 60 === 0 && system.activeStretchEffects.length > 0) {
+        console.log('Active mesh stretches:', system.activeStretchEffects.length, 'effects, max decay:', 
+          Math.max(...system.activeStretchEffects.map(e => e.decay)).toFixed(2));
+      }
+    } else {
+      // No active stretch effects - clear stretch offsets
+      system.nodes.forEach(node => {
+        node.stretchX = 0;
+        node.stretchY = 0;
+        node.stretchZ = 0;
       });
     }
     
@@ -1323,7 +1425,11 @@ function animate() {
         
         // Update visual node position
         if (system.nodeInstances[i]) {
-          system.nodeInstances[i].position.set(node.x, node.y, node.z);
+          // Apply stretch offset to visual position
+          const visualX = node.x + (node.stretchX || 0);
+          const visualY = node.y + (node.stretchY || 0);
+          const visualZ = node.z + (node.stretchZ || 0);
+          system.nodeInstances[i].position.set(visualX, visualY, visualZ);
         }
       }
     });
@@ -1336,12 +1442,13 @@ function animate() {
         const nodeB = nodes[constraint.nodeB];
         const i6 = i * 6;
         
-        linePositions[i6] = nodeA.x;
-        linePositions[i6 + 1] = nodeA.y;
-        linePositions[i6 + 2] = nodeA.z;
-        linePositions[i6 + 3] = nodeB.x;
-        linePositions[i6 + 4] = nodeB.y;
-        linePositions[i6 + 5] = nodeB.z;
+        // Apply stretch offsets to constraint line endpoints
+        linePositions[i6] = nodeA.x + (nodeA.stretchX || 0);
+        linePositions[i6 + 1] = nodeA.y + (nodeA.stretchY || 0);
+        linePositions[i6 + 2] = nodeA.z + (nodeA.stretchZ || 0);
+        linePositions[i6 + 3] = nodeB.x + (nodeB.stretchX || 0);
+        linePositions[i6 + 4] = nodeB.y + (nodeB.stretchY || 0);
+        linePositions[i6 + 5] = nodeB.z + (nodeB.stretchZ || 0);
       });
       system.constraintLines.geometry.attributes.position.needsUpdate = true;
     }
