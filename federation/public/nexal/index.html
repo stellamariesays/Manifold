@@ -688,7 +688,7 @@ function buildCentralNexus() {
   fogGroup.position.set(0, 1, 0);
   
   // Create particle cloud points for "thefog"
-  const particleCount = 800;
+  const particleCount = 4000;
   const positions = new Float32Array(particleCount * 3);
   const colors = new Float32Array(particleCount * 3);
   const sizes = new Float32Array(particleCount);
@@ -706,8 +706,8 @@ function buildCentralNexus() {
     positions[i3 + 1] = radius * Math.cos(phi);
     positions[i3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
     
-    // Fog colors: purples, violets, dark blues
-    const intensity = 0.3 + Math.random() * 0.4;
+    // Fog colors: purples, violets, dark blues (brighter)
+    const intensity = 0.6 + Math.random() * 0.8;
     colors[i3] = 0.4 * intensity;     // Red
     colors[i3 + 1] = 0.0 * intensity; // Green  
     colors[i3 + 2] = 0.8 * intensity; // Blue
@@ -721,10 +721,10 @@ function buildCentralNexus() {
   particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
   
   const particlesMaterial = new THREE.PointsMaterial({
-    size: 0.1,
+    size: 0.12,
     vertexColors: true,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.8,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -740,8 +740,8 @@ function buildCentralNexus() {
     const darkGeo = new THREE.SphereGeometry(0.08 + Math.random() * 0.12, 8, 8);
     const darkMat = new THREE.MeshPhongMaterial({
       color: 0x110022,
-      emissive: 0x330044,
-      emissiveIntensity: 0.2,
+      emissive: 0x440066,
+      emissiveIntensity: 0.4,
       transparent: true,
       opacity: 0.8,
     });
