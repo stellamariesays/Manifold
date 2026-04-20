@@ -1779,16 +1779,18 @@ function animateDataHighways(elapsed) {
         const posB = connectionB.pulseSphere.position;
         const distance = posA.distanceTo(posB);
         
-        // If both pulses are in web layer and close together
+        // If both particle beams are in web layer and close together
         const bothInWeb = Math.abs(posA.y + 2.5) < 1.0 && Math.abs(posB.y + 2.5) < 1.0;
-        if (bothInWeb && distance < 2.0) {
-          // Create meeting effect - brief bright flash
-          connectionA.pulseSphere.material.emissiveIntensity = 2.0;
-          connectionB.pulseSphere.material.emissiveIntensity = 2.0;
-          connectionA.pulseSphere.scale.setScalar(0.6);
-          connectionB.pulseSphere.scale.setScalar(0.6);
+        if (bothInWeb && distance < 2.5) {
+          // Create dramatic meeting effect - bright flash and expansion
+          connectionA.pulseSphere.material.emissiveIntensity = 3.0;
+          connectionB.pulseSphere.material.emissiveIntensity = 3.0;
+          connectionA.pulseSphere.scale.setScalar(0.8); // Bigger flash
+          connectionB.pulseSphere.scale.setScalar(0.8);
+          connectionA.pulseSphere.material.opacity = 1.0;
+          connectionB.pulseSphere.material.opacity = 1.0;
           
-          console.log(`Pulse meeting: ${connectionA.sourceAgent} meets ${connectionB.sourceAgent} in web`);
+          console.log(`Particle beam meeting: ${connectionA.sourceAgent} meets ${connectionB.sourceAgent} in web`);
         }
       }
     });
@@ -1833,27 +1835,24 @@ function animateDataHighways(elapsed) {
           lightUpWebSegments(currentPos, connection.color, connection.intensity);
         }
         
-        // Pulse the sphere itself with higher intensity
-        const pulsePhase = Math.sin(currentTime * 0.01);
-        const baseIntensity = 0.7;
-        const pulseIntensity = baseIntensity + 0.4 * pulsePhase;
+        // Pulse the sphere itself with high intensity for particle beam effect
+        const pulsePhase = Math.sin(currentTime * 0.015);
+        const baseIntensity = 1.0; // Higher base intensity
+        const pulseIntensity = baseIntensity + 0.5 * pulsePhase;
         connection.pulseSphere.material.emissiveIntensity = pulseIntensity;
-        connection.pulseSphere.material.opacity = 0.8 + 0.2 * pulsePhase;
+        connection.pulseSphere.material.opacity = 0.9 + 0.1 * pulsePhase;
         
         // Scale sphere based on position - bigger in web, smaller when shooting
         const isInWeb = Math.abs(currentPos.y + 2.5) < 1.0;
-        const targetScale = isInWeb ? 0.4 : 0.25; // Bigger in web
+        const targetScale = isInWeb ? 0.5 : 0.3; // Slightly bigger for better visibility
         connection.pulseSphere.scale.setScalar(targetScale);
+        
+        // Add bloom effect for particle beam
+        const glowIntensity = 1.2 + 0.3 * pulsePhase;
+        connection.pulseSphere.material.emissive.setScalar(glowIntensity);
       }
       
-      // Fade the path line over time
-      const lifetimeProgress = age / connection.lifetime;
-      const fadeOpacity = connection.maxOpacity * (1 - lifetimeProgress * 0.5);
-      
-      if (connection.line && connection.line.material) {
-        connection.line.material.opacity = fadeOpacity;
-        connection.line.material.color.setHex(connection.color);
-      }
+      // No persistent lines to fade - only particle beams
       
       // Debug every 120 frames
       if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
@@ -1863,11 +1862,8 @@ function animateDataHighways(elapsed) {
       // Keep connection until pulse completes path or lifetime expires
       return connection.progress < 1.0 && age <= connection.lifetime;
     } else {
-      // Remove completed connection
-      console.log(`Completing web connection: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
-      if (connection.line && connection.line.parent) {
-        connection.line.parent.remove(connection.line);
-      }
+      // Remove completed particle beam
+      console.log(`Completing particle beam: ${connection.capability} - ${connection.sourceAgent} → ${connection.destAgent}`);
       if (connection.pulseSphere && connection.pulseSphere.parent) {
         connection.pulseSphere.parent.remove(connection.pulseSphere);
       }
@@ -1981,33 +1977,23 @@ function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
     );
   }
   
-  const lineGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
-  
-  // Create animated pulse material that travels along the path
-  const lineMaterial = new THREE.LineBasicMaterial({
-    color: color,
-    transparent: true,
-    opacity: 0.8,
-    linewidth: 3
-  });
-  
-  const connectionLine = new THREE.Line(lineGeometry, lineMaterial);
-  scene.add(connectionLine);
+  // No persistent lines - only traveling particle beams
+  const connectionLine = null;
   
   // Create traveling pulse sphere that moves along the web path
   const pulseGeometry = new THREE.SphereGeometry(0.3, 8, 6);
   const pulseMaterial = new THREE.MeshBasicMaterial({
     color: color,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.95,
     emissive: new THREE.Color(color),
-    emissiveIntensity: 0.5
+    emissiveIntensity: 0.8  // Brighter since it's the only visible element
   });
   
   const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
   scene.add(pulseSphere);
   
-  console.log(`Web highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceAgentName} → ${destAgentName} - ${pathPoints.length} path points`);
+  console.log(`Particle beam: ${capabilityName} (${pressure.toFixed(2)}) ${sourceAgentName} → ${destAgentName}`);
   
   // Create animated connection that travels along web infrastructure
   const connection = {
