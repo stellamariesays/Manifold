@@ -810,16 +810,20 @@ const CONSTRAINT_CONFIG = {
   
   // Particle emissions
   particleEmissions: true, // Enable particle emissions to hubs
-  emissionInterval: 300,   // Emit particles every 300ms (0.3 seconds)
+  emissionInterval: 800,   // Emit particles every 800ms (0.8 seconds) - slower
   particlesPerEmission: 2, // Number of particles per emission burst
-  particleSpeed: 0.02,     // Speed of particle travel to hubs
+  particleSpeed: 0.015,    // Speed of particle travel to hubs (slightly slower)
   particleSize: 0.05,      // Visual size of particles
   
   // Mesh stretching during emissions
   meshStretch: true,       // Enable mesh stretching toward emission targets
-  stretchMagnitude: 0.8,   // How far nodes stretch toward targets
-  stretchDuration: 800,    // How long stretch effect lasts (ms)
+  stretchMagnitude: 1.8,   // How far nodes stretch toward targets (2.25x further)
+  stretchDuration: 2000,   // How long stretch effect lasts (ms) - 2.5x longer
   stretchRecovery: 0.08,   // How quickly mesh returns to original shape
+  
+  // Sophia's "thefog" connection preference
+  thefogPreference: 0.6,   // 60% chance to emit toward thefog vs other hubs
+  thefogStretchBoost: 1.4, // Extra stretch magnitude when reaching toward thefog
   
   // System
   nodeCount: 200,          // Number of nodes
@@ -977,9 +981,17 @@ function buildCentralNexus() {
   const hubCenters = {
     'hog': { x: -8, y: 2, z: -6 },
     'trillian': { x: 8, y: 3, z: 2 },
-    'thefog': { x: -2, y: 5, z: 8 },
+    'thefog': { x: -2, y: 5, z: 8 }, // Sophia's realm
     'relay': { x: 6, y: 1, z: -8 }
   };
+  
+  // Create named hub arrays for weighted selection
+  const hubNames = Object.keys(hubCenters);
+  const hubPositions = hubNames.map(name => ({
+    name: name,
+    position: new THREE.Vector3(hubCenters[name].x, hubCenters[name].y, hubCenters[name].z),
+    isThefog: name === 'thefog'
+  }));
 
   // Store references for animation and mouse interaction
   window._constraintSystem = {
@@ -1009,7 +1021,7 @@ function buildCentralNexus() {
     // Particle system
     particles: [],
     lastEmissionTime: 0,
-    hubPositions: Object.values(hubCenters).map(pos => new THREE.Vector3(pos.x, pos.y, pos.z)),
+    hubPositions: hubPositions, // Named hub positions with thefog identification
     particleGroup: new THREE.Group(), // Container for particle meshes
     
     // Mesh stretching system
@@ -1219,15 +1231,38 @@ function animate() {
         
         // Create particles for this emission burst
         for (let i = 0; i < CONSTRAINT_CONFIG.particlesPerEmission; i++) {
-          // Pick random hub as target
-          const targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
-          const targetHub = system.hubPositions[targetHubIndex];
-          targetHubs.push({ index: targetHubIndex, position: targetHub });
+          // Weighted hub selection favoring thefog (Sophia's realm)
+          let targetHub;
+          let targetHubIndex;
           
-          // Create particle mesh
+          if (Math.random() < CONSTRAINT_CONFIG.thefogPreference) {
+            // Prefer thefog (Sophia's realm)
+            const thefogHub = system.hubPositions.find(hub => hub.isThefog);
+            if (thefogHub) {
+              targetHub = thefogHub;
+              targetHubIndex = system.hubPositions.indexOf(thefogHub);
+            } else {
+              // Fallback if thefog not found
+              targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
+              targetHub = system.hubPositions[targetHubIndex];
+            }
+          } else {
+            // Random hub selection
+            targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
+            targetHub = system.hubPositions[targetHubIndex];
+          }
+          
+          targetHubs.push({ 
+            index: targetHubIndex, 
+            hubInfo: targetHub, 
+            position: targetHub.position 
+          });
+          
+          // Create particle mesh - purple glow for thefog, cyan for others
           const particleGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.particleSize, 8, 6);
+          const particleColor = targetHub.isThefog ? 0x8800ff : 0x00e5ff; // Purple for thefog
           const particleMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0x00e5ff, 
+            color: particleColor, 
             transparent: true, 
             opacity: 0.8 
           });
@@ -1240,10 +1275,11 @@ function animate() {
           const particle = {
             mesh: particleMesh,
             startPos: system.group.position.clone(),
-            targetPos: targetHub.clone(),
+            targetPos: targetHub.position.clone(),
             progress: 0.0,
             speed: CONSTRAINT_CONFIG.particleSpeed,
-            targetHubIndex: targetHubIndex
+            targetHubIndex: targetHubIndex,
+            isThefog: targetHub.isThefog
           };
           
           system.particles.push(particle);
@@ -1260,22 +1296,32 @@ function animate() {
               .sub(systemCenter)
               .normalize();
             
-            // Create stretch effect
+            // Apply thefog boost for Sophia's realm connections
+            const baseStrength = CONSTRAINT_CONFIG.stretchMagnitude;
+            const effectiveStrength = targetHub.hubInfo.isThefog ? 
+              baseStrength * CONSTRAINT_CONFIG.thefogStretchBoost : 
+              baseStrength;
+            
+            // Create stretch effect with enhanced reach toward hub centers
             const stretchEffect = {
               direction: stretchDirection,
-              strength: CONSTRAINT_CONFIG.stretchMagnitude,
+              strength: effectiveStrength,
               startTime: currentTime,
               duration: CONSTRAINT_CONFIG.stretchDuration,
-              decay: 1.0 // Will decay from 1.0 to 0.0
+              decay: 1.0, // Will decay from 1.0 to 0.0
+              hubTarget: targetHub.position.clone(), // Store actual hub position for closer reach
+              isThefog: targetHub.hubInfo.isThefog
             };
             
             system.activeStretchEffects.push(stretchEffect);
           });
         }
         
-        // Debug: Log particle emission
-        if (system.frameCount % 300 === 0) { // Every 5 seconds
-          console.log('Emitted', CONSTRAINT_CONFIG.particlesPerEmission, 'particles. Active:', system.particles.length);
+        // Debug: Log particle emission with thefog preference tracking
+        const thefogCount = targetHubs.filter(hub => hub.hubInfo.isThefog).length;
+        if (system.frameCount % 180 === 0) { // Every 3 seconds
+          console.log('Emitted', CONSTRAINT_CONFIG.particlesPerEmission, 'particles. Active:', system.particles.length, 
+                      '| thefog:', thefogCount, '/', targetHubs.length);
         }
       }
       
@@ -1325,17 +1371,26 @@ function animate() {
         
         // Apply all active stretch effects
         system.activeStretchEffects.forEach(effect => {
-          // Calculate how much this node should be displaced
-          // Nodes further in the stretch direction get displaced more
+          // Calculate how much this node should be displaced toward hub target
           const nodeFromCenter = new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z);
           const dot = nodeFromCenter.dot(effect.direction);
           
           // Only stretch nodes that are in the positive direction of stretch
           if (dot > 0) {
-            const stretchAmount = dot * effect.strength * effect.decay;
-            totalStretchX += effect.direction.x * stretchAmount;
-            totalStretchY += effect.direction.y * stretchAmount;
-            totalStretchZ += effect.direction.z * stretchAmount;
+            // Enhanced stretching that pulls nodes closer to actual hub centers
+            const baseStretchAmount = dot * effect.strength * effect.decay;
+            
+            // Additional pull toward exact hub position for closer reach
+            const hubDirection = new THREE.Vector3()
+              .copy(effect.hubTarget)
+              .sub(new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z))
+              .normalize();
+            
+            const hubPull = baseStretchAmount * 0.3; // 30% additional pull toward hub center
+            
+            totalStretchX += effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
+            totalStretchY += effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
+            totalStretchZ += effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
           }
         });
         
@@ -1345,10 +1400,11 @@ function animate() {
         node.stretchZ = totalStretchZ;
       });
       
-      // Debug: Log active stretch effects
+      // Debug: Log active stretch effects with thefog tracking
       if (system.frameCount % 60 === 0 && system.activeStretchEffects.length > 0) {
-        console.log('Active mesh stretches:', system.activeStretchEffects.length, 'effects, max decay:', 
-          Math.max(...system.activeStretchEffects.map(e => e.decay)).toFixed(2));
+        const thefogStretches = system.activeStretchEffects.filter(e => e.isThefog).length;
+        const maxDecay = Math.max(...system.activeStretchEffects.map(e => e.decay)).toFixed(2);
+        console.log('Active mesh stretches:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, ') max decay:', maxDecay);
       }
     } else {
       // No active stretch effects - clear stretch offsets
