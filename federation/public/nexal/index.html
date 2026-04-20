@@ -808,22 +808,28 @@ const CONSTRAINT_CONFIG = {
   shrinkRadius: 6.0,       // Distance at which shrinking starts
   minShrinkScale: 0.3,     // Minimum scale when mouse is very close
   
-  // Particle emissions
+  // Particle emissions (20% slower overall)
   particleEmissions: true, // Enable particle emissions to hubs
-  emissionInterval: 800,   // Emit particles every 800ms (0.8 seconds) - slower
+  emissionInterval: 1000,  // Emit particles every 1000ms (1.0 seconds) - 20% slower
   particlesPerEmission: 2, // Number of particles per emission burst
-  particleSpeed: 0.015,    // Speed of particle travel to hubs (slightly slower)
+  particleSpeed: 0.012,    // Speed of particle travel to hubs (20% slower)
   particleSize: 0.05,      // Visual size of particles
   
-  // Mesh stretching during emissions
+  // Mesh stretching during emissions (20% slower)
   meshStretch: true,       // Enable mesh stretching toward emission targets
-  stretchMagnitude: 1.8,   // How far nodes stretch toward targets (2.25x further)
-  stretchDuration: 2000,   // How long stretch effect lasts (ms) - 2.5x longer
+  stretchMagnitude: 1.8,   // How far nodes stretch toward targets
+  stretchDuration: 2500,   // How long stretch effect lasts (ms) - 20% slower decay
   stretchRecovery: 0.08,   // How quickly mesh returns to original shape
   
   // Sophia's "thefog" connection preference
   thefogPreference: 0.6,   // 60% chance to emit toward thefog vs other hubs
   thefogStretchBoost: 1.4, // Extra stretch magnitude when reaching toward thefog
+  thefogDurationBoost: 1.6, // Thefog connections linger 60% longer
+  thefogConcentration: 0.4, // Tighter diameter - only 40% of nodes participate in thefog stretch
+  
+  // Visual feedback during stretching
+  stretchLighting: true,   // Enable lighting effects during stretch
+  maxLightening: 0.6,      // Maximum opacity reduction near hubs (60% lighter)
   
   // System
   nodeCount: 200,          // Number of nodes
@@ -1298,19 +1304,27 @@ function animate() {
             
             // Apply thefog boost for Sophia's realm connections
             const baseStrength = CONSTRAINT_CONFIG.stretchMagnitude;
-            const effectiveStrength = targetHub.hubInfo.isThefog ? 
+            const baseDuration = CONSTRAINT_CONFIG.stretchDuration;
+            const isThefogConnection = targetHub.hubInfo.isThefog;
+            
+            const effectiveStrength = isThefogConnection ? 
               baseStrength * CONSTRAINT_CONFIG.thefogStretchBoost : 
               baseStrength;
+              
+            const effectiveDuration = isThefogConnection ?
+              baseDuration * CONSTRAINT_CONFIG.thefogDurationBoost :
+              baseDuration;
             
             // Create stretch effect with enhanced reach toward hub centers
             const stretchEffect = {
               direction: stretchDirection,
               strength: effectiveStrength,
               startTime: currentTime,
-              duration: CONSTRAINT_CONFIG.stretchDuration,
+              duration: effectiveDuration, // Longer duration for thefog
               decay: 1.0, // Will decay from 1.0 to 0.0
               hubTarget: targetHub.position.clone(), // Store actual hub position for closer reach
-              isThefog: targetHub.hubInfo.isThefog
+              isThefog: isThefogConnection,
+              concentrated: isThefogConnection // Flag for tighter diameter
             };
             
             system.activeStretchEffects.push(stretchEffect);
@@ -1364,6 +1378,9 @@ function animate() {
       system.nodes.forEach((node, i) => {
         const originalPos = system.originalNodePositions[i];
         
+        // Initialize lightening for this frame
+        node.lightening = 0;
+        
         // Calculate total stretch displacement from all active effects
         let totalStretchX = 0;
         let totalStretchY = 0;
@@ -1377,20 +1394,39 @@ function animate() {
           
           // Only stretch nodes that are in the positive direction of stretch
           if (dot > 0) {
-            // Enhanced stretching that pulls nodes closer to actual hub centers
-            const baseStretchAmount = dot * effect.strength * effect.decay;
+            // For thefog (concentrated streams), only affect nodes more aligned with direction
+            let participates = true;
+            if (effect.concentrated) {
+              // Tighter diameter - only nodes with strong directional alignment participate
+              const alignmentThreshold = CONSTRAINT_CONFIG.thefogConcentration;
+              const nodeDistance = nodeFromCenter.length();
+              const alignment = nodeDistance > 0 ? dot / nodeDistance : 0;
+              participates = alignment > alignmentThreshold;
+            }
             
-            // Additional pull toward exact hub position for closer reach
-            const hubDirection = new THREE.Vector3()
-              .copy(effect.hubTarget)
-              .sub(new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z))
-              .normalize();
-            
-            const hubPull = baseStretchAmount * 0.3; // 30% additional pull toward hub center
-            
-            totalStretchX += effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
-            totalStretchY += effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
-            totalStretchZ += effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
+            if (participates) {
+              // Enhanced stretching that pulls nodes closer to actual hub centers
+              const baseStretchAmount = dot * effect.strength * effect.decay;
+              
+              // Additional pull toward exact hub position for closer reach
+              const hubDirection = new THREE.Vector3()
+                .copy(effect.hubTarget)
+                .sub(new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z))
+                .normalize();
+              
+              const hubPull = baseStretchAmount * 0.3; // 30% additional pull toward hub center
+              
+              totalStretchX += effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
+              totalStretchY += effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
+              totalStretchZ += effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
+              
+              // Calculate lighting effect intensity based on stretch amount
+              if (CONSTRAINT_CONFIG.stretchLighting) {
+                const stretchIntensity = (Math.abs(totalStretchX) + Math.abs(totalStretchY) + Math.abs(totalStretchZ)) / 3;
+                const lightening = Math.min(stretchIntensity / effect.strength, 1.0) * CONSTRAINT_CONFIG.maxLightening;
+                node.lightening = Math.max(node.lightening || 0, lightening);
+              }
+            }
           }
         });
         
@@ -1400,18 +1436,22 @@ function animate() {
         node.stretchZ = totalStretchZ;
       });
       
-      // Debug: Log active stretch effects with thefog tracking
+      // Debug: Log active stretch effects with thefog tracking and lighting
       if (system.frameCount % 60 === 0 && system.activeStretchEffects.length > 0) {
         const thefogStretches = system.activeStretchEffects.filter(e => e.isThefog).length;
+        const concentratedStretches = system.activeStretchEffects.filter(e => e.concentrated).length;
         const maxDecay = Math.max(...system.activeStretchEffects.map(e => e.decay)).toFixed(2);
-        console.log('Active mesh stretches:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, ') max decay:', maxDecay);
+        const lightenedNodes = system.nodes.filter(n => n.lightening > 0).length;
+        console.log('Mesh stretches:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, 
+                   'concentrated:', concentratedStretches, ') decay:', maxDecay, 'lit nodes:', lightenedNodes);
       }
     } else {
-      // No active stretch effects - clear stretch offsets
+      // No active stretch effects - clear stretch offsets and lighting
       system.nodes.forEach(node => {
         node.stretchX = 0;
         node.stretchY = 0;
         node.stretchZ = 0;
+        node.lightening = 0;
       });
     }
     
@@ -1479,13 +1519,34 @@ function animate() {
           node.vz += (0 - node.z) * 0.01;
         }
         
-        // Update visual node position
+        // Update visual node position and appearance
         if (system.nodeInstances[i]) {
           // Apply stretch offset to visual position
           const visualX = node.x + (node.stretchX || 0);
           const visualY = node.y + (node.stretchY || 0);
           const visualZ = node.z + (node.stretchZ || 0);
           system.nodeInstances[i].position.set(visualX, visualY, visualZ);
+          
+          // Apply lightening effect during stretching
+          if (CONSTRAINT_CONFIG.stretchLighting && node.lightening > 0) {
+            const baseOpacity = CONSTRAINT_CONFIG.nodeOpacity;
+            const lightenedOpacity = baseOpacity * (1.0 - node.lightening);
+            system.nodeInstances[i].material.opacity = lightenedOpacity;
+            
+            // Add subtle glow effect for stretched nodes
+            if (node.lightening > 0.3) {
+              system.nodeInstances[i].material.emissive.setHex(0x221144);
+              system.nodeInstances[i].material.emissiveIntensity = node.lightening * 0.5;
+            } else {
+              system.nodeInstances[i].material.emissive.setHex(0x000000);
+              system.nodeInstances[i].material.emissiveIntensity = 0;
+            }
+          } else {
+            // Reset to normal appearance
+            system.nodeInstances[i].material.opacity = CONSTRAINT_CONFIG.nodeOpacity;
+            system.nodeInstances[i].material.emissive.setHex(0x000000);
+            system.nodeInstances[i].material.emissiveIntensity = 0;
+          }
         }
       }
     });
