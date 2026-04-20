@@ -707,8 +707,13 @@ function buildAgentTopologies(agents) {
     const agentIndexInHub = hubAgents.indexOf(agent);
     const agentsInHub = hubAgents.length;
     
-    // Orbital parameters
-    const orbitRadius = 1.5 + (agentIndexInHub % 3) * 0.8; // Varied orbit distances
+    // Orbital parameters - smaller radius for thefog hub for more stability
+    let orbitRadius;
+    if (agent.hub === 'thefog') {
+      orbitRadius = 0.8 + (agentIndexInHub % 3) * 0.3; // Smaller orbits for thefog (0.8-1.4)
+    } else {
+      orbitRadius = 1.5 + (agentIndexInHub % 3) * 0.8; // Normal orbits for other hubs (1.5-3.1)
+    }
     const orbitAngle = (agentIndexInHub / agentsInHub) * Math.PI * 2;
     const orbitHeight = Math.sin(agentIndexInHub * 0.7) * 0.5;
     
@@ -719,8 +724,13 @@ function buildAgentTopologies(agents) {
     
     group.position.set(orbitalX, orbitalY, orbitalZ);
     
-    // Store orbital parameters for animation
-    const orbitSpeed = 0.2 + Math.random() * 0.3; // Varied orbital speeds
+    // Store orbital parameters for animation - much slower for thefog hub
+    let orbitSpeed;
+    if (agent.hub === 'thefog') {
+      orbitSpeed = 0.03 + Math.random() * 0.05; // Very slow for thefog (0.03-0.08)
+    } else {
+      orbitSpeed = 0.2 + Math.random() * 0.3; // Normal speed for other hubs (0.2-0.5)
+    }
     const orbitDirection = Math.random() > 0.5 ? 1 : -1; // Random direction
     
     // Random orientation
