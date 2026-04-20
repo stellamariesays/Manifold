@@ -656,7 +656,16 @@ function buildSpiderWeb() {
       'hog': { x: -8, y: 2, z: -6 },
       'trillian': { x: 8, y: 3, z: 2 },
       'thefog': { x: -2, y: 5, z: 8 },
-      'relay': { x: 6, y: 1, z: -8 }
+      'relay': { x: 6, y: 1, z: -8 },
+      'bobiverse': { x: 0, y: 6, z: -10 }  // Additional hub from API data
+    },
+    // Hub zones for spider web routing (8-sector routing system)
+    hubZones: {
+      'hog': { angle: 0 },                    // 0 degrees (east)
+      'trillian': { angle: Math.PI / 2 },     // 90 degrees (north)
+      'thefog': { angle: Math.PI },           // 180 degrees (west)
+      'relay': { angle: 3 * Math.PI / 2 },    // 270 degrees (south)
+      'bobiverse': { angle: Math.PI / 4 }     // 45 degrees (northeast)
     }
   };
   
@@ -673,7 +682,8 @@ function buildAgentTopologies(agents) {
     'relay': 0x00e5ff,
     'hog': 0x00ff88,
     'trillian': 0xaa00ff,
-    'thefog': 0x8800ff
+    'thefog': 0x8800ff,
+    'bobiverse': 0xff6600  // Orange for bobiverse
   };
   
   // Define hub center positions in 3D space
@@ -681,7 +691,8 @@ function buildAgentTopologies(agents) {
     'hog': { x: -8, y: 2, z: -6 },
     'trillian': { x: 8, y: 3, z: 2 },
     'thefog': { x: -2, y: 5, z: 8 },
-    'relay': { x: 6, y: 1, z: -8 }
+    'relay': { x: 6, y: 1, z: -8 },
+    'bobiverse': { x: 0, y: 6, z: -10 }
   };
   
   // Group agents by hub for orbital assignment
@@ -1046,7 +1057,8 @@ function buildCentralNexus() {
     'hog': { x: -8, y: 2, z: -6 },
     'trillian': { x: 8, y: 3, z: 2 },
     'thefog': { x: -2, y: 5, z: 8 }, // Sophia's realm
-    'relay': { x: 6, y: 1, z: -8 }
+    'relay': { x: 6, y: 1, z: -8 },
+    'bobiverse': { x: 0, y: 6, z: -10 }
   };
   
   // Create named hub arrays for weighted selection
@@ -1106,7 +1118,8 @@ function updateAgentsList(agents) {
     'hog': '#00ff88',
     'trillian': '#aa00ff', 
     'thefog': '#8800ff',
-    'relay': '#00e5ff'
+    'relay': '#00e5ff',
+    'bobiverse': '#ff6600'  // Orange for bobiverse
   };
   
   agents.forEach(agent => {
