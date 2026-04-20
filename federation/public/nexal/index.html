@@ -268,6 +268,43 @@
       color: rgba(255,255,255,0.5);
       text-transform: uppercase;
     }
+
+    /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
+    @media (max-width: 768px) {
+      /* Hide all UI panels on mobile to give full screen to 3D animation */
+      #title-panel,
+      #agents-panel,
+      #sophia-panel,
+      #status-panel,
+      #detail-panel {
+        display: none !important;
+      }
+      
+      /* Ensure canvas uses full screen */
+      #scene {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+      
+      /* Remove any potential scrollbars */
+      html, body {
+        overflow: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Improve touch interaction */
+      #scene {
+        touch-action: manipulation;
+      }
+    }
+
+    /* For very small mobile devices */
+    @media (max-width: 480px) {
+      /* Ensure minimal UI interference */
+      #hud {
+        display: none;
+      }
+    }
   </style>
   <script type="importmap">
     {
