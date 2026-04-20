@@ -638,9 +638,9 @@ function buildSpiderWeb() {
   window._webGroup = webGroup;
   window._webRings = webRings;
   
-  // Initialize data highway system
+  // Initialize neural network data highway system
   window._dataHighways = {
-    pulses: [],
+    connections: [], // Neural connections instead of pulses
     segmentActivity: new Map(), // Track which segments have data flowing
     lastPulseTime: 0,
     capabilityColors: {
@@ -651,11 +651,12 @@ function buildSpiderWeb() {
       'solar': 0xffaa00,       // Orange for solar capabilities
       'default': 0xffffff      // White for other capabilities
     },
-    hubZones: {
-      'hog': { angle: 4.7, sectors: [3, 4, 5] },      // Bottom-left quadrants
-      'trillian': { angle: 0.8, sectors: [0, 1, 2] }, // Top-right quadrants  
-      'thefog': { angle: 2.4, sectors: [1, 2, 3] },   // Top-left quadrants
-      'relay': { angle: 5.5, sectors: [5, 6, 7] }     // Bottom-right quadrants
+    // Hub center positions for neural connections
+    hubCenters: {
+      'hog': { x: -8, y: 2, z: -6 },
+      'trillian': { x: 8, y: 3, z: 2 },
+      'thefog': { x: -2, y: 5, z: 8 },
+      'relay': { x: 6, y: 1, z: -8 }
     }
   };
 }
@@ -1713,39 +1714,20 @@ function animate() {
 
 function animateDataHighways(elapsed) {
   const highways = window._dataHighways;
-  if (!highways) {
-    console.log('Data highways: No highway system');
-    return;
-  }
-  if (!window._meshData) {
-    console.log('Data highways: No mesh data available');
-    return;
-  }
-  if (!window._webGroup) {
-    console.log('Data highways: No web group');
-    return;
-  }
+  if (!highways || !window._meshData || !window._webGroup) return;
   
   const currentTime = performance.now();
   
-  // Create new data pulses based on capability pressure (every 500ms for testing)
-  if (currentTime - highways.lastPulseTime > 500) {
+  // Create new neural connections based on capability pressure (every 3 seconds)
+  if (currentTime - highways.lastPulseTime > 3000) {
     highways.lastPulseTime = currentTime;
-    
-    console.log('Data highways: Checking for capabilities...', window._meshData.darkCircles ? window._meshData.darkCircles.length : 'undefined');
     
     // Find high-pressure capabilities from mesh data
     const highPressureCapabilities = window._meshData.darkCircles
       ? window._meshData.darkCircles.filter(cap => cap.pressure > 0.3)
       : [];
     
-    console.log('Data highways: Found', highPressureCapabilities.length, 'high-pressure capabilities');
-    
-    // TEST: Create a visible test pulse regardless of data
-    console.log('Data highways: Creating test pulse');
-    createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'test-capability');
-    
-    // Create pulses for each high-pressure capability
+    // Create neural connections for each high-pressure capability
     highPressureCapabilities.forEach(capability => {
       // Determine capability type for coloring
       const capType = getCapabilityType(capability.name);
@@ -1763,40 +1745,50 @@ function animateDataHighways(elapsed) {
     });
   }
   
-  // Debug: Log pulse count every 60 frames
-  if (animationFrame % 60 === 0) {
-    console.log(`Data highways: ${highways.pulses.length} active pulses`);
+  // Debug: Log connection count every 60 frames
+  if (animationFrame % 60 === 0 && highways.connections.length > 0) {
+    console.log(`Neural highways: ${highways.connections.length} active connections`);
   }
   
-  // Animate existing pulses along web segments
-  highways.pulses = highways.pulses.filter(pulse => {
-    pulse.progress += pulse.speed;
+  // Animate neural network connections
+  highways.connections = highways.connections.filter(connection => {
+    const age = currentTime - connection.startTime;
     
-    if (pulse.progress <= 1.0) {
-      // Update pulse position along path
-      const position = getWebPathPosition(pulse.path, pulse.progress);
-      if (position && pulse.mesh) {
-        pulse.mesh.position.copy(position);
-        
-        // Debug position every 30 frames for first few pulses
-        if (animationFrame % 30 === 0 && highways.pulses.indexOf(pulse) < 3) {
-          console.log(`Pulse ${pulse.capability} at progress ${pulse.progress.toFixed(2)} position:`, 
-                     position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1));
-        }
-        
-        // Light up web segments near pulse (temporarily disabled for debugging)
-        // lightUpWebSegments(position, pulse.color, pulse.intensity);
-      } else {
-        console.log(`Pulse ${pulse.capability}: position or mesh missing`, !!position, !!pulse.mesh);
+    if (age <= connection.lifetime) {
+      // Neural flowing effect - pulse progress along curve
+      connection.progress += connection.speed;
+      if (connection.progress > 1.0) connection.progress = 0.0; // Loop the flow
+      
+      // Create pulsing opacity effect
+      const pulsePhase = Math.sin(currentTime * 0.005 + connection.progress * Math.PI * 2);
+      const opacity = connection.maxOpacity * (0.3 + 0.7 * (pulsePhase * 0.5 + 0.5));
+      
+      connection.line.material.opacity = opacity;
+      
+      // Flowing gradient effect - brighten sections as pulse travels
+      const flowIntensity = Math.sin(connection.progress * Math.PI * 4) * 0.3 + 0.7;
+      connection.line.material.color.setHex(connection.color);
+      
+      // Debug flow every 120 frames for first few connections
+      if (animationFrame % 120 === 0 && highways.connections.indexOf(connection) < 2) {
+        console.log(`Neural flow ${connection.capability} progress: ${connection.progress.toFixed(2)} opacity: ${opacity.toFixed(2)}`);
       }
-      return true; // Keep pulse
+      
+      return true; // Keep connection
     } else {
-      // Remove completed pulse
-      console.log(`Removing completed pulse: ${pulse.capability}`);
-      if (pulse.mesh && pulse.mesh.parent) {
-        pulse.mesh.parent.remove(pulse.mesh);
+      // Fade out and remove old connection
+      console.log(`Fading neural connection: ${connection.capability}`);
+      if (connection.line && connection.line.parent) {
+        // Fade out over 500ms
+        const fadePhase = Math.max(0, 1.0 - (age - connection.lifetime) / 500);
+        connection.line.material.opacity *= fadePhase;
+        
+        if (fadePhase <= 0.01) {
+          connection.line.parent.remove(connection.line);
+          return false; // Remove connection
+        }
       }
-      return false; // Remove pulse
+      return true; // Keep during fade
     }
   });
   
@@ -1821,49 +1813,57 @@ function getCapabilityType(capabilityName) {
 
 function createDataPulse(sourceHub, destHub, color, pressure, capabilityName) {
   const highways = window._dataHighways;
-  if (!highways.hubZones[sourceHub] || !highways.hubZones[destHub]) return;
+  if (!highways.hubCenters[sourceHub] || !highways.hubCenters[destHub]) return;
   
-  // Create pulse mesh - HUGE glowing sphere for testing
-  const pulseGeometry = new THREE.SphereGeometry(1.5, 20, 20); // HUGE for visibility
-  const pulseMaterial = new THREE.MeshBasicMaterial({
+  // Neural network style: Create flowing connection line instead of sphere
+  const sourcePos = highways.hubCenters[sourceHub];
+  const destPos = highways.hubCenters[destHub];
+  
+  // Create curved path between hubs
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z),
+    new THREE.Vector3(0, 2, 0), // Arc through center point elevated
+    new THREE.Vector3(destPos.x, destPos.y, destPos.z)
+  );
+  
+  // Create line geometry from curve
+  const points = curve.getPoints(50);
+  const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+  
+  // Neural network style material - subtle gradient
+  const lineMaterial = new THREE.LineBasicMaterial({
     color: color,
-    transparent: false, // No transparency
-    emissive: color,
-    emissiveIntensity: 3.0 // Maximum brightness
+    transparent: true,
+    opacity: 0.6 + pressure * 0.4, // Opacity based on pressure
+    linewidth: 2 + pressure * 3 // Thicker lines for higher pressure
   });
   
-  console.log(`Creating HUGE pulse mesh with color: 0x${color.toString(16)} at position will be calculated`);
-  const pulseMesh = new THREE.Mesh(pulseGeometry, pulseMaterial);
+  const connectionLine = new THREE.Line(lineGeometry, lineMaterial);
+  window._webGroup.add(connectionLine);
   
-  // Add to web group
-  window._webGroup.add(pulseMesh);
+  console.log(`Neural connection: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub} - ${color.toString(16)}`);
   
-  // Position pulse at start location for immediate visibility
-  pulseMesh.position.set(0, -3, 0); // Start at web center
-  
-  // Calculate path through spider web from source to dest hub zone
-  const path = calculateWebPath(sourceHub, destHub);
-  
-  console.log(`Pulse added to scene: ${capabilityName}, mesh parent:`, pulseMesh.parent ? 'yes' : 'no');
-  
-  // Create pulse object
-  const pulse = {
-    mesh: pulseMesh,
-    path: path,
+  // Create flowing pulse effect along the line
+  const connection = {
+    line: connectionLine,
+    curve: curve,
     progress: 0.0,
-    speed: 0.008 * (1 + pressure), // Speed based on capability pressure
+    speed: 0.02 * (1 + pressure), // Neural pulse speed
     color: color,
     intensity: pressure,
     capability: capabilityName,
     sourceHub: sourceHub,
-    destHub: destHub
+    destHub: destHub,
+    maxOpacity: 0.6 + pressure * 0.4,
+    lifetime: 3000 + pressure * 2000, // Connection lasts longer for important capabilities
+    startTime: performance.now()
   };
   
-  highways.pulses.push(pulse);
+  highways.connections.push(connection);
   
   // Debug log high-activity capabilities
   if (pressure > 0.7) {
-    console.log(`Data highway: ${capabilityName} (${pressure.toFixed(2)}) routing ${sourceHub} → ${destHub}`);
+    console.log(`Neural highway: ${capabilityName} (${pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
   }
 }
 
