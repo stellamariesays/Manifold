@@ -123,7 +123,7 @@ After=network.target tailscaled.service
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR/federation
-ExecStart=$(which node) dist/server/standalone.mjs --config config-relay.json
+ExecStart=$(which node) /opt/Manifold/federation/node_modules/.bin/tsx /opt/Manifold/federation/standalone.mts --config config-relay.json
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
