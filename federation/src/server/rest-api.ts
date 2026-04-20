@@ -17,12 +17,14 @@ export interface RestApiOptions {
   hub: string
   port: number
   debug?: boolean
+  apiKey?: string
 }
 
 export class RestApi {
   private readonly hub: string
   private readonly port: number
   private readonly debug: boolean
+  private readonly apiKey?: string
 
   private app = express()
   private server: ReturnType<typeof this.app.listen> | null = null
@@ -42,6 +44,7 @@ export class RestApi {
     this.hub = options.hub
     this.port = options.port
     this.debug = options.debug ?? false
+    this.apiKey = options.apiKey
     this.attestationEngine = new AttestationEngine()
     this.antiSybilGuard = new AntiSybilGuard()
     this._setup()
@@ -55,11 +58,6 @@ export class RestApi {
     this.taskHistory = taskHistory
     this.metrics = metrics
     this.detectionCoord = detectionCoord!
-
-    // Apply auth middleware if configured
-    if (security?.apiKey) {
-      this.app.use(createAuthMiddleware(security))
-    }
 
     return new Promise((resolve, reject) => {
       this.server = this.app.listen(this.port, () => {
@@ -84,9 +82,14 @@ export class RestApi {
     this.app.use((_req, res, next) => {
       res.setHeader('Access-Control-Allow-Origin', '*')
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
       next()
     })
+
+    // Auth middleware — must be before router
+    if (this.apiKey) {
+      this.app.use(createAuthMiddleware({ apiKey: this.apiKey }))
+    }
 
     const router: Router = express.Router()
 
