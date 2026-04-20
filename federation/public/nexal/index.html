@@ -803,6 +803,18 @@ const CONSTRAINT_CONFIG = {
   mouseRadius: 4.0,        // Black hole influence radius
   mouseForce: 2.5,         // Black hole attraction strength
   
+  // Mouse proximity shrinking
+  shrinkOnProximity: true, // Shrink constraint system when mouse is near
+  shrinkRadius: 6.0,       // Distance at which shrinking starts
+  minShrinkScale: 0.3,     // Minimum scale when mouse is very close
+  
+  // Particle emissions
+  particleEmissions: true, // Enable particle emissions to hubs
+  emissionInterval: 300,   // Emit particles every 300ms (0.3 seconds)
+  particlesPerEmission: 2, // Number of particles per emission burst
+  particleSpeed: 0.02,     // Speed of particle travel to hubs
+  particleSize: 0.05,      // Visual size of particles
+  
   // System
   nodeCount: 200,          // Number of nodes
   connectionDistance: 1.2, // Distance to create connections
@@ -955,6 +967,14 @@ function buildCentralNexus() {
   
   scene.add(constraintGroup);
   
+  // Populate hub positions for particle targeting
+  const hubCenters = {
+    'hog': { x: -8, y: 2, z: -6 },
+    'trillian': { x: 8, y: 3, z: 2 },
+    'thefog': { x: -2, y: 5, z: 8 },
+    'relay': { x: 6, y: 1, z: -8 }
+  };
+
   // Store references for animation and mouse interaction
   window._constraintSystem = {
     group: constraintGroup,
@@ -974,8 +994,21 @@ function buildCentralNexus() {
     introDuration: 2000, // 2 seconds
     mouseInteractionEnabled: false, // Enabled after 2.2 seconds
     mouseEnableTime: 2200, // 2.2 seconds
-    frameCount: 0 // For debug logging
+    frameCount: 0, // For debug logging
+    
+    // Proximity scaling
+    currentScale: 1.0,
+    targetProximityScale: 1.0,
+    
+    // Particle system
+    particles: [],
+    lastEmissionTime: 0,
+    hubPositions: Object.values(hubCenters).map(pos => new THREE.Vector3(pos.x, pos.y, pos.z)),
+    particleGroup: new THREE.Group() // Container for particle meshes
   };
+  
+  // Add particle group to scene
+  scene.add(window._constraintSystem.particleGroup);
 }
 
 function updateAgentsList(agents) {
@@ -1081,6 +1114,7 @@ function animate() {
       } else {
         // Animation complete - set final scale and switch to stable mode
         system.group.scale.setScalar(system.targetScale);
+        system.currentScale = system.targetScale; // Initialize proximity scaling
         system.introAnimation = false;
         console.log('Intro animation complete - switching to stable mode');
         
@@ -1093,6 +1127,9 @@ function animate() {
           system.mouseInteractionEnabled = true;
           console.log('Mouse interaction enabled after intro completion');
         }
+      } else if (!system.introAnimation && CONSTRAINT_CONFIG.shrinkOnProximity) {
+        // Don't apply proximity shrinking during intro animation
+        // This will be handled in the separate proximity shrinking section
       }
     }
     const nodes = system.nodes;
@@ -1133,6 +1170,94 @@ function animate() {
       if (system.frameCount % 60 === 0 && nodesAffected > 0) {
         console.log('Black hole affecting', nodesAffected, 'nodes');
       }
+    }
+    
+    // Proximity-based shrinking effect (only after intro animation completes)
+    if (CONSTRAINT_CONFIG.shrinkOnProximity && system.mousePosition && system.mouseInteractionEnabled && !system.introAnimation) {
+      // Calculate distance from mouse to constraint system center
+      const systemCenter = system.group.position;
+      const mouseDistance = system.mousePosition.distanceTo(systemCenter);
+      
+      // Calculate target scale based on mouse proximity
+      if (mouseDistance < CONSTRAINT_CONFIG.shrinkRadius) {
+        const proximityRatio = mouseDistance / CONSTRAINT_CONFIG.shrinkRadius;
+        system.targetProximityScale = CONSTRAINT_CONFIG.minShrinkScale + 
+          (1.0 - CONSTRAINT_CONFIG.minShrinkScale) * proximityRatio;
+      } else {
+        system.targetProximityScale = 1.0;
+      }
+      
+      // Smoothly interpolate to target scale
+      const lerpFactor = 0.05;
+      system.currentScale += (system.targetProximityScale - system.currentScale) * lerpFactor;
+      system.group.scale.setScalar(system.currentScale);
+      
+      // Debug: Log shrinking effect every 60 frames
+      if (system.frameCount % 60 === 0 && system.currentScale < 0.95) {
+        console.log('Proximity shrinking - scale:', system.currentScale.toFixed(2), 'distance:', mouseDistance.toFixed(2));
+      }
+    }
+    
+    // Particle emission system (only after intro animation completes)
+    if (CONSTRAINT_CONFIG.particleEmissions && system.hubPositions.length > 0 && !system.introAnimation) {
+      const currentTime = performance.now();
+      
+      // Emit new particles every interval
+      if (currentTime - system.lastEmissionTime >= CONSTRAINT_CONFIG.emissionInterval) {
+        system.lastEmissionTime = currentTime;
+        
+        // Create particles for this emission burst
+        for (let i = 0; i < CONSTRAINT_CONFIG.particlesPerEmission; i++) {
+          // Pick random hub as target
+          const targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
+          const targetHub = system.hubPositions[targetHubIndex];
+          
+          // Create particle mesh
+          const particleGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.particleSize, 8, 6);
+          const particleMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x00e5ff, 
+            transparent: true, 
+            opacity: 0.8 
+          });
+          const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
+          
+          // Start at constraint system center
+          particleMesh.position.copy(system.group.position);
+          
+          // Store particle data
+          const particle = {
+            mesh: particleMesh,
+            startPos: system.group.position.clone(),
+            targetPos: targetHub.clone(),
+            progress: 0.0,
+            speed: CONSTRAINT_CONFIG.particleSpeed,
+            targetHubIndex: targetHubIndex
+          };
+          
+          system.particles.push(particle);
+          system.particleGroup.add(particleMesh);
+        }
+        
+        // Debug: Log particle emission
+        if (system.frameCount % 300 === 0) { // Every 5 seconds
+          console.log('Emitted', CONSTRAINT_CONFIG.particlesPerEmission, 'particles. Active:', system.particles.length);
+        }
+      }
+      
+      // Update existing particles
+      system.particles = system.particles.filter(particle => {
+        particle.progress += particle.speed;
+        
+        if (particle.progress >= 1.0) {
+          // Particle reached destination - remove it
+          system.particleGroup.remove(particle.mesh);
+          return false;
+        } else {
+          // Update particle position along path
+          particle.mesh.position.lerpVectors(particle.startPos, particle.targetPos, particle.progress);
+          return true;
+        }
+      });
     }
     
     // Apply constraint forces
