@@ -797,8 +797,8 @@ const CONSTRAINT_CONFIG = {
   constraintRatio: 0.8,    // 0-1, higher = stronger constraints (pull back to original positions)
   followMouse: true,       // Mouse interaction
   whiteNodes: true,        // Node color scheme
-  mouseRadius: 2.0,        // Mouse influence radius
-  mouseForce: 0.8,         // Mouse force strength
+  mouseRadius: 3.0,        // Mouse influence radius (increased for more visible effect)
+  mouseForce: 1.5,         // Mouse force strength (increased for more responsive interaction)
   
   // System
   nodeCount: 200,          // Number of nodes
@@ -886,8 +886,8 @@ function buildCentralNexus() {
   const nodeGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.nodeSize, 8, 8);
   const nodeMaterial = new THREE.MeshPhongMaterial({
     color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
-    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x222222 : 0x220044,
-    emissiveIntensity: 0.1,
+    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x444444 : 0x220044,
+    emissiveIntensity: CONSTRAINT_CONFIG.whiteNodes ? 0.3 : 0.1,
     transparent: true,
     opacity: CONSTRAINT_CONFIG.nodeOpacity,
   });
@@ -905,7 +905,7 @@ function buildCentralNexus() {
   const linePositions = new Float32Array(constraints.length * 6); // 2 points per constraint * 3 coords
   
   const lineMaterial = new THREE.LineBasicMaterial({
-    color: CONSTRAINT_CONFIG.whiteTheme ? 0xffffff : 0x4400aa,
+    color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
     transparent: true,
     opacity: CONSTRAINT_CONFIG.lineOpacity,
   });
@@ -1049,9 +1049,9 @@ function animate() {
         
         if (distance < CONSTRAINT_CONFIG.mouseRadius && distance > 0.1) {
           const force = CONSTRAINT_CONFIG.mouseForce / (distance * distance + 1);
-          node.vx += dx * force * 0.01;
-          node.vy += dy * force * 0.01;
-          node.vz += dz * force * 0.01;
+          node.vx += dx * force * 0.02;
+          node.vy += dy * force * 0.02;
+          node.vz += dz * force * 0.02;
         }
       });
     }
