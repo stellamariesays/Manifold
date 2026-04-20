@@ -825,11 +825,15 @@ const CONSTRAINT_CONFIG = {
   thefogPreference: 0.6,   // 60% chance to emit toward thefog vs other hubs
   thefogStretchBoost: 1.4, // Extra stretch magnitude when reaching toward thefog
   thefogDurationBoost: 1.6, // Thefog connections linger 60% longer
-  thefogConcentration: 0.4, // Tighter diameter - only 40% of nodes participate in thefog stretch
+  thefogConcentration: 0.65, // Much tighter diameter - only 35% of nodes (was 40%)
+  thefogParticipation: 0.75, // Only 75% as many strands for thefog (25% reduction)
+  
+  // Stretch animation timing
+  stretchSpeed: 1.0,       // Buildup multiplier (1.0 = full buildup over buildup duration)
   
   // Visual feedback during stretching
   stretchLighting: true,   // Enable lighting effects during stretch
-  maxLightening: 0.6,      // Maximum opacity reduction near hubs (60% lighter)
+  maxLightening: 0.7,      // Maximum opacity reduction near hubs (70% lighter)
   
   // System
   nodeCount: 200,          // Number of nodes
@@ -928,7 +932,9 @@ function buildCentralNexus() {
   
   const nodeInstances = [];
   nodes.forEach((node, i) => {
-    const nodeMesh = new THREE.Mesh(nodeGeometry, nodeMaterial.clone());
+    // Clone material for each node to allow individual opacity changes
+    const individualMaterial = nodeMaterial.clone();
+    const nodeMesh = new THREE.Mesh(nodeGeometry, individualMaterial);
     nodeMesh.position.set(node.x, node.y, node.z);
     nodeInstances.push(nodeMesh);
     constraintGroup.add(nodeMesh);
@@ -1321,7 +1327,10 @@ function animate() {
               strength: effectiveStrength,
               startTime: currentTime,
               duration: effectiveDuration, // Longer duration for thefog
-              decay: 1.0, // Will decay from 1.0 to 0.0
+              buildup: 0.0, // Start at 0, build up gradually
+              decay: 1.0, // Will decay from 1.0 to 0.0 after buildup completes
+              buildupPhase: true, // Currently building up strength
+              buildupDuration: effectiveDuration * 0.5, // 50% of total time for gradual buildup
               hubTarget: targetHub.position.clone(), // Store actual hub position for closer reach
               isThefog: isThefogConnection,
               concentrated: isThefogConnection // Flag for tighter diameter
@@ -1359,7 +1368,7 @@ function animate() {
     if (CONSTRAINT_CONFIG.meshStretch && system.activeStretchEffects.length > 0) {
       const currentTime = performance.now();
       
-      // Update and filter active stretch effects
+      // Update and filter active stretch effects with gradual buildup
       system.activeStretchEffects = system.activeStretchEffects.filter(effect => {
         const elapsed = currentTime - effect.startTime;
         const progress = elapsed / effect.duration;
@@ -1368,8 +1377,23 @@ function animate() {
           // Effect expired
           return false;
         } else {
-          // Update decay (smooth ease-out curve)
-          effect.decay = 1.0 - (progress * progress); // Quadratic ease-out
+          if (effect.buildupPhase) {
+            // Gradual buildup phase
+            const buildupProgress = Math.min(elapsed / effect.buildupDuration, 1.0);
+            effect.buildup = buildupProgress * CONSTRAINT_CONFIG.stretchSpeed;
+            
+            if (buildupProgress >= 1.0) {
+              effect.buildupPhase = false;
+              effect.buildup = 1.0;
+            }
+          } else {
+            // Decay phase (smooth ease-out curve)
+            const decayStart = effect.buildupDuration;
+            const decayElapsed = elapsed - decayStart;
+            const decayDuration = effect.duration - decayStart;
+            const decayProgress = decayElapsed / decayDuration;
+            effect.decay = 1.0 - (decayProgress * decayProgress); // Quadratic ease-out
+          }
           return true;
         }
       });
@@ -1402,11 +1426,21 @@ function animate() {
               const nodeDistance = nodeFromCenter.length();
               const alignment = nodeDistance > 0 ? dot / nodeDistance : 0;
               participates = alignment > alignmentThreshold;
+              
+              // Further reduce participation for thefog (25% fewer strands)
+              if (participates && Math.random() > CONSTRAINT_CONFIG.thefogParticipation) {
+                participates = false;
+              }
             }
             
             if (participates) {
+              // Use buildup for gradual stretch, then decay for pullback
+              const currentStrength = effect.buildupPhase ? 
+                effect.strength * effect.buildup : 
+                effect.strength * effect.decay;
+              
               // Enhanced stretching that pulls nodes closer to actual hub centers
-              const baseStretchAmount = dot * effect.strength * effect.decay;
+              const baseStretchAmount = dot * currentStrength;
               
               // Additional pull toward exact hub position for closer reach
               const hubDirection = new THREE.Vector3()
@@ -1416,14 +1450,18 @@ function animate() {
               
               const hubPull = baseStretchAmount * 0.3; // 30% additional pull toward hub center
               
-              totalStretchX += effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
-              totalStretchY += effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
-              totalStretchZ += effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
+              const stretchX = effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
+              const stretchY = effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
+              const stretchZ = effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
+              
+              totalStretchX += stretchX;
+              totalStretchY += stretchY;
+              totalStretchZ += stretchZ;
               
               // Calculate lighting effect intensity based on stretch amount
               if (CONSTRAINT_CONFIG.stretchLighting) {
-                const stretchIntensity = (Math.abs(totalStretchX) + Math.abs(totalStretchY) + Math.abs(totalStretchZ)) / 3;
-                const lightening = Math.min(stretchIntensity / effect.strength, 1.0) * CONSTRAINT_CONFIG.maxLightening;
+                const stretchMagnitude = Math.sqrt(stretchX*stretchX + stretchY*stretchY + stretchZ*stretchZ);
+                const lightening = Math.min(stretchMagnitude / (effect.strength * 0.5), 1.0) * CONSTRAINT_CONFIG.maxLightening;
                 node.lightening = Math.max(node.lightening || 0, lightening);
               }
             }
@@ -1440,10 +1478,13 @@ function animate() {
       if (system.frameCount % 60 === 0 && system.activeStretchEffects.length > 0) {
         const thefogStretches = system.activeStretchEffects.filter(e => e.isThefog).length;
         const concentratedStretches = system.activeStretchEffects.filter(e => e.concentrated).length;
-        const maxDecay = Math.max(...system.activeStretchEffects.map(e => e.decay)).toFixed(2);
-        const lightenedNodes = system.nodes.filter(n => n.lightening > 0).length;
-        console.log('Mesh stretches:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, 
-                   'concentrated:', concentratedStretches, ') decay:', maxDecay, 'lit nodes:', lightenedNodes);
+        const buildingUp = system.activeStretchEffects.filter(e => e.buildupPhase).length;
+        const maxDecay = Math.max(...system.activeStretchEffects.map(e => e.buildupPhase ? e.buildup : e.decay)).toFixed(2);
+        const lightenedNodes = system.nodes.filter(n => (n.lightening || 0) > 0.1).length;
+        const maxLightening = Math.max(...system.nodes.map(n => n.lightening || 0)).toFixed(2);
+        console.log('Mesh:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, 
+                   'concentrated:', concentratedStretches, 'building:', buildingUp, ') strength:', maxDecay, 
+                   'lit nodes:', lightenedNodes, 'max light:', maxLightening);
       }
     } else {
       // No active stretch effects - clear stretch offsets and lighting
@@ -1530,22 +1571,26 @@ function animate() {
           // Apply lightening effect during stretching
           if (CONSTRAINT_CONFIG.stretchLighting && node.lightening > 0) {
             const baseOpacity = CONSTRAINT_CONFIG.nodeOpacity;
-            const lightenedOpacity = baseOpacity * (1.0 - node.lightening);
+            const lightenedOpacity = Math.max(baseOpacity * (1.0 - node.lightening), 0.1); // Don't go completely transparent
             system.nodeInstances[i].material.opacity = lightenedOpacity;
             
-            // Add subtle glow effect for stretched nodes
-            if (node.lightening > 0.3) {
-              system.nodeInstances[i].material.emissive.setHex(0x221144);
-              system.nodeInstances[i].material.emissiveIntensity = node.lightening * 0.5;
+            // Add stronger glow effect for stretched nodes
+            if (node.lightening > 0.2) {
+              system.nodeInstances[i].material.emissive.setHex(0x4422ff); // Brighter purple glow
+              system.nodeInstances[i].material.emissiveIntensity = node.lightening * 0.8; // Stronger intensity
             } else {
               system.nodeInstances[i].material.emissive.setHex(0x000000);
               system.nodeInstances[i].material.emissiveIntensity = 0;
             }
+            
+            // Force material update
+            system.nodeInstances[i].material.needsUpdate = true;
           } else {
             // Reset to normal appearance
             system.nodeInstances[i].material.opacity = CONSTRAINT_CONFIG.nodeOpacity;
             system.nodeInstances[i].material.emissive.setHex(0x000000);
             system.nodeInstances[i].material.emissiveIntensity = 0;
+            system.nodeInstances[i].material.needsUpdate = true;
           }
         }
       }
