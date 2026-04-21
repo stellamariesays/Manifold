@@ -589,6 +589,11 @@ export class RestApi {
   .ok{color:#4ade80} .err{color:#f87171} .warn{color:#fbbf24} .dim{color:#666}
   a{color:#60a5fa;text-decoration:none}
   .refresh{float:right;color:#888;font-size:0.8rem}
+  .examples{background:#16213e;border:1px solid #2563eb;border-radius:8px;padding:1rem;margin:1rem 0}
+  .example{background:#0f172a;border:1px solid #1e293b;border-radius:4px;padding:0.75rem;margin:0.5rem 0}
+  .example h4{color:#60a5fa;margin:0 0 0.5rem 0;font-size:0.9rem}
+  .example pre{background:#000;color:#e2e8f0;padding:0.5rem;border-radius:4px;font-size:0.8rem;overflow-x:auto;margin:0.25rem 0}
+  .example .desc{color:#94a3b8;font-size:0.85rem;margin:0.25rem 0}
 </style>
 </head><body>
 <h1>🕸️ Manifold — ${m.hub}</h1>
@@ -611,6 +616,101 @@ export class RestApi {
   <div class="card"><div class="label">Success Rate</div><div class="value">${m.successRate}</div></div>
   <div class="card"><div class="label">Avg Latency</div><div class="value">${m.avgExecutionMs}ms</div></div>
   <div class="card"><div class="label">Pending</div><div class="value warn">${m.tasksPending}</div></div>
+</div>
+
+<div class="examples">
+<h2>🚀 Cross-Agent Task Examples</h2>
+<div class="desc">Submit tasks to leverage the distributed capabilities across all connected hubs.</div>
+
+<div class="example">
+<h4>🔍 Solar Monitoring Pipeline</h4>
+<div class="desc">Coordinate solar flare detection across multiple specialized agents</div>
+<pre>curl -X POST https://nexal.network/api/task \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "command": "monitor-solar-activity",
+    "target": "solar-detect",
+    "params": {
+      "threshold": "M-class",
+      "duration": "24h",
+      "notify": ["stella", "braid"]
+    }
+  }'</pre>
+</div>
+
+<div class="example">
+<h4>🤖 Multi-Hub Agent Orchestration</h4>
+<div class="desc">Route tasks across hubs using agent capabilities</div>
+<pre>curl -X POST https://nexal.network/api/task \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "command": "coordinate-deployment",
+    "capability": "deployment-strategy",
+    "params": {
+      "project": "manifold-update",
+      "hubs": ["hog", "trillian", "thefog"]
+    }
+  }'</pre>
+</div>
+
+<div class="example">
+<h4>💬 Conversational + Technical Analysis</h4>
+<div class="desc">Combine Bob's conversation skills with Stella's judgment</div>
+<pre>curl -X POST https://nexal.network/api/task \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "command": "analyze-and-explain",
+    "targets": ["bob", "stella"],
+    "params": {
+      "data": "crypto market analysis",
+      "format": "conversational-summary"
+    }
+  }'</pre>
+</div>
+
+<div class="example">
+<h4>🔧 Infrastructure Health Check</h4>
+<div class="desc">Distributed system monitoring across all hubs</div>
+<pre>curl -X POST https://nexal.network/api/task \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "command": "system-health-audit",
+    "capability": "system-administration",
+    "params": {
+      "scope": "all-hubs",
+      "include": ["security", "performance", "capacity"]
+    }
+  }'</pre>
+</div>
+
+<div class="example">
+<h4>📊 Real-time Dashboard Creation</h4>
+<div class="desc">Use solar-sites agent for live visualization</div>
+<pre>curl -X POST https://nexal.network/api/task \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "command": "create-dashboard",
+    "target": "solar-sites",
+    "params": {
+      "data_source": "manifold-metrics",
+      "visualization": "d3-network",
+      "update_interval": "5s"
+    }
+  }'</pre>
+</div>
+
+<div class="example">
+<h4>🎯 Capability Discovery</h4>
+<div class="desc">Find agents with specific capabilities across the federation</div>
+<pre># List all available capabilities
+curl https://nexal.network/api/agents
+
+# Find agents with specific capability
+curl "https://nexal.network/api/agents?capability=deployment"
+
+# Check task status
+curl https://nexal.network/api/task/&lt;task-id&gt;</pre>
+</div>
 </div>
 
 <h2>🤖 Per-Agent Stats</h2>
