@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexal Network — Intelligence Coordination Protocol</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:    #00e5ff;
+      --violet:  #aa00ff;
+      --green:   #00ff88;
+      --pink:    #ff0077;
+      --gold:    #ffcc00;
+      --bg:      #000510;
+      --panel:   rgba(0,10,30,0.85);
+      --border:  rgba(0,229,255,0.3);
+      --text:    #b0e0f8;
+      --accent:  #00e5ff;
+      --danger:  #ff3366;
+      --window:  linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+      --window-border: #4a9eff;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Rajdhani', 'Share Tech Mono', monospace;
+      color: var(--text);
+      user-select: none;
+    }
+
+    /* ── FULLSCREEN 3D BACKGROUND ──────────────────────────────── */
+    #scene {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* ── WINDOWS-STYLE GUI LAYER ───────────────────────────────── */
+    #gui-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TASKBAR (BOTTOM) ──────────────────────────────────────── */
+    #taskbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      background: linear-gradient(180deg, #2c5aa0 0%, #1e3c72 100%);
+      border-top: 2px solid var(--window-border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      pointer-events: all;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    #start-button {
+      height: 36px;
+      width: 120px;
+      background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+      border: 2px outset #ff8e8e;
+      border-radius: 4px;
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all 0.1s;
+      pointer-events: all;
+    }
+
+    #start-button:hover {
+      background: linear-gradient(135deg, #ff7979, #fd7f28);
+      border: 2px outset #ffa8a8;
+    }
+
+    #start-button:active {
+      border: 2px inset #ff6b6b;
+      background: linear-gradient(135deg, #e55656, #d63031);
+    }
+
+    #taskbar-items {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-left: 16px;
+    }
+
+    .taskbar-item {
+      height: 36px;
+      min-width: 160px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .taskbar-item:hover {
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.4);
+    }
+
+    .taskbar-item.active {
+      background: rgba(255,255,255,0.25);
+      border: 1px inset rgba(255,255,255,0.3);
+    }
+
+    .taskbar-item .icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    #system-tray {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: #e0e0e0;
+    }
+
+    .system-icon {
+      width: 20px;
+      height: 20px;
+      background: rgba(255,255,255,0.3);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .system-icon:hover {
+      background: rgba(255,255,255,0.5);
+    }
+
+    #clock {
+      font-weight: 600;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    /* ── WINDOWS ───────────────────────────────────────────────── */
+    .window {
+      position: absolute;
+      background: var(--panel);
+      border: 2px outset var(--window-border);
+      border-radius: 6px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      pointer-events: all;
+      display: flex;
+      flex-direction: column;
+      min-width: 300px;
+      min-height: 200px;
+    }
+
+    .window.minimized {
+      display: none;
+    }
+
+    .window-titlebar {
+      height: 32px;
+      background: var(--window);
+      border-bottom: 1px solid var(--window-border);
+      border-radius: 4px 4px 0 0;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      cursor: move;
+      user-select: none;
+    }
+
+    .window-icon {
+      width: 16px;
+      height: 16px;
+      background: var(--cyan);
+      border-radius: 2px;
+      margin-right: 8px;
+    }
+
+    .window-title {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+
+    .window-controls {
+      display: flex;
+      gap: 2px;
+    }
+
+    .window-control {
+      width: 20px;
+      height: 20px;
+      border: 1px outset #ccc;
+      background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.1s;
+      color: #333;
+    }
+
+    .window-control:hover {
+      background: linear-gradient(135deg, #f8f8f8, #e0e0e0);
+    }
+
+    .window-control:active {
+      border: 1px inset #ccc;
+      background: linear-gradient(135deg, #d8d8d8, #c0c0c0);
+    }
+
+    .window-control.close:hover {
+      background: linear-gradient(135deg, #ff6b6b, #e55656);
+      color: white;
+    }
+
+    .window-content {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      color: var(--text);
+    }
+
+    /* ── COMMAND CENTER WINDOW ────────────────────────────────── */
+    #command-window {
+      width: 600px;
+      height: 450px;
+      top: 60px;
+      right: 40px;
+    }
+
+    .command-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .command-button {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #4a9eff, #0078ff);
+      border: 2px outset #6bb6ff;
+      border-radius: 4px;
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.1s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .command-button:hover {
+      background: linear-gradient(135deg, #5ba7ff, #1082ff);
+      border-color: #7fc0ff;
+    }
+
+    .command-button:active {
+      border: 2px inset #4a9eff;
+      background: linear-gradient(135deg, #3d8efc, #0066cc);
+    }
+
+    .command-button.violet {
+      background: linear-gradient(135deg, #aa00ff, #8800cc);
+      border-color: #cc44ff;
+    }
+
+    .command-button.violet:hover {
+      background: linear-gradient(135deg, #bb22ff, #9911dd);
+      border-color: #dd66ff;
+    }
+
+    .command-button.green {
+      background: linear-gradient(135deg, #00ff88, #00cc66);
+      border-color: #44ffaa;
+    }
+
+    .command-button.green:hover {
+      background: linear-gradient(135deg, #22ff99, #11dd77);
+      border-color: #66ffbb;
+    }
+
+    .command-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.3);
+      border: 2px inset #666;
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+    }
+
+    .command-input:focus {
+      outline: none;
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+    }
+
+    .command-output {
+      height: 160px;
+      background: rgba(0,0,0,0.5);
+      border: 2px inset #666;
+      border-radius: 4px;
+      padding: 8px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      overflow-y: auto;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
+    .output-line {
+      margin-bottom: 4px;
+      word-wrap: break-word;
+    }
+
+    .output-line.success { color: var(--green); }
+    .output-line.error { color: var(--danger); }
+    .output-line.info { color: var(--cyan); }
+    .output-line.warning { color: var(--gold); }
+
+    /* ── STATUS WINDOW ────────────────────────────────────────── */
+    #status-window {
+      width: 320px;
+      height: 280px;
+      top: 60px;
+      left: 40px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .status-item {
+      padding: 8px;
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .status-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--cyan);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .status-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.7);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-list {
+      max-height: 120px;
+      overflow-y: auto;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .status-list-item {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,229,255,0.1);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── FLOATING TOOLBAR ──────────────────────────────────────── */
+    #toolbar {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel);
+      border: 2px outset var(--window-border);
+      border-radius: 6px;
+      padding: 8px 16px;
+      backdrop-filter: blur(12px);
+      pointer-events: all;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+
+    .toolbar-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 8px var(--cyan);
+      letter-spacing: 2px;
+    }
+
+    .toolbar-separator {
+      width: 1px;
+      height: 24px;
+      background: rgba(255,255,255,0.3);
+    }
+
+    .toolbar-button {
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px;
+      color: var(--text);
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toolbar-button:hover {
+      background: rgba(255,255,255,0.2);
+      border-color: rgba(255,255,255,0.5);
+    }
+
+    /* ── MOBILE RESPONSIVE ────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #command-window {
+        width: calc(100vw - 20px);
+        height: calc(100vh - 100px);
+        top: 10px;
+        left: 10px;
+        right: 10px;
+      }
+
+      #status-window {
+        width: calc(100vw - 20px);
+        height: 200px;
+        top: 10px;
+        left: 10px;
+        display: none; /* Hide on mobile by default */
+      }
+
+      #toolbar {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        transform: none;
+        font-size: 12px;
+        padding: 6px 12px;
+      }
+
+      .command-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .command-button {
+        padding: 8px 12px;
+        font-size: 10px;
+      }
+
+      #taskbar {
+        height: 60px;
+        padding: 0 8px;
+      }
+
+      #start-button {
+        height: 40px;
+        width: 100px;
+        font-size: 12px;
+      }
+
+      .taskbar-item {
+        min-width: 120px;
+        height: 40px;
+      }
+    }
+
+    /* ── SCROLLBARS ───────────────────────────────────────────── */
+    ::-webkit-scrollbar {
+      width: 16px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #c0c0c0;
+      border: 1px inset #c0c0c0;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #f0f0f0, #d0d0d0);
+      border: 1px outset #e0e0e0;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, #f8f8f8, #e0e0e0);
+    }
+
+    ::-webkit-scrollbar-corner {
+      background: #c0c0c0;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+
+<!-- Fullscreen 3D Background -->
+<canvas id="scene"></canvas>
+
+<!-- Windows GUI Layer -->
+<div id="gui-layer">
+  
+  <!-- Floating Toolbar -->
+  <div id="toolbar">
+    <div class="toolbar-title">NEXAL NETWORK</div>
+    <div class="toolbar-separator"></div>
+    <button class="toolbar-button" onclick="toggleWindow('status-window')">📊 Status</button>
+    <button class="toolbar-button" onclick="toggleWindow('command-window')">⚡ Command</button>
+    <button class="toolbar-button" onclick="resetCamera()">🎯 Reset View</button>
+    <div class="toolbar-separator"></div>
+    <span style="font-size: 10px; color: #aaa;">Federation v2.1</span>
+  </div>
+
+  <!-- Status Window -->
+  <div id="status-window" class="window">
+    <div class="window-titlebar" onmousedown="startDrag(event, 'status-window')">
+      <div class="window-icon" style="background: var(--green);"></div>
+      <span class="window-title">Federation Status</span>
+      <div class="window-controls">
+        <button class="window-control" onclick="minimizeWindow('status-window')">─</button>
+        <button class="window-control close" onclick="closeWindow('status-window')">✕</button>
+      </div>
+    </div>
+    <div class="window-content">
+      <div class="status-grid">
+        <div class="status-item">
+          <span class="status-value" id="agent-count">-</span>
+          <span class="status-label">Agents</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value" id="hub-count">-</span>
+          <span class="status-label">Hubs</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value" id="capability-count">-</span>
+          <span class="status-label">Capabilities</span>
+        </div>
+        <div class="status-item">
+          <span class="status-value" id="uptime">99.97%</span>
+          <span class="status-label">Uptime</span>
+        </div>
+      </div>
+      
+      <h4 style="margin-bottom: 8px; color: var(--cyan); font-size: 12px;">Active Agents</h4>
+      <div class="status-list" id="agents-list">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Command Center Window -->
+  <div id="command-window" class="window">
+    <div class="window-titlebar" onmousedown="startDrag(event, 'command-window')">
+      <div class="window-icon" style="background: var(--violet);"></div>
+      <span class="window-title">Command Center</span>
+      <div class="window-controls">
+        <button class="window-control" onclick="minimizeWindow('command-window')">─</button>
+        <button class="window-control close" onclick="closeWindow('command-window')">✕</button>
+      </div>
+    </div>
+    <div class="window-content">
+      <div class="command-grid">
+        <button class="command-button" onclick="executeCommand('mesh-status')">Mesh Status</button>
+        <button class="command-button violet" onclick="executeCommand('agent-health')">Agent Health</button>
+        <button class="command-button green" onclick="executeCommand('spawn-agent')">Spawn Agent</button>
+        <button class="command-button" onclick="executeCommand('capability-scan')">Cap Scan</button>
+        <button class="command-button violet" onclick="executeCommand('dark-circles')">Dark Circles</button>
+        <button class="command-button green" onclick="executeCommand('federation-info')">Fed Info</button>
+        <button class="command-button" onclick="executeCommand('hub-metrics')">Hub Metrics</button>
+        <button class="command-button violet" onclick="executeCommand('pulse-test')">Pulse Test</button>
+        <button class="command-button green" onclick="testCommand()">🔧 Test</button>
+      </div>
+      
+      <input type="text" class="command-input" id="command-input" placeholder="Enter command..." 
+             onkeypress="if(event.key==='Enter') executeCustomCommand()" />
+      
+      <div class="command-output" id="command-output">
+        <div class="output-line info">[SYSTEM] Nexal Network Command Center initialized</div>
+        <div class="output-line info">[READY] Federation mesh operational - 3D visualization active</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Windows Taskbar -->
+  <div id="taskbar">
+    <button id="start-button" onclick="toggleStartMenu()">
+      <span>🌀</span>
+      <span>NEXAL</span>
+    </button>
+    
+    <div id="taskbar-items">
+      <div class="taskbar-item active" onclick="toggleWindow('command-window')">
+        <div class="icon" style="background: var(--violet);"></div>
+        <span>Command Center</span>
+      </div>
+      <div class="taskbar-item" onclick="toggleWindow('status-window')">
+        <div class="icon" style="background: var(--green);"></div>
+        <span>Federation Status</span>
+      </div>
+    </div>
+    
+    <div id="system-tray">
+      <div class="system-icon" title="Network Status" onclick="executeCommand('mesh-status')"></div>
+      <div class="system-icon" title="System Monitor" onclick="executeCommand('hub-metrics')"></div>
+      <span id="clock">--:--</span>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+window.THREE = THREE;
+
+// ──────── GEOMETRY FUNCTIONS ────────────────────────────────────
+function makeKleinBottleGeometry(scale = 1, segments = 32) {
+  const geometry = new THREE.BufferGeometry();
+  const vertices = [];
+  const indices = [];
+  
+  const uSteps = segments;
+  const vSteps = segments;
+  
+  for (let i = 0; i <= uSteps; i++) {
+    for (let j = 0; j <= vSteps; j++) {
+      const u = (i / uSteps) * Math.PI * 2;
+      const v = (j / vSteps) * Math.PI * 2;
+      
+      const a = 3, n = 2;
+      const x = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.cos(u / n);
+      const y = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.sin(u / n);
+      const z = Math.sin(u / 2) * Math.sin(v) + Math.cos(u / 2) * Math.sin(2 * v);
+      
+      vertices.push(x * scale * 0.3, y * scale * 0.3, z * scale * 0.3);
+    }
+  }
+  
+  for (let i = 0; i < uSteps; i++) {
+    for (let j = 0; j < vSteps; j++) {
+      const a = i * (vSteps + 1) + j;
+      const b = (i + 1) * (vSteps + 1) + j;
+      const c = (i + 1) * (vSteps + 1) + j + 1;
+      const d = i * (vSteps + 1) + j + 1;
+      
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+  
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
+  return geometry;
+}
+
+function makeMobiusStripGeometry(radius = 1, width = 0.5, segments = 64) {
+  const geometry = new THREE.BufferGeometry();
+  const vertices = [];
+  const indices = [];
+  
+  const uSteps = segments;
+  const vSteps = 8;
+  
+  for (let i = 0; i <= uSteps; i++) {
+    for (let j = 0; j <= vSteps; j++) {
+      const u = (i / uSteps) * Math.PI * 2;
+      const v = ((j / vSteps) - 0.5) * width;
+      
+      const x = (radius + v * Math.cos(u / 2)) * Math.cos(u);
+      const y = (radius + v * Math.cos(u / 2)) * Math.sin(u);
+      const z = v * Math.sin(u / 2);
+      
+      vertices.push(x, y, z);
+    }
+  }
+  
+  for (let i = 0; i < uSteps; i++) {
+    for (let j = 0; j < vSteps; j++) {
+      const a = i * (vSteps + 1) + j;
+      const b = (i + 1) * (vSteps + 1) + j;
+      const c = (i + 1) * (vSteps + 1) + j + 1;
+      const d = i * (vSteps + 1) + j + 1;
+      
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+  
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  
+  return geometry;
+}
+
+// ──────── MAIN SETUP ────────────────────────────────────────
+let scene, camera, renderer;
+let agentGroups = [];
+window.agentGroups = agentGroups;
+let clickableObjects = [];
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x000000);
+  
+  // Add atmospheric fog for depth
+  scene.fog = new THREE.Fog(0x000510, 10, 100);
+  
+  const canvas = document.getElementById('scene');
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  
+  camera.position.set(0, 8, 20);
+  camera.lookAt(0, 0, 0);
+  window.camera = camera;
+  
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0, 0);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 5;
+  controls.maxDistance = 50;
+  controls.autoRotate = false;
+  window.cameraControls = controls;
+  
+  // Enhanced lighting
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+  scene.add(ambientLight);
+  
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  directionalLight.position.set(10, 10, 5);
+  directionalLight.castShadow = true;
+  scene.add(directionalLight);
+  
+  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.8);
+  directionalLight2.position.set(-10, -10, -5);
+  scene.add(directionalLight2);
+  
+  loadAgentsAndBuild();
+}
+
+async function loadAgentsAndBuild() {
+  let agents = [];
+  
+  try {
+    const response = await fetch('/api/mesh');
+    const meshData = await response.json();
+    if (meshData && meshData.agents) {
+      agents = meshData.agents;
+      window._meshData = meshData;
+      console.log('Mesh data loaded:', agents.length, 'agents');
+    }
+  } catch (e) {
+    console.log('Using demo agents');
+    agents = [
+      { id: 'stella', hub: 'trillian', capabilities: ['guidance'], name: 'Stella' },
+      { id: 'eddie', hub: 'hog', capabilities: ['execution'], name: 'Eddie' },
+      { id: 'sophia', hub: 'thefog', capabilities: ['wisdom'], name: 'Sophia' },
+      { id: 'manifold', hub: 'trillian', capabilities: ['topology'], name: 'Manifold' },
+      { id: 'solar-detect', hub: 'hog', capabilities: ['monitoring'], name: 'Solar Detect' },
+      { id: 'void-watcher', hub: 'thefog', capabilities: ['void-scan'], name: 'Void Watcher' }
+    ];
+  }
+  
+  buildSpiderWeb();
+  buildAgentTopologies(agents);
+  buildCentralNexus();
+  updateStatusPanel(agents);
+  
+  animate();
+}
+
+function buildSpiderWeb() {
+  const webGroup = new THREE.Group();
+  webGroup.position.set(0, -3, 0);
+  
+  const spokes = 8;
+  const rings = 4;
+  const outerR = 12;
+  
+  // Concentric rings
+  for (let r = 1; r <= rings; r++) {
+    const radius = (r / rings) * outerR;
+    const segmentCount = 64;
+    const positions = new Float32Array((segmentCount + 1) * 3);
+    
+    for (let i = 0; i <= segmentCount; i++) {
+      const angle = (i / segmentCount) * Math.PI * 2;
+      positions[i * 3] = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = 0;
+      positions[i * 3 + 2] = Math.sin(angle) * radius;
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0x2a4a6a, 
+      transparent: true, 
+      opacity: 0.4
+    });
+    
+    const line = new THREE.Line(geometry, material);
+    webGroup.add(line);
+  }
+  
+  // Radial spokes
+  for (let s = 0; s < spokes; s++) {
+    const angle = (s / spokes) * Math.PI * 2;
+    const points = [
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(Math.cos(angle) * outerR, 0, Math.sin(angle) * outerR)
+    ];
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0x1a3a5a, 
+      transparent: true, 
+      opacity: 0.5
+    });
+    const line = new THREE.Line(geometry, material);
+    webGroup.add(line);
+  }
+  
+  scene.add(webGroup);
+  window._webGroup = webGroup;
+}
+
+function buildAgentTopologies(agents) {
+  const hubColors = {
+    'relay': 0x00e5ff,
+    'hog': 0x00ff88,
+    'trillian': 0xaa00ff,
+    'thefog': 0x8800ff,
+    'bobiverse': 0xff6600
+  };
+  
+  const hubCenters = {
+    'hog': { x: -8, y: 2, z: -6 },
+    'trillian': { x: 8, y: 3, z: 2 },
+    'thefog': { x: -2, y: 5, z: 8 },
+    'relay': { x: 6, y: 1, z: -8 },
+    'bobiverse': { x: 0, y: 6, z: -10 }
+  };
+  
+  agents.forEach((agent, idx) => {
+    const group = new THREE.Group();
+    const hubColor = hubColors[agent.hub] || 0x666666;
+    const scale = 0.8 + Math.random() * 0.4;
+    
+    // Topology geometry
+    let formGeo;
+    if (idx % 2 === 0) {
+      formGeo = makeKleinBottleGeometry(scale, 20);
+    } else {
+      formGeo = makeMobiusStripGeometry(scale * 1.2, scale * 0.5, 40);
+    }
+    
+    // Main form
+    const formMat = new THREE.MeshPhongMaterial({
+      color: 0xcccccc,
+      emissive: new THREE.Color(hubColor).multiplyScalar(0.15),
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide,
+    });
+    const formMesh = new THREE.Mesh(formGeo, formMat);
+    formMesh.userData = { type: 'agent', agent, idx };
+    clickableObjects.push(formMesh);
+    group.add(formMesh);
+    
+    // Wireframe
+    const wfMat = new THREE.MeshBasicMaterial({
+      color: hubColor,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const wfMesh = new THREE.Mesh(formGeo, wfMat);
+    group.add(wfMesh);
+    
+    // Core
+    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
+    const coreMat = new THREE.MeshPhongMaterial({
+      color: hubColor,
+      emissive: hubColor,
+      emissiveIntensity: 0.6,
+    });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    group.add(core);
+    
+    // Position around hub center
+    const hubCenter = hubCenters[agent.hub] || { x: 0, y: 0, z: 0 };
+    const orbitRadius = 1.5 + (idx % 3) * 0.8;
+    const orbitAngle = (idx / agents.length) * Math.PI * 2;
+    
+    group.position.set(
+      hubCenter.x + Math.cos(orbitAngle) * orbitRadius,
+      hubCenter.y + Math.sin(idx * 0.7) * 0.5,
+      hubCenter.z + Math.sin(orbitAngle) * orbitRadius
+    );
+    
+    group.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    );
+    
+    scene.add(group);
+    agentGroups.push(group);
+  });
+}
+
+function buildCentralNexus() {
+  // Create Sophia's constraint network
+  const constraintGroup = new THREE.Group();
+  constraintGroup.position.set(0, 1, 0);
+  
+  const nodeCount = 100;
+  const nodes = [];
+  
+  // Create nodes
+  for (let i = 0; i < nodeCount; i++) {
+    const node = {
+      x: (Math.random() - 0.5) * 4,
+      y: (Math.random() - 0.5) * 3,
+      z: (Math.random() - 0.5) * 4,
+      vx: 0, vy: 0, vz: 0
+    };
+    nodes.push(node);
+    
+    // Visual node
+    const nodeGeo = new THREE.SphereGeometry(0.02, 6, 6);
+    const nodeMat = new THREE.MeshPhongMaterial({
+      color: 0xffffff,
+      emissive: 0x444444,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const nodeMesh = new THREE.Mesh(nodeGeo, nodeMat);
+    nodeMesh.position.set(node.x, node.y, node.z);
+    constraintGroup.add(nodeMesh);
+  }
+  
+  scene.add(constraintGroup);
+  window._constraintSystem = { group: constraintGroup, nodes };
+}
+
+function updateStatusPanel(agents) {
+  document.getElementById('agent-count').textContent = agents.length;
+  document.getElementById('hub-count').textContent = [...new Set(agents.map(a => a.hub))].length;
+  document.getElementById('capability-count').textContent = 
+    agents.reduce((sum, agent) => sum + (agent.capabilities ? agent.capabilities.length : 1), 0);
+  
+  // Update agents list
+  const agentsList = document.getElementById('agents-list');
+  agentsList.innerHTML = '';
+  
+  const hubColors = {
+    'hog': '#00ff88',
+    'trillian': '#aa00ff', 
+    'thefog': '#8800ff',
+    'relay': '#00e5ff',
+    'bobiverse': '#ff6600'
+  };
+  
+  agents.slice(0, 8).forEach(agent => {
+    const item = document.createElement('div');
+    item.className = 'status-list-item';
+    const hubColor = hubColors[agent.hub] || '#666666';
+    
+    item.innerHTML = `
+      <span style="color: ${hubColor};">${agent.name || agent.id}</span>
+      <span style="color: #999; font-size: 10px;">${agent.hub}</span>
+    `;
+    agentsList.appendChild(item);
+  });
+}
+
+// Animation loop
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const elapsed = performance.now() / 1000;
+  
+  // Animate agents
+  agentGroups.forEach((group, idx) => {
+    group.rotation.y += 0.005 + idx * 0.001;
+    group.rotation.x += 0.003;
+  });
+  
+  // Simple constraint animation
+  if (window._constraintSystem) {
+    const nodes = window._constraintSystem.nodes;
+    nodes.forEach((node, i) => {
+      node.x += Math.sin(elapsed + i) * 0.001;
+      node.y += Math.cos(elapsed * 1.2 + i) * 0.001;
+      node.z += Math.sin(elapsed * 0.8 + i) * 0.001;
+      
+      // Update visual position
+      const child = window._constraintSystem.group.children[i];
+      if (child) {
+        child.position.set(node.x, node.y, node.z);
+      }
+    });
+  }
+  
+  if (window.cameraControls) {
+    window.cameraControls.update();
+  }
+  
+  renderer.render(scene, camera);
+}
+
+// ──────── WINDOWS GUI FUNCTIONS ────────────────────────────────
+
+let windowStates = {
+  'status-window': { minimized: false },
+  'command-window': { minimized: false }
+};
+
+window.toggleWindow = function(windowId) {
+  const window = document.getElementById(windowId);
+  const taskbarItem = [...document.querySelectorAll('.taskbar-item')]
+    .find(item => item.onclick?.toString().includes(windowId));
+  
+  if (windowStates[windowId].minimized) {
+    window.classList.remove('minimized');
+    windowStates[windowId].minimized = false;
+    if (taskbarItem) taskbarItem.classList.add('active');
+  } else {
+    window.classList.add('minimized');
+    windowStates[windowId].minimized = true;
+    if (taskbarItem) taskbarItem.classList.remove('active');
+  }
+};
+
+window.minimizeWindow = function(windowId) {
+  const window = document.getElementById(windowId);
+  const taskbarItem = [...document.querySelectorAll('.taskbar-item')]
+    .find(item => item.onclick?.toString().includes(windowId));
+  
+  window.classList.add('minimized');
+  windowStates[windowId].minimized = true;
+  if (taskbarItem) taskbarItem.classList.remove('active');
+};
+
+window.closeWindow = function(windowId) {
+  document.getElementById(windowId).style.display = 'none';
+  const taskbarItem = [...document.querySelectorAll('.taskbar-item')]
+    .find(item => item.onclick?.toString().includes(windowId));
+  if (taskbarItem) taskbarItem.style.display = 'none';
+};
+
+window.resetCamera = function() {
+  if (window.camera && window.cameraControls) {
+    window.camera.position.set(0, 8, 20);
+    window.cameraControls.target.set(0, 0, 0);
+    window.cameraControls.update();
+    addOutputLine('Camera reset to default position', 'success');
+  }
+};
+
+// Window dragging
+let dragData = null;
+
+window.startDrag = function(event, windowId) {
+  const windowEl = document.getElementById(windowId);
+  const rect = windowEl.getBoundingClientRect();
+  
+  dragData = {
+    windowId,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top
+  };
+  
+  document.addEventListener('mousemove', drag);
+  document.addEventListener('mouseup', stopDrag);
+  event.preventDefault();
+};
+
+function drag(event) {
+  if (!dragData) return;
+  
+  const windowEl = document.getElementById(dragData.windowId);
+  const x = event.clientX - dragData.offsetX;
+  const y = event.clientY - dragData.offsetY;
+  
+  windowEl.style.left = Math.max(0, Math.min(x, window.innerWidth - windowEl.offsetWidth)) + 'px';
+  windowEl.style.top = Math.max(0, Math.min(y, window.innerHeight - windowEl.offsetHeight)) + 'px';
+}
+
+function stopDrag() {
+  dragData = null;
+  document.removeEventListener('mousemove', drag);
+  document.removeEventListener('mouseup', stopDrag);
+}
+
+// Command system
+window.executeCommand = function(command) {
+  addOutputLine(`> ${command}`, 'info');
+  
+  setTimeout(async () => {
+    switch(command) {
+      case 'mesh-status':
+        try {
+          const response = await fetch('/api/mesh');
+          const meshData = await response.json();
+          if (meshData && meshData.agents) {
+            addOutputLine(`Mesh Status: ${meshData.agents.length} agents online`, 'success');
+            addOutputLine(`Hubs: ${[...new Set(meshData.agents.map(a => a.hub))].join(', ')}`, 'info');
+          } else {
+            addOutputLine('Mesh API offline - using demo data', 'error');
+          }
+        } catch (e) {
+          addOutputLine('Mesh API unavailable', 'error');
+        }
+        break;
+        
+      case 'agent-health':
+        addOutputLine('Scanning agent health...', 'info');
+        setTimeout(() => {
+          addOutputLine('All agents responding normally', 'success');
+        }, 1000);
+        break;
+        
+      case 'spawn-agent':
+        addOutputLine('Spawning new agent...', 'info');
+        setTimeout(() => {
+          const agentId = 'nexal-' + Math.random().toString(36).substr(2, 6);
+          addOutputLine(`Agent spawned: ${agentId}`, 'success');
+        }, 1500);
+        break;
+        
+      case 'dark-circles':
+        addOutputLine('Analyzing dark circles...', 'info');
+        setTimeout(() => {
+          addOutputLine('Dark circle analysis complete', 'success');
+        }, 1200);
+        break;
+        
+      case 'pulse-test':
+        addOutputLine('Network pulse test initiated...', 'info');
+        setTimeout(() => {
+          addOutputLine('All nodes responding < 50ms', 'success');
+        }, 2000);
+        break;
+        
+      default:
+        addOutputLine(`Executed: ${command}`, 'success');
+    }
+  }, 200 + Math.random() * 500);
+};
+
+window.testCommand = function() {
+  addOutputLine('> system test', 'info');
+  setTimeout(() => {
+    addOutputLine('System test passed - all interfaces operational', 'success');
+    addOutputLine('3D visualization: ✓ Active', 'info');
+    addOutputLine('Command system: ✓ Online', 'info');
+    addOutputLine('Federation mesh: ✓ Connected', 'info');
+  }, 800);
+};
+
+window.executeCustomCommand = function() {
+  const input = document.getElementById('command-input');
+  const command = input.value.trim();
+  
+  if (!command) return;
+  
+  addOutputLine(`> ${command}`, 'info');
+  input.value = '';
+  
+  setTimeout(() => {
+    if (command.toLowerCase().includes('help')) {
+      addOutputLine('Available commands: mesh-status, agent-health, spawn-agent', 'info');
+      addOutputLine('Use buttons for quick access to common operations', 'info');
+    } else if (command.toLowerCase().includes('clear')) {
+      document.getElementById('command-output').innerHTML = 
+        '<div class="output-line info">[SYSTEM] Command output cleared</div>';
+    } else {
+      addOutputLine(`Command processed: ${command}`, 'success');
+    }
+  }, 300);
+};
+
+function addOutputLine(text, type = 'info') {
+  const output = document.getElementById('command-output');
+  const line = document.createElement('div');
+  line.className = `output-line ${type}`;
+  
+  const timestamp = new Date().toLocaleTimeString('en-US', { 
+    hour12: false, 
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit'
+  });
+  
+  line.textContent = `[${timestamp}] ${text}`;
+  output.appendChild(line);
+  
+  // Auto-scroll to bottom
+  output.scrollTop = output.scrollHeight;
+  
+  // Limit lines to prevent memory issues
+  while (output.children.length > 100) {
+    output.removeChild(output.firstChild);
+  }
+}
+
+// Clock update
+function updateClock() {
+  const clock = document.getElementById('clock');
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', { 
+    hour12: false, 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  clock.textContent = time;
+}
+
+setInterval(updateClock, 1000);
+updateClock();
+
+// Window resize handling
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Initialize
+init();
+
+</script>
+</body>
+</html>

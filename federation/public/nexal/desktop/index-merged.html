@@ -2142,9 +2142,6 @@ function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000); // Pure black background for higher contrast
   
-  // Add atmospheric fog for depth
-  scene.fog = new THREE.Fog(0x000510, 10, 100);
-  
   const canvas = document.getElementById('scene');
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -2980,7 +2977,6 @@ function animate() {
         // Enable mouse interaction immediately after intro completes
         if (!system.mouseInteractionEnabled) {
           system.mouseInteractionEnabled = true;
-          console.log('🖱️ MOUSE INTERACTION ENABLED - Dynamic fog will now follow your cursor!');
           console.log('Mouse interaction enabled after intro completion');
         }
       }
@@ -3975,8 +3971,8 @@ window.addEventListener('click', (event) => {
 // Mouse movement tracking for constraint system
 window.addEventListener('mousemove', (event) => {
   // Debug: Simple test that mouse events are firing (throttled)
-  if (window._constraintSystem && window._constraintSystem.frameCount % 60 === 0) {
-    console.log('🖱️ Mouse tracking - system:', !!window._constraintSystem, 'enabled:', !!window._constraintSystem.mouseInteractionEnabled, 'pos:', event.clientX, event.clientY);
+  if (window._constraintSystem && window._constraintSystem.frameCount % 120 === 0) {
+    console.log('Mouse event fired - system exists:', !!window._constraintSystem, 'enabled:', !!window._constraintSystem.mouseInteractionEnabled);
   }
   
   if (window._constraintSystem && CONSTRAINT_CONFIG.followMouse && window._constraintSystem.mouseInteractionEnabled) {
