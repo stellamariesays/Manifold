@@ -16,8 +16,8 @@
       --pink:    #ff0077;
       --gold:    #ffcc00;
       --bg:      #000510;
-      --panel:   rgba(0,10,30,0.85);
-      --border:  rgba(0,229,255,0.3);
+      --panel:   rgba(0,10,30,0.82);
+      --border:  rgba(0,229,255,0.25);
       --text:    #b0e0f8;
       --accent:  #00e5ff;
       --danger:  #ff3366;
@@ -37,7 +37,586 @@
       inset: 0;
       display: block;
       width: 100%; height: 100%;
-      z-index: 1;
+    }
+
+    /* ── HUD LAYER ────────────────────────────────────────────── */
+    #hud {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .panel {
+      pointer-events: all;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      backdrop-filter: blur(8px);
+      position: absolute;
+      padding: 14px 18px;
+      box-shadow: 0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,229,255,0.02) 2px, rgba(0,229,255,0.02) 4px
+      );
+      pointer-events: none;
+      border-radius: 4px;
+    }
+
+    /* Title Panel */
+    #title-panel {
+      top: 18px; left: 20px;
+      min-width: 280px;
+    }
+
+    #title-panel .logo {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0,229,255,0.4);
+      line-height: 1;
+    }
+
+    #title-panel .sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(0,229,255,0.55);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    #title-panel .version {
+      margin-top: 10px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    #title-panel .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Agent List Panel */
+    #agents-panel {
+      top: 140px; left: 20px;
+      width: 280px; max-height: 400px;
+      overflow-y: auto;
+    }
+
+    #agents-panel .panel-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #agents-panel .panel-title::before {
+      content: "●";
+      color: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    .agent-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
+    }
+
+    .agent-item .agent-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+
+    .agent-item .agent-name {
+      flex: 1; color: var(--text);
+    }
+
+    .agent-item .agent-caps {
+      font-size: 9px; color: rgba(255,255,255,0.4);
+    }
+
+    /* SOPHIA Panel */
+    #sophia-panel {
+      bottom: 20px; left: 20px;
+      width: 280px;
+    }
+
+    #sophia-panel .sophia-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--violet);
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+      text-shadow: 0 0 15px var(--violet);
+    }
+
+    #sophia-panel .sophia-subtitle {
+      font-size: 9px;
+      color: rgba(170,0,255,0.6);
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .sophia-controls {
+      display: flex; gap: 8px;
+    }
+
+    .sophia-btn {
+      padding: 6px 12px;
+      background: rgba(170,0,255,0.15);
+      border: 1px solid rgba(170,0,255,0.3);
+      border-radius: 3px;
+      color: var(--violet);
+      font-size: 10px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+
+    .sophia-btn:hover {
+      background: rgba(170,0,255,0.25);
+      border-color: var(--violet);
+    }
+
+    /* Right Status Panel */
+    #status-panel {
+      top: 18px; right: 20px;
+      width: 320px;
+    }
+
+    #status-panel .status-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .status-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
+    }
+
+    .status-label { color: rgba(255,255,255,0.7); }
+    .status-value { color: var(--text); font-weight: 600; }
+
+    /* Agent Detail Panel */
+    #detail-panel {
+      top: 200px; right: 20px;
+      width: 320px;
+      display: none;
+    }
+
+    #detail-panel.visible {
+      display: block;
+    }
+
+    /* Chat Interface Panel */
+    #chat-panel {
+      position: fixed;
+      bottom: 20px; right: 20px;
+      width: 400px; max-height: 500px;
+      display: flex; flex-direction: column;
+      z-index: 1000;
+      pointer-events: all;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #chat-panel.maximized {
+      top: 20px !important;
+      bottom: 20px !important;
+      left: 20px !important;
+      right: 20px !important;
+      width: auto !important;
+      max-height: none !important;
+      height: auto !important;
+    }
+
+    #chat-panel.maximized .chat-messages {
+      max-height: none !important;
+      flex: 1 !important;
+    }
+
+    #chat-panel.maximized .task-grid {
+      grid-template-columns: repeat(4, 1fr) !important;
+      gap: 12px !important;
+    }
+
+    .chat-header {
+      padding: 12px 18px;
+      background: linear-gradient(135deg, var(--violet), var(--cyan));
+      color: white;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-align: center;
+      border-radius: 4px 4px 0 0;
+      font-size: 12px;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .chat-header:hover {
+      background: linear-gradient(135deg, #bb11ff, #11aaff);
+    }
+
+    .maximize-btn {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 3px;
+      color: white;
+      padding: 4px 8px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .maximize-btn:hover {
+      background: rgba(255,255,255,0.3);
+      border-color: rgba(255,255,255,0.5);
+    }
+
+    .chat-messages {
+      flex: 1;
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 12px;
+      background: var(--panel);
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    .chat-message {
+      margin-bottom: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .chat-message.system {
+      background: rgba(0,229,255,0.1);
+      border-left: 3px solid var(--cyan);
+      color: var(--cyan);
+    }
+
+    .chat-message.user {
+      background: rgba(170,0,255,0.1);
+      border-left: 3px solid var(--violet);
+      color: var(--text);
+      margin-left: 20px;
+    }
+
+    .chat-message.success {
+      background: rgba(0,255,136,0.1);
+      border-left: 3px solid var(--green);
+      color: var(--green);
+    }
+
+    .chat-message.error {
+      background: rgba(255,51,102,0.1);
+      border-left: 3px solid var(--danger);
+      color: var(--danger);
+    }
+
+    .chat-controls {
+      padding: 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 0 0 4px 4px;
+      backdrop-filter: blur(8px);
+    }
+
+    .task-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .task-button {
+      padding: 8px 12px;
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 4px;
+      color: var(--cyan);
+      font-size: 10px;
+      font-family: inherit;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .task-button:hover {
+      background: rgba(0,229,255,0.2);
+      border-color: var(--cyan);
+      transform: translateY(-1px);
+    }
+
+    .task-button:active {
+      transform: translateY(0);
+    }
+
+    .task-button.violet {
+      background: rgba(170,0,255,0.1);
+      border-color: rgba(170,0,255,0.3);
+      color: var(--violet);
+    }
+
+    .task-button.violet:hover {
+      background: rgba(170,0,255,0.2);
+      border-color: var(--violet);
+    }
+
+    .task-button.green {
+      background: rgba(0,255,136,0.1);
+      border-color: rgba(0,255,136,0.3);
+      color: var(--green);
+    }
+
+    .task-button.green:hover {
+      background: rgba(0,255,136,0.2);
+      border-color: var(--green);
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(0,10,30,0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+    }
+
+    .chat-input::placeholder {
+      color: rgba(176,224,248,0.5);
+    }
+
+    .chat-send {
+      padding: 8px 16px;
+      background: var(--violet);
+      border: none;
+      border-radius: 4px;
+      color: white;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .chat-send:hover {
+      background: #bb11ff;
+    }
+
+    .chat-send:disabled {
+      background: #555;
+      cursor: not-allowed;
+    }
+
+    /* Chat scrollbar styling */
+    .chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.2);
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: rgba(0,229,255,0.3);
+      border-radius: 3px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb:hover {
+      background: rgba(0,229,255,0.5);
+    }
+
+    .detail-title {
+      font-size: 18px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+    }
+
+    .detail-subtitle {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 12px;
+    }
+
+    .detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .detail-stat {
+      text-align: center;
+      padding: 8px;
+      background: rgba(0,229,255,0.05);
+      border-radius: 3px;
+    }
+
+    .detail-stat .stat-num {
+      font-size: 16px;
+      color: var(--cyan);
+      display: block;
+    }
+
+    .detail-stat .stat-label {
+      font-size: 8px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+    }
+
+    /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
+    @media (max-width: 768px) {
+      /* Hide all UI panels on mobile to give full screen to 3D animation */
+      #title-panel,
+      #agents-panel,
+      #sophia-panel,
+      #status-panel,
+      #detail-panel {
+        display: none !important;
+      }
+
+      /* Keep chat interface visible and responsive on mobile */
+      #chat-panel {
+        width: calc(100vw - 40px) !important;
+        max-width: 380px !important;
+        bottom: 10px !important;
+        right: 20px !important;
+        z-index: 1001 !important;
+      }
+
+      #chat-panel.maximized {
+        top: 10px !important;
+        bottom: 10px !important;
+        left: 10px !important;
+        right: 10px !important;
+        width: auto !important;
+        max-width: none !important;
+      }
+
+      #chat-panel.maximized .task-grid {
+        grid-template-columns: 1fr 1fr 1fr !important;
+        gap: 8px !important;
+      }
+
+      .task-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 6px !important;
+      }
+
+      .task-button {
+        padding: 6px 8px !important;
+        font-size: 9px !important;
+      }
+
+      .chat-input {
+        font-size: 12px !important;
+      }
+      
+      /* Ensure canvas uses full screen */
+      #scene {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+      
+      /* Remove any potential scrollbars */
+      html, body {
+        overflow: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Improve touch interaction */
+      #scene {
+        touch-action: manipulation;
+      }
+      
+      /* Mobile brightness enhancement - global brightness boost */
+      #scene {
+        filter: brightness(1.4) contrast(1.2);
+        -webkit-filter: brightness(1.4) contrast(1.2);
+      }
+    }
+
+    /* For very small mobile devices */
+    @media (max-width: 480px) {
+      /* Hide HUD but keep chat */
+      #hud > *:not(#chat-panel) {
+        display: none !important;
+      }
+      
+      /* Extra brightness boost for small screens */
+      #scene {
+        filter: brightness(1.6) contrast(1.3);
+        -webkit-filter: brightness(1.6) contrast(1.3);
+      }
+
+      /* Compact chat interface for very small screens */
+      #chat-panel {
+        width: calc(100vw - 20px) !important;
+        bottom: 5px !important;
+        right: 10px !important;
+        max-height: 400px !important;
+      }
+
+      .task-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 4px !important;
+      }
+
+      .task-button {
+        padding: 4px 6px !important;
+        font-size: 8px !important;
+      }
+
+      .chat-header {
+        padding: 8px 12px !important;
+        font-size: 10px !important;
+      }
+
+      .chat-messages {
+        max-height: 200px !important;
+        padding: 8px !important;
+      }
     }
 
     /* ── WINDOWS-STYLE GUI OVERLAY ─────────────────────────────── */
@@ -432,1618 +1011,116 @@
 </head>
 <body>
 
-<!-- Fullscreen 3D Background -->
+<!-- HUD Overlay -->
+<div id="hud">
+  <!-- Title Panel -->
+  <div id="title-panel" class="panel">
+    <div class="logo">MANIFOLD</div>
+    <div class="sub">Numinous Architecture — Federation Mesh</div>
+    <div class="version">
+      <div class="status-dot"></div>
+      <span>Relay connected: nexal.network</span>
+    </div>
+  </div>
+
+  <!-- Active Agents Panel -->
+  <div id="agents-panel" class="panel">
+    <div class="panel-title">Active Agents</div>
+    <div id="agents-list">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+
+  <!-- SOPHIA Panel -->
+  <div id="sophia-panel" class="panel">
+    <div class="sophia-title">SOPHIA</div>
+    <div class="sophia-subtitle">Create Creation 10</div>
+    <div class="sophia-controls">
+      <button class="sophia-btn">Navigate</button>
+      <button class="sophia-btn">Initiate</button>
+    </div>
+  </div>
+
+  <!-- Status Panel -->
+  <div id="status-panel" class="panel">
+    <div class="status-title">Federation Status</div>
+    <div class="status-row">
+      <span class="status-label">Agents Online</span>
+      <span class="status-value" id="agent-count">-</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Capabilities</span>
+      <span class="status-value" id="capability-count">-</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Mesh Latency</span>
+      <span class="status-value">23ms</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Messages / Sec</span>
+      <span class="status-value">135/s</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Uptime</span>
+      <span class="status-value">99.97%</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Relay</span>
+      <span class="status-value">nexal.network</span>
+    </div>
+  </div>
+
+  <!-- Agent Detail Panel -->
+  <div id="detail-panel" class="panel">
+    <div class="detail-title" id="detail-agent-name">Agent Name</div>
+    <div class="detail-subtitle" id="detail-agent-hub">Hub: trillian</div>
+    <div class="detail-stats">
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-messages">-</span>
+        <span class="stat-label">Messages</span>
+      </div>
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-uptime">-</span>
+        <span class="stat-label">Uptime</span>
+      </div>
+    </div>
+    <div id="detail-capabilities"></div>
+  </div>
+
+  <!-- Chat Interface -->
+  <div id="chat-panel">
+    <div class="chat-header" onclick="toggleChatMaximize()">
+      MANIFOLD COMMAND INTERFACE
+      <button class="maximize-btn" id="maximize-btn" onclick="event.stopPropagation(); toggleChatMaximize()">⛶</button>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-message system">
+        <strong>SYSTEM:</strong> Manifold Federation interface initialized. Select tasks below or type commands.
+      </div>
+    </div>
+    <div class="chat-controls">
+      <div class="task-grid">
+        <button class="task-button" data-task="test" onclick="testChatInterface()">🔧 TEST</button>
+        <button class="task-button" data-task="mesh-status" onclick="executeFederationTask('mesh-status')">Mesh Status</button>
+        <button class="task-button violet" data-task="agent-health" onclick="executeFederationTask('agent-health')">Agent Health</button>
+        <button class="task-button green" data-task="spawn-agent" onclick="executeFederationTask('spawn-agent')">Spawn Agent</button>
+        <button class="task-button" data-task="capability-scan" onclick="executeFederationTask('capability-scan')">Cap Scan</button>
+        <button class="task-button violet" data-task="dark-circles" onclick="executeFederationTask('dark-circles')">Dark Circles</button>
+        <button class="task-button green" data-task="federation-info" onclick="executeFederationTask('federation-info')">Fed Info</button>
+        <button class="task-button" data-task="hub-metrics" onclick="executeFederationTask('hub-metrics')">Hub Metrics</button>
+        <button class="task-button violet" data-task="pulse-test" onclick="executeFederationTask('pulse-test')">Pulse Test</button>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" class="chat-input" id="chat-input" placeholder="Enter command or task..." />
+        <button class="chat-send" id="chat-send" onclick="handleChatInput()">SEND</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3D Scene -->
 <canvas id="scene"></canvas>
 
-<!-- Windows GUI Layer -->
-<div id="gui-layer">
-  
-  <!-- Floating Toolbar -->
-  <div id="toolbar">
-    <div class="toolbar-title">NEXAL NETWORK</div>
-    <div class="toolbar-separator"></div>
-    <button class="toolbar-button" onclick="toggleWindow('status-window')">📊 Status</button>
-    <button class="toolbar-button" onclick="toggleWindow('command-window')">⚡ Command</button>
-    <button class="toolbar-button" onclick="resetCamera()">🎯 Reset View</button>
-    <div class="toolbar-separator"></div>
-    <span style="font-size: 10px; color: #aaa;">Federation v2.1</span>
-  </div>
-
-  <!-- Status Window -->
-  <div id="status-window" class="window">
-    <div class="window-titlebar" onmousedown="startDrag(event, 'status-window')">
-      <div class="window-icon" style="background: var(--green);"></div>
-      <span class="window-title">Federation Status</span>
-      <div class="window-controls">
-        <button class="window-control" onclick="minimizeWindow('status-window')">─</button>
-        <button class="window-control close" onclick="closeWindow('status-window')">✕</button>
-      </div>
-    </div>
-    <div class="window-content">
-      <div class="status-grid">
-        <div class="status-item">
-          <span class="status-value" id="agent-count">-</span>
-          <span class="status-label">Agents</span>
-        </div>
-        <div class="status-item">
-          <span class="status-value" id="hub-count">-</span>
-          <span class="status-label">Hubs</span>
-        </div>
-        <div class="status-item">
-          <span class="status-value" id="capability-count">-</span>
-          <span class="status-label">Capabilities</span>
-        </div>
-        <div class="status-item">
-          <span class="status-value" id="uptime">99.97%</span>
-          <span class="status-label">Uptime</span>
-        </div>
-      </div>
-      
-      <h4 style="margin-bottom: 8px; color: var(--cyan); font-size: 12px;">Active Agents</h4>
-      <div class="status-list" id="agents-list">
-        <!-- Populated dynamically -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Command Center Window -->
-  <div id="command-window" class="window">
-    <div class="window-titlebar" onmousedown="startDrag(event, 'command-window')">
-      <div class="window-icon" style="background: var(--violet);"></div>
-      <span class="window-title">Command Center</span>
-      <div class="window-controls">
-        <button class="window-control" onclick="minimizeWindow('command-window')">─</button>
-        <button class="window-control close" onclick="closeWindow('command-window')">✕</button>
-      </div>
-    </div>
-    <div class="window-content">
-      <div class="command-grid">
-        <button class="command-button" onclick="executeCommand('mesh-status')">Mesh Status</button>
-        <button class="command-button violet" onclick="executeCommand('agent-health')">Agent Health</button>
-        <button class="command-button green" onclick="executeCommand('spawn-agent')">Spawn Agent</button>
-        <button class="command-button" onclick="executeCommand('capability-scan')">Cap Scan</button>
-        <button class="command-button violet" onclick="executeCommand('dark-circles')">Dark Circles</button>
-        <button class="command-button green" onclick="executeCommand('federation-info')">Fed Info</button>
-        <button class="command-button" onclick="executeCommand('hub-metrics')">Hub Metrics</button>
-        <button class="command-button violet" onclick="executeCommand('pulse-test')">Pulse Test</button>
-        <button class="command-button green" onclick="testCommand()">🔧 Test</button>
-      </div>
-      
-      <input type="text" class="command-input" id="command-input" placeholder="Enter command..." 
-             onkeypress="if(event.key==='Enter') executeCustomCommand()" />
-      
-      <div class="command-output" id="command-output">
-        <div class="output-line info">[SYSTEM] Nexal Network Command Center initialized</div>
-        <div class="output-line info">[READY] Federation mesh operational - 3D visualization active</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Windows Taskbar -->
-  <div id="taskbar">
-    <button id="start-button" onclick="toggleStartMenu()">
-      <span>🌀</span>
-      <span>NEXAL</span>
-    </button>
-    
-    <div id="taskbar-items">
-      <div class="taskbar-item active" onclick="toggleWindow('status-window')">
-        <div class="icon" style="background: var(--green);"></div>
-        <span>Federation Status</span>
-      </div>
-      <div class="taskbar-item active" onclick="toggleWindow('command-window')">
-        <div class="icon" style="background: var(--violet);"></div>
-        <span>Command Center</span>
-      </div>
-    </div>
-    
-    <div id="system-tray">
-      <div class="system-icon"></div>
-      <span id="clock">19:40</span>
-    </div>
-  </div>
-
-</div>
-742:<script type="module">
-743-import * as THREE from 'three';
-744-import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
-745-window.THREE = THREE;
-746-
-747-// ──────── GEOMETRY FUNCTIONS ────────────────────────────────────
-748-function makeKleinBottleGeometry(scale = 1, segments = 32) {
-749-  const geometry = new THREE.BufferGeometry();
-750-  const vertices = [];
-751-  const indices = [];
-752-  
-753-  const uSteps = segments;
-754-  const vSteps = segments;
-755-  
-756-  for (let i = 0; i <= uSteps; i++) {
-757-    for (let j = 0; j <= vSteps; j++) {
-758-      const u = (i / uSteps) * Math.PI * 2;
-759-      const v = (j / vSteps) * Math.PI * 2;
-760-      
-761-      const a = 3, n = 2;
-762-      const x = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.cos(u / n);
-763-      const y = (a + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.sin(u / n);
-764-      const z = Math.sin(u / 2) * Math.sin(v) + Math.cos(u / 2) * Math.sin(2 * v);
-765-      
-766-      vertices.push(x * scale * 0.3, y * scale * 0.3, z * scale * 0.3);
-767-    }
-768-  }
-769-  
-770-  for (let i = 0; i < uSteps; i++) {
-771-    for (let j = 0; j < vSteps; j++) {
-772-      const a = i * (vSteps + 1) + j;
-773-      const b = (i + 1) * (vSteps + 1) + j;
-774-      const c = (i + 1) * (vSteps + 1) + j + 1;
-775-      const d = i * (vSteps + 1) + j + 1;
-776-      
-777-      indices.push(a, b, d);
-778-      indices.push(b, c, d);
-779-    }
-780-  }
-781-  
-782-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-783-  geometry.setIndex(indices);
-784-  geometry.computeVertexNormals();
-785-  
-786-  return geometry;
-787-}
-788-
-789-function makeMobiusStripGeometry(radius = 1, width = 0.5, segments = 64) {
-790-  const geometry = new THREE.BufferGeometry();
-791-  const vertices = [];
-792-  const indices = [];
-793-  
-794-  const uSteps = segments;
-795-  const vSteps = 8;
-796-  
-797-  for (let i = 0; i <= uSteps; i++) {
-798-    for (let j = 0; j <= vSteps; j++) {
-799-      const u = (i / uSteps) * Math.PI * 2;
-800-      const v = ((j / vSteps) - 0.5) * width;
-801-      
-802-      const x = (radius + v * Math.cos(u / 2)) * Math.cos(u);
-803-      const y = (radius + v * Math.cos(u / 2)) * Math.sin(u);
-804-      const z = v * Math.sin(u / 2);
-805-      
-806-      vertices.push(x, y, z);
-807-    }
-808-  }
-809-  
-810-  for (let i = 0; i < uSteps; i++) {
-811-    for (let j = 0; j < vSteps; j++) {
-812-      const a = i * (vSteps + 1) + j;
-813-      const b = (i + 1) * (vSteps + 1) + j;
-814-      const c = (i + 1) * (vSteps + 1) + j + 1;
-815-      const d = i * (vSteps + 1) + j + 1;
-816-      
-817-      indices.push(a, b, d);
-818-      indices.push(b, c, d);
-819-    }
-820-  }
-821-  
-822-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-823-  geometry.setIndex(indices);
-824-  geometry.computeVertexNormals();
-825-  
-826-  return geometry;
-827-}
-828-
-829-// ──────── MAIN SETUP ────────────────────────────────────────
-830-let scene, camera, renderer;
-831-let agentGroups = [];
-832-window.agentGroups = agentGroups; // Make globally accessible for data highways
-833-let clickableObjects = [];
-834-
-835-function init() {
-836-  // Scene setup
-837-  scene = new THREE.Scene();
-838-  scene.background = new THREE.Color(0x000000); // Pure black background for higher contrast
-839-  
-840-  const canvas = document.getElementById('scene');
-841-  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-842-  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-843-  
-844-  renderer.setSize(window.innerWidth, window.innerHeight);
-845-  renderer.shadowMap.enabled = true;
-846-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-847-  
-848-  // Camera position
-849-  camera.position.set(0, 8, 20);
-850-  camera.lookAt(0, 0, 0);
-851-  
-852-  // Store camera globally for mouse interaction
-853-  window.camera = camera;
-854-  
-855-  // Camera controls
-856-  const controls = new OrbitControls(camera, renderer.domElement);
-857-  controls.target.set(0, 0, 0);
-858-  controls.enableDamping = true;
-859-  controls.dampingFactor = 0.05;
-860-  controls.minDistance = 5;
-861-  controls.maxDistance = 50;
-862-  controls.minPolarAngle = 0;
-863-  controls.maxPolarAngle = Math.PI;
-864-  controls.autoRotate = false;
-865-  controls.enablePan = true;
-866-  controls.enableZoom = true;
-867-  controls.enableRotate = true;
-868-  
-869-  // Store controls globally for animation loop
-870-  window.cameraControls = controls;
-871-  
-872-  // Mobile detection for enhanced brightness
-873-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
-874-                   || window.innerWidth <= 768;
-875-  const mobileBrightnessBoost = isMobile ? 2.0 : 1.0; // 2x brighter on mobile
-876-  window.isMobile = isMobile;
-877-  window.mobileBrightnessBoost = mobileBrightnessBoost;
-878-  
-879-  console.log(`Mobile device detected: ${isMobile}, brightness boost: ${mobileBrightnessBoost}x`);
-880-  
-881-  // Lighting - High contrast white lighting against black background (mobile-enhanced)
-882-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.2 * mobileBrightnessBoost); // Enhanced ambient on mobile
-883-  scene.add(ambientLight);
-884-  
-885-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2 * mobileBrightnessBoost); // Enhanced directional on mobile
-886-  directionalLight.position.set(10, 10, 5);
-887-  directionalLight.castShadow = true;
-888-  directionalLight.shadow.mapSize.width = 2048;
-889-  directionalLight.shadow.mapSize.height = 2048;
-890-  scene.add(directionalLight);
-891-  
-892-  // Add second directional light from opposite side for better contrast (mobile-enhanced)
-893-  const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6 * mobileBrightnessBoost); // Enhanced secondary on mobile
-894-  directionalLight2.position.set(-10, -10, -5);
-895-  scene.add(directionalLight2);
-896-  
-897-  // Load agents and build scene
-898-  loadAgentsAndBuild();
-899-}
-900-
-901-async function loadAgentsAndBuild() {
-902-  let agents = [];
-903-  
-904-  try {
-905-    const response = await fetch('/api/mesh');
-906-    const meshData = await response.json();
-907-    if (meshData && meshData.agents) {
-908-      agents = meshData.agents;
-909-      // Store mesh data globally for data highways
-910-      window._meshData = meshData;
-911-      console.log('Mesh data loaded:', meshData.agents.length, 'agents,', 
-912-                  meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
-913-    }
-914-  } catch (e) {
-915-    console.log('Using demo agents (API offline)');
-916-    // Demo agents in proper hub clusters
-917-    agents = [
-918-      // HOG Hub (green)
-919-      { id: 'solar-detect', hub: 'hog', capabilities: ['monitoring'], position: [-8, 2, -2] },
-920-      { id: 'solar-sites', hub: 'hog', capabilities: ['web-deploy'], position: [-6, 0, -1] },
-921-      { id: 'cron-monitor', hub: 'hog', capabilities: ['scheduling'], position: [-7, -1, 0] },
-922-      
-923-      // TRILLIAN Hub (purple)
-924-      { id: 'stella', hub: 'trillian', capabilities: ['guidance'], position: [6, 3, 0] },
-925-      { id: 'manifold', hub: 'trillian', capabilities: ['topology'], position: [8, 1, 1] },
-926-      { id: 'argue', hub: 'trillian', capabilities: ['debate'], position: [7, 0, -2] },
-927-      { id: 'braid', hub: 'trillian', capabilities: ['solar-prediction'], position: [5, 2, 2] },
-928-      
-929-      // THEFOG Hub (purple)
-930-      { id: 'void-watcher', hub: 'thefog', capabilities: ['void-scan'], position: [0, 4, 8] },
-931-      { id: 'reach-scanner', hub: 'thefog', capabilities: ['mesh-probe'], position: [-1, 3, 6] },
-932-      { id: 'sentry', hub: 'thefog', capabilities: ['monitoring'], position: [1, 5, 7] },
-933-      { id: 'sophia', hub: 'thefog', capabilities: ['void-depth'], position: [0, 6, 5] }
-934-    ];
-935-  }
-936-  
-937-  buildSpiderWeb();
-938-  buildAgentTopologies(agents);
-939-  buildCentralNexus();
-940-  updateAgentsList(agents);
-941-  updateStatusPanel(agents);
-942-  
-943-  animate();
-944-}
-945-
-946-function buildSpiderWeb() {
-947-  const webGroup = new THREE.Group();
-948-  webGroup.position.set(0, -3, 0);
-949-  
-950-  const spokes = 8;
-951-  const rings = 4;
-952-  const outerR = 12;
-953-  const webRings = [];
-954-  
-955-  // Concentric rings with wave capability
-956-  for (let r = 1; r <= rings; r++) {
-957-    const radius = (r / rings) * outerR;
-958-    const segmentCount = 64;
-959-    const positions = new Float32Array((segmentCount + 1) * 3);
-960-    const originalPositions = new Float32Array((segmentCount + 1) * 3);
-961-    
-962-    for (let i = 0; i <= segmentCount; i++) {
-963-      const angle = (i / segmentCount) * Math.PI * 2;
-964-      const x = Math.cos(angle) * radius;
-965-      const y = 0; // Will be modified by waves
-966-      const z = Math.sin(angle) * radius;
-967-      
-968-      const i3 = i * 3;
-969-      positions[i3] = x;
-970-      positions[i3 + 1] = y;
-971-      positions[i3 + 2] = z;
-972-      
-973-      originalPositions[i3] = x;
-974-      originalPositions[i3 + 1] = y;
-975-      originalPositions[i3 + 2] = z;
-976-    }
-977-    
-978-    const geometry = new THREE.BufferGeometry();
-979-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-980-    
-981-    const material = new THREE.MeshBasicMaterial({ 
-982-      color: 0x2a4a6a, 
-983-      transparent: true, 
-984-      opacity: 0.3,
-985-      emissive: 0x000000,
-986-      emissiveIntensity: 0
-987-    });
-988-    
-989-    const line = new THREE.Line(geometry, material);
-990-    line.userData = { 
-991-      originalPositions,
-992-      radius,
-993-      segmentCount,
-994-      ringIndex: r
-995-    };
-996-    
-997-    webRings.push(line);
-998-    webGroup.add(line);
-999-  }
-1000-  
-1001-  // Radial spokes
-1002-  for (let s = 0; s < spokes; s++) {
-1003-    const angle = (s / spokes) * Math.PI * 2;
-1004-    const points = [
-1005-      new THREE.Vector3(0, 0, 0),
-1006-      new THREE.Vector3(
-1007-        Math.cos(angle) * outerR,
-1008-        0,
-1009-        Math.sin(angle) * outerR
-1010-      )
-1011-    ];
-1012-    
-1013-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-1014-    const material = new THREE.MeshBasicMaterial({ 
-1015-      color: 0x1a3a5a, 
-1016-      transparent: true, 
-1017-      opacity: 0.4,
-1018-      emissive: 0x000000,
-1019-      emissiveIntensity: 0
-1020-    });
-1021-    const line = new THREE.Line(geometry, material);
-1022-    webGroup.add(line);
-1023-  }
-1024-  
-1025-  scene.add(webGroup);
-1026-  
-1027-  // Store references for wave animation and data highways
-1028-  window._webGroup = webGroup;
-1029-  window._webRings = webRings;
-1030-  
-1031-  // Initialize neural network data highway system
-1032-  window._dataHighways = {
-1033-    connections: [], // Neural connections instead of pulses
-1034-    segmentActivity: new Map(), // Track which segments have data flowing
-1035-    lastPulseTime: 0,
-1036-    capabilityColors: {
-1037-      'detection': 0xff3366,   // Red for detection capabilities
-1038-      'data': 0x00e5ff,        // Cyan for data capabilities  
-1039-      'deployment': 0x00ff88,  // Green for deployment capabilities
-1040-      'strategy': 0xaa00ff,    // Purple for strategy capabilities
-1041-      'solar': 0xffaa00,       // Orange for solar capabilities
-1042-      'default': 0xffffff      // White for other capabilities
-1043-    },
-1044-    // Hub center positions for neural connections
-1045-    hubCenters: {
-1046-      'hog': { x: -8, y: 2, z: -6 },
-1047-      'trillian': { x: 8, y: 3, z: 2 },
-1048-      'thefog': { x: -2, y: 5, z: 8 },
-1049-      'relay': { x: 6, y: 1, z: -8 },
-1050-      'bobiverse': { x: 0, y: 6, z: -10 }  // Additional hub from API data
-1051-    },
-1052-    // Hub zones for spider web routing (8-sector routing system)
-1053-    hubZones: {
-1054-      'hog': { angle: 0 },                    // 0 degrees (east)
-1055-      'trillian': { angle: Math.PI / 2 },     // 90 degrees (north)
-1056-      'thefog': { angle: Math.PI },           // 180 degrees (west)
-1057-      'relay': { angle: 3 * Math.PI / 2 },    // 270 degrees (south)
-1058-      'bobiverse': { angle: Math.PI / 4 }     // 45 degrees (northeast)
-1059-    }
-1060-  };
-1061-  
-1062-  // TEST: Create a visible test connection immediately
-1063-  setTimeout(() => {
-1064-    console.log('Creating test neural connection...');
-1065-    createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'TEST-CONNECTION');
-1066-    createDataPulse('thefog', 'relay', 0x00ff00, 1.0, 'TEST-CONNECTION-2');
-1067-  }, 2000);
-1068-}
-1069-
-1070-function buildAgentTopologies(agents) {
-1071-  const hubColors = {
-1072-    'relay': 0x00e5ff,
-1073-    'hog': 0x00ff88,
-1074-    'trillian': 0xaa00ff,
-1075-    'thefog': 0x8800ff,
-1076-    'bobiverse': 0xff6600  // Orange for bobiverse
-1077-  };
-1078-  
-1079-  // Define hub center positions in 3D space  
-1080-  const hubCenters = {
-1081-    'hog': { x: -8, y: 2, z: -6 },
-1082-    'trillian': { x: 8, y: 3, z: 2 },
-1083-    'thefog': { x: -2, y: 5, z: 8 },
-1084-    'relay': { x: 6, y: 1, z: -8 },
-1085-    'bobiverse': { x: 0, y: 6, z: -10 }
-1086-  };
-1087-  
-1088-  // Store globally for orbital animation updates
-1089-  window.hubCenters = hubCenters;
-1090-  
-1091-  // Group agents by hub for orbital assignment
-1092-  const agentsByHub = {};
-1093-  agents.forEach(agent => {
-1094-    if (!agentsByHub[agent.hub]) {
-1095-      agentsByHub[agent.hub] = [];
-1096-    }
-1097-    agentsByHub[agent.hub].push(agent);
-1098-  });
-1099-  
-1100-  agents.forEach((agent, idx) => {
-1101-    const group = new THREE.Group();
-1102-    
-1103-    const hubColor = hubColors[agent.hub] || 0x666666;
-1104-    const scale = 0.8 + Math.random() * 0.4;
-1105-    
-1106-    // Alternate topologies
-1107-    let formGeo;
-1108-    if (idx % 2 === 0) {
-1109-      formGeo = makeKleinBottleGeometry(scale, 20);
-1110-      agent.topologyType = 'kleinBottle';
-1111-    } else {
-1112-      formGeo = makeMobiusStripGeometry(scale * 1.2, scale * 0.5, 40);
-1113-      agent.topologyType = 'mobiusStrip';
-1114-    }
-1115-    
-1116-    // Main form - much brighter for high contrast (mobile-enhanced)
-1117-    const formMat = new THREE.MeshPhongMaterial({
-1118-      color: 0xcccccc, // Bright light gray base
-1119-      emissive: new THREE.Color(hubColor).multiplyScalar(0.15 * window.mobileBrightnessBoost), // Enhanced emissive on mobile
-1120-      transparent: true,
-1121-      opacity: 0.8, // Slightly more opaque
-1122-      side: THREE.DoubleSide,
-1123-    });
-1124-    const formMesh = new THREE.Mesh(formGeo, formMat);
-1125-    formMesh.castShadow = true;
-1126-    formMesh.userData = { type: 'agent', agent, idx };
-1127-    clickableObjects.push(formMesh);
-1128-    group.add(formMesh);
-1129-    
-1130-    // Wireframe - brighter for high contrast
-1131-    const wfMat = new THREE.MeshBasicMaterial({
-1132-      color: hubColor,
-1133-      wireframe: true,
-1134-      transparent: true,
-1135-      opacity: 0.9, // Much more visible wireframe
-1136-    });
-1137-    const wfMesh = new THREE.Mesh(formGeo, wfMat);
-1138-    group.add(wfMesh);
-1139-    
-1140-    // Central core (mobile-enhanced)
-1141-    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
-1142-    const coreMat = new THREE.MeshPhongMaterial({
-1143-      color: hubColor,
-1144-      emissive: hubColor,
-1145-      emissiveIntensity: 0.6 * window.mobileBrightnessBoost, // Enhanced core glow on mobile
-1146-    });
-1147-    const core = new THREE.Mesh(coreGeo, coreMat);
-1148-    group.add(core);
-1149-    
-1150-    // Orbital positioning around hub centers
-1151-    const hubCenter = hubCenters[agent.hub] || { x: 0, y: 0, z: 0 };
-1152-    const hubAgents = agentsByHub[agent.hub];
-1153-    const agentIndexInHub = hubAgents.indexOf(agent);
-1154-    const agentsInHub = hubAgents.length;
-1155-    
-1156-    // Orbital parameters - smaller radius for thefog hub for more stability
-1157-    let orbitRadius;
-1158-    if (agent.hub === 'thefog') {
-1159-      orbitRadius = 0.8 + (agentIndexInHub % 3) * 0.3; // Smaller orbits for thefog (0.8-1.4)
-1160-    } else {
-1161-      orbitRadius = 1.5 + (agentIndexInHub % 3) * 0.8; // Normal orbits for other hubs (1.5-3.1)
-1162-    }
-1163-    const orbitAngle = (agentIndexInHub / agentsInHub) * Math.PI * 2;
-1164-    const orbitHeight = Math.sin(agentIndexInHub * 0.7) * 0.5;
-1165-    
-1166-    // Calculate orbital position
-1167-    const orbitalX = hubCenter.x + Math.cos(orbitAngle) * orbitRadius;
-1168-    const orbitalY = hubCenter.y + orbitHeight;
-1169-    const orbitalZ = hubCenter.z + Math.sin(orbitAngle) * orbitRadius;
-1170-    
-1171-    group.position.set(orbitalX, orbitalY, orbitalZ);
-1172-    
-1173-    // Store orbital parameters for animation - much slower for thefog hub
-1174-    let orbitSpeed;
-1175-    if (agent.hub === 'thefog') {
-1176-      orbitSpeed = 0.03 + Math.random() * 0.05; // Very slow for thefog (0.03-0.08)
-1177-    } else {
-1178-      orbitSpeed = 0.2 + Math.random() * 0.3; // Normal speed for other hubs (0.2-0.5)
-1179-    }
-1180-    const orbitDirection = Math.random() > 0.5 ? 1 : -1; // Random direction
-1181-    
-1182-    // Random orientation
-1183-    group.rotation.set(
-1184-      Math.random() * Math.PI,
-1185-      Math.random() * Math.PI,
-1186-      Math.random() * Math.PI
-1187-    );
-1188-    
-1189-    group.userData = { 
-1190-      agent, 
-1191-      idx,
-1192-      hubCenter,
-1193-      orbitRadius,
-1194-      baseOrbitAngle: orbitAngle,
-1195-      orbitHeight,
-1196-      orbitSpeed,
-1197-      orbitDirection,
-1198-      agentIndexInHub
-1199-    };
-1200-    
-1201-    scene.add(group);
-1202-    agentGroups.push(group);
-1203-  });
-1204-  
-1205-  // Create visual markers for hub centers with orbital motion parameters
-1206-  Object.entries(hubCenters).forEach(([hubName, center], idx) => {
-1207-    const hubMarkerGeo = new THREE.SphereGeometry(0.3, 16, 16);
-1208-    const hubColor = hubColors[hubName] || 0x666666;
-1209-    const hubMarkerMat = new THREE.MeshPhongMaterial({
-1210-      color: hubColor,
-1211-      emissive: hubColor,
-1212-      emissiveIntensity: 0.8 * window.mobileBrightnessBoost, // Enhanced hub glow on mobile
-1213-      transparent: true,
-1214-      opacity: 0.9, // More solid hub markers
-1215-    });
-1216-    
-1217-    const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
-1218-    
-1219-    // Calculate orbital parameters around central fog (0,0,0)
-1220-    const baseOrbitRadius = Math.sqrt(center.x * center.x + center.z * center.z);
-1221-    const baseOrbitAngle = Math.atan2(center.z, center.x);
-1222-    const baseOrbitHeight = center.y;
-1223-    
-1224-    // Store orbital parameters
-1225-    const orbitSpeed = 0.05 + (idx % 3) * 0.01; // Slightly different speeds for each hub
-1226-    
-1227-    hubMarker.position.set(center.x, center.y, center.z);
-1228-    
-1229-    // Add orbital motion parameters and hub info
-1230-    hubMarker.userData = { 
-1231-      type: 'hub', 
-1232-      hubName, 
-1233-      isHubCenter: true,
-1234-      isOrbitingHub: true,
-1235-      orbitRadius: baseOrbitRadius,
-1236-      orbitAngle: baseOrbitAngle,
-1237-      orbitHeight: baseOrbitHeight,
-1238-      orbitSpeed: orbitSpeed,
-1239-      baseCenter: { x: center.x, y: center.y, z: center.z }, // Store original position
-1240-      hubInfo: {
-1241-        name: hubName,
-1242-        color: `#${hubColor.toString(16).padStart(6, '0')}`,
-1243-        center: center,
-1244-        description: getHubDescription(hubName)
-1245-      }
-1246-    };
-1247-    
-1248-    // Make hub markers clickable
-1249-    clickableObjects.push(hubMarker);
-1250-    scene.add(hubMarker);
-1251-    
-1252-    // Store hub markers for potential animation
-1253-    agentGroups.push(hubMarker);
-1254-  });
-1255-}
-1256-
-1257-function getHubDescription(hubName) {
-1258-  const descriptions = {
-1259-    'hog': 'Development & Monitoring Hub - System health, data detection, solar monitoring, and deployment management.',
-1260-    'trillian': 'Guidance & Strategy Hub - Leadership, decision-making, manifold topology, and strategic coordination.',
-1261-    'thefog': 'Mystical Computation Hub - Void scanning, deep analysis, and advanced computational research within Sophia\'s realm.',
-1262-    'relay': 'Network Coordination Hub - Federation relay, communications, and inter-hub connectivity management.'
-1263-  };
-1264-  return descriptions[hubName] || 'Unknown hub configuration.';
-1265-}
-1266-
-1267-// ──────── CONSTRAINT SYSTEM PARAMETERS ────────────────────────
-1268-// Easy parameter adjustment - modify these values to iterate on the system
-1269-const CONSTRAINT_CONFIG = {
-1270-  // Motion
-1271-  constraintRatio: 0.3,    // 0-1, higher = stronger constraints (reduced for black hole effect)
-1272-  followMouse: true,       // Mouse interaction
-1273-  whiteNodes: true,        // Node color scheme
-1274-  mouseRadius: 4.0,        // Black hole influence radius
-1275-  mouseForce: 2.5,         // Black hole attraction strength
-1276-  
-1277-  // Mouse proximity shrinking
-1278-  shrinkOnProximity: true, // Shrink constraint system when mouse is near
-1279-  shrinkRadius: 6.0,       // Distance at which shrinking starts
-1280-  minShrinkScale: 0.3,     // Minimum scale when mouse is very close
-1281-  
-1282-  // Particle emissions (20% slower overall)
-1283-  particleEmissions: true, // Enable particle emissions to hubs
-1284-  emissionInterval: 1000,  // Emit particles every 1000ms (1.0 seconds) - 20% slower
-1285-  particlesPerEmission: 2, // Number of particles per emission burst
-1286-  particleSpeed: 0.012,    // Speed of particle travel to hubs (20% slower)
-1287-  particleSize: 0.05,      // Visual size of particles
-1288-  
-1289-  // Mesh stretching during emissions (20% slower)
-1290-  meshStretch: true,       // Enable mesh stretching toward emission targets
-1291-  stretchMagnitude: 1.8,   // How far nodes stretch toward targets
-1292-  stretchDuration: 2500,   // How long stretch effect lasts (ms) - 20% slower decay
-1293-  stretchRecovery: 0.08,   // How quickly mesh returns to original shape
-1294-  
-1295-  // Sophia's "thefog" connection preference
-1296-  thefogPreference: 0.6,   // 60% chance to emit toward thefog vs other hubs
-1297-  thefogStretchBoost: 1.4, // Extra stretch magnitude when reaching toward thefog
-1298-  thefogDurationBoost: 1.6, // Thefog connections linger 60% longer
-1299-  thefogConcentration: 0.65, // Much tighter diameter - only 35% of nodes (was 40%)
-1300-  thefogParticipation: 0.75, // Only 75% as many strands for thefog (25% reduction)
-1301-  
-1302-  // Stretch animation timing
-1303-  stretchSpeed: 1.0,       // Buildup multiplier (1.0 = full buildup over buildup duration)
-1304-  
-1305-  // Visual feedback during stretching
-1306-  stretchLighting: true,   // Enable lighting effects during stretch
-1307-  maxLightening: 0.7,      // Maximum opacity reduction near hubs (70% lighter)
-1308-  
-1309-  // System
-1310-  nodeCount: 200,          // Number of nodes
-1311-  connectionDistance: 1.2, // Distance to create connections
-1312-  springStrength: 0.05,    // Spring force strength (will be reduced after intro)
-1313-  damping: 0.98,          // Velocity damping (0-1, will be increased after intro)
-1314-  nodeSize: 0.02,         // Visual node size
-1315-  
-1316-  // Post-intro stability
-1317-  stableSpringStrength: 0.02, // Reduced spring strength after intro
-1318-  stableDamping: 0.95,        // Increased damping after intro for stillness
-1319-  
-1320-  // Rendering
-1321-  reflectedGround: true,   // Ground reflection
-1322-  whiteTheme: false,       // Color scheme
-1323-  nodeOpacity: 0.8,        // Node transparency
-1324-  lineOpacity: 0.3,        // Connection line transparency
-1325-  
-1326-  // Post-Processing (for future)
-1327-  fxaa: false,            // Anti-aliasing
-1328-  motionBlur: false,      // Motion blur effect
-1329-  bloom: false            // Bloom effect
-1330-};
-1331-
-1332-function buildCentralNexus() {
-1333-  // Sophia's Realm: Dynamic Constraint Network
-1334-  const constraintGroup = new THREE.Group();
-1335-  constraintGroup.position.set(0, 1, 0);
-1336-  // Initialize constraint network nodes
-1337-  const nodes = [];
-1338-  const constraints = [];
-1339-  
-1340-  // Create nodes in organic formation
-1341-  for (let i = 0; i < CONSTRAINT_CONFIG.nodeCount; i++) {
-1342-    // Create node with physics properties
-1343-    const node = {
-1344-      // Position
-1345-      x: (Math.random() - 0.5) * 4,
-1346-      y: (Math.random() - 0.5) * 3,
-1347-      z: (Math.random() - 0.5) * 4,
-1348-      
-1349-      // Velocity
-1350-      vx: 0,
-1351-      vy: 0,
-1352-      vz: 0,
-1353-      
-1354-      // Original position (for constraints)
-1355-      ox: 0,
-1356-      oy: 0,
-1357-      oz: 0,
-1358-      
-1359-      // Properties
-1360-      mass: 1,
-1361-      fixed: false,
-1362-      id: i
-1363-    };
-1364-    
-1365-    // Set original position
-1366-    node.ox = node.x;
-1367-    node.oy = node.y;
-1368-    node.oz = node.z;
-1369-    
-1370-    nodes.push(node);
-1371-  }
-1372-  
-1373-  // Create constraints between nearby nodes
-1374-  for (let i = 0; i < nodes.length; i++) {
-1375-    for (let j = i + 1; j < nodes.length; j++) {
-1376-      const nodeA = nodes[i];
-1377-      const nodeB = nodes[j];
-1378-      
-1379-      const dx = nodeA.x - nodeB.x;
-1380-      const dy = nodeA.y - nodeB.y;
-1381-      const dz = nodeA.z - nodeB.z;
-1382-      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-1383-      
-1384-      if (distance < CONSTRAINT_CONFIG.connectionDistance) {
-1385-        constraints.push({
-1386-          nodeA: i,
-1387-          nodeB: j,
-1388-          restLength: distance
-1389-        });
-1390-      }
-1391-    }
-1392-  }
-1393-  
-1394-  // Create visual nodes
-1395-  const nodeGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.nodeSize, 8, 8);
-1396-  const nodeMaterial = new THREE.MeshPhongMaterial({
-1397-    color: CONSTRAINT_CONFIG.whiteNodes ? 0xffffff : 0x4400aa,
-1398-    emissive: CONSTRAINT_CONFIG.whiteNodes ? 0x222222 : 0x220044,
-1399-    emissiveIntensity: (CONSTRAINT_CONFIG.whiteNodes ? 0.1 : 0.1) * (window.mobileBrightnessBoost || 1.0), // Enhanced on mobile
-1400-    transparent: true,
-1401-    opacity: CONSTRAINT_CONFIG.nodeOpacity,
-1402-  });
-1403-  
-1404-  const nodeInstances = [];
-1405-  nodes.forEach((node, i) => {
-1406-    // Clone material for each node to allow individual opacity changes
-1407-    const individualMaterial = nodeMaterial.clone();
-1408-    const nodeMesh = new THREE.Mesh(nodeGeometry, individualMaterial);
-1409-    nodeMesh.position.set(node.x, node.y, node.z);
-1410-    nodeInstances.push(nodeMesh);
-1411-    constraintGroup.add(nodeMesh);
-1412-  });
-1413-  
-1414-  // Create constraint lines
-1415-  const lineGeometry = new THREE.BufferGeometry();
-1416-  const linePositions = new Float32Array(constraints.length * 6); // 2 points per constraint * 3 coords
-1417-  
-1418-  const lineMaterial = new THREE.LineBasicMaterial({
-1419-    color: 0x333333, // Dark grey/charcoal
-1420-    transparent: true,
-1421-    opacity: CONSTRAINT_CONFIG.lineOpacity,
-1422-  });
-1423-  
-1424-  constraints.forEach((constraint, i) => {
-1425-    const nodeA = nodes[constraint.nodeA];
-1426-    const nodeB = nodes[constraint.nodeB];
-1427-    const i6 = i * 6;
-1428-    
-1429-    linePositions[i6] = nodeA.x;
-1430-    linePositions[i6 + 1] = nodeA.y;
-1431-    linePositions[i6 + 2] = nodeA.z;
-1432-    linePositions[i6 + 3] = nodeB.x;
-1433-    linePositions[i6 + 4] = nodeB.y;
-1434-    linePositions[i6 + 5] = nodeB.z;
-1435-  });
-1436-  
-1437-  lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
-1438-  const constraintLines = new THREE.LineSegments(lineGeometry, lineMaterial);
-1439-  constraintGroup.add(constraintLines);
-1440-  
-1441-  // Create ground reflection if enabled
-1442-  if (CONSTRAINT_CONFIG.reflectedGround) {
-1443-    const groundGeometry = new THREE.PlaneGeometry(20, 20);
-1444-    const groundMaterial = new THREE.MeshPhongMaterial({
-1445-      color: 0x001122,
-1446-      transparent: true,
-1447-      opacity: 0.1,
-1448-      side: THREE.DoubleSide,
-1449-    });
-1450-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-1451-    ground.rotation.x = -Math.PI / 2;
-1452-    ground.position.y = -2;
-1453-    constraintGroup.add(ground);
-1454-  }
-1455-  
-1456-  // Initial dramatic scale - starts huge and shrinks down
-1457-  const initialScale = 25.0; // Start 25x larger than normal (more dramatic)
-1458-  constraintGroup.scale.setScalar(initialScale);
-1459-  console.log('Constraint group initialized with scale:', initialScale);
-1460-  
-1461-  scene.add(constraintGroup);
-1462-  
-1463-  // Populate hub positions for particle targeting
-1464-  const hubCenters = {
-1465-    'hog': { x: -8, y: 2, z: -6 },
-1466-    'trillian': { x: 8, y: 3, z: 2 },
-1467-    'thefog': { x: -2, y: 5, z: 8 }, // Sophia's realm
-1468-    'relay': { x: 6, y: 1, z: -8 },
-1469-    'bobiverse': { x: 0, y: 6, z: -10 }
-1470-  };
-1471-  
-1472-  // Create named hub arrays for weighted selection
-1473-  const hubNames = Object.keys(hubCenters);
-1474-  const hubPositions = hubNames.map(name => ({
-1475-    name: name,
-1476-    position: new THREE.Vector3(hubCenters[name].x, hubCenters[name].y, hubCenters[name].z),
-1477-    isThefog: name === 'thefog'
-1478-  }));
-1479-
-1480-  // Store references for animation and mouse interaction
-1481-  window._constraintSystem = {
-1482-    group: constraintGroup,
-1483-    nodes: nodes,
-1484-    constraints: constraints,
-1485-    nodeInstances: nodeInstances,
-1486-    constraintLines: constraintLines,
-1487-    mousePosition: new THREE.Vector3(),
-1488-    raycaster: new THREE.Raycaster(),
-1489-    mouse: new THREE.Vector2(),
-1490-    
-1491-    // Animation state
-1492-    startTime: null, // Will be set when animation loop first runs
-1493-    introAnimation: true,
-1494-    initialScale: initialScale,
-1495-    targetScale: 1.0,
-1496-    introDuration: 2000, // 2 seconds
-1497-    mouseInteractionEnabled: false, // Enabled after 2.2 seconds
-1498-    mouseEnableTime: 2200, // 2.2 seconds
-1499-    frameCount: 0, // For debug logging
-1500-    
-1501-    // Proximity scaling
-1502-    currentScale: 1.0,
-1503-    targetProximityScale: 1.0,
-1504-    
-1505-    // Particle system
-1506-    particles: [],
-1507-    lastEmissionTime: 0,
-1508-    hubPositions: hubPositions, // Named hub positions with thefog identification
-1509-    particleGroup: new THREE.Group(), // Container for particle meshes
-1510-    
-1511-    // Mesh stretching system
-1512-    originalNodePositions: nodes.map(node => ({ x: node.x, y: node.y, z: node.z })), // Store original positions
-1513-    activeStretchEffects: [], // Array of active stretch effects { direction, strength, decay, startTime }
-1514-    stretchTargets: [] // Current stretch target positions for smooth interpolation
-1515-  };
-1516-  
-1517-  // Add particle group to scene
-1518-  scene.add(window._constraintSystem.particleGroup);
-1519-}
-1520-
-1521-function updateAgentsList(agents) {
-1522-  const agentsList = document.getElementById('agents-list');
-1523-  agentsList.innerHTML = '';
-1524-  
-1525-  const hubColors = {
-1526-    'hog': '#00ff88',
-1527-    'trillian': '#aa00ff', 
-1528-    'thefog': '#8800ff',
-1529-    'relay': '#00e5ff',
-1530-    'bobiverse': '#ff6600'  // Orange for bobiverse
-1531-  };
-1532-  
-1533-  agents.forEach(agent => {
-1534-    const item = document.createElement('div');
-1535-    item.className = 'agent-item';
-1536-    
-1537-    const hubColor = hubColors[agent.hub] || '#666666';
-1538-    
-1539-    item.innerHTML = `
-1540-      <div class="agent-dot" style="background: ${hubColor}"></div>
-1541-      <span class="agent-name">${agent.name || agent.id}</span>
-1542-      <span class="agent-caps">${agent.capabilities ? agent.capabilities.length : 1} caps</span>
-1543-    `;
-1544-    
-1545-    agentsList.appendChild(item);
-1546-  });
-1547-}
-1548-
-1549-function updateStatusPanel(agents) {
-1550-  document.getElementById('agent-count').textContent = agents.length;
-1551-  
-1552-  const totalCaps = agents.reduce((sum, agent) => 
-1553-    sum + (agent.capabilities ? agent.capabilities.length : 1), 0);
-1554-  document.getElementById('capability-count').textContent = totalCaps;
-1555-}
-1556-
-1557-// Animation loop
-1558-// Global frame counter for debugging
-1559-let animationFrame = 0;
-1560-
-1561-function animate() {
-1562-  requestAnimationFrame(animate);
-1563-  animationFrame++;
-1564-  
-1565-  const elapsed = performance.now() / 1000;
-1566-  
-1567-  // Animate agents and hub centers
-1568-  agentGroups.forEach((group, idx) => {
-1569-    const userData = group.userData;
-1570-    
-1571-    if (userData && userData.isHubCenter && userData.isOrbitingHub) {
-1572-      // Animate hub orbital motion around central fog
-1573-      const orbitTime = elapsed * userData.orbitSpeed;
-1574-      const currentAngle = userData.orbitAngle + orbitTime;
-1575-      
-1576-      // Calculate new orbital position
-1577-      const orbitalX = Math.cos(currentAngle) * userData.orbitRadius;
-1578-      const orbitalZ = Math.sin(currentAngle) * userData.orbitRadius;
-1579-      const orbitalY = userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2; // Gentle vertical oscillation
-1580-      
-1581-      group.position.set(orbitalX, orbitalY, orbitalZ);
-1582-      
-1583-      // Update the hubCenters data for data highways to follow
-1584-      const hubName = userData.hubName;
-1585-      if (window._dataHighways && window._dataHighways.hubCenters[hubName]) {
-1586-        window._dataHighways.hubCenters[hubName] = new THREE.Vector3(orbitalX, orbitalY, orbitalZ);
-1587-      }
-1588-      
-1589-      // Also update the main hubCenters reference if it exists
-1590-      if (window.hubCenters && window.hubCenters[hubName]) {
-1591-        window.hubCenters[hubName] = { x: orbitalX, y: orbitalY, z: orbitalZ };
-1592-      }
-1593-      
-1594-      // Subtle pulsing animation
-1595-      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.1;
-1596-      group.scale.setScalar(pulse);
-1597-      
-1598-    } else if (userData && userData.isHubCenter) {
-1599-      // Static hub centers (fallback for non-orbital hubs)
-1600-      const pulse = 1 + Math.sin(elapsed * 2 + idx) * 0.15;
-1601-      group.scale.setScalar(pulse);
-1602-      
-1603-    } else if (userData && userData.hubCenter) {
-1604-      // Animate agents in orbital motion around hub centers (following moving hubs)
-1605-      const orbitTime = elapsed * userData.orbitSpeed * userData.orbitDirection;
-1606-      const currentAngle = userData.baseOrbitAngle + orbitTime;
-1607-      
-1608-      // Get current hub position (may be moving due to hub orbital motion)
-1609-      let currentHubPos = userData.hubCenter;
-1610-      
-1611-      // Check if hub is orbiting and get its current position
-1612-      if (window.hubCenters && window.hubCenters[userData.agent.hub]) {
-1613-        currentHubPos = window.hubCenters[userData.agent.hub];
-1614-      }
-1615-      
-1616-      // Update orbital position around current hub position
-1617-      const orbitalX = currentHubPos.x + Math.cos(currentAngle) * userData.orbitRadius;
-1618-      const orbitalZ = currentHubPos.z + Math.sin(currentAngle) * userData.orbitRadius;
-1619-      const orbitalY = currentHubPos.y + userData.orbitHeight + Math.sin(elapsed * 0.5 + userData.agentIndexInHub) * 0.1;
-1620-      
-1621-      group.position.set(orbitalX, orbitalY, orbitalZ);
-1622-      
-1623-      // Continue topology rotation
-1624-      group.rotation.y += 0.005 + idx * 0.001;
-1625-      group.rotation.x += 0.003;
-1626-    }
-1627-  });
-1628-  
-1629-  // Animate Sophia's Realm (The Fog)
-1630-  if (window._centralSphere) {
-1631-    // Gentle rotation of entire fog system
-1632-    window._centralSphere.rotation.y += 0.003;
-1633-    window._centralSphere.rotation.x += 0.001;
-1634-  }
-1635-  
-1636-  // Animate constraint network physics
-1637-  if (window._constraintSystem) {
-1638-    const system = window._constraintSystem;
-1639-    
-1640-    // Increment frame counter for debug logging (needs to be outside intro check)
-1641-    system.frameCount++;
-1642-    
-1643-    // Handle intro animation - shrink from huge to normal size
-1644-    if (system.introAnimation) {
-1645-      const currentTime = performance.now();
-1646-      
-1647-      // Initialize start time on first frame
-1648-      if (system.startTime === null) {
-1649-        system.startTime = currentTime;
-1650-        console.log('Starting intro animation at scale:', system.initialScale);
-1651-      }
-1652-      
-1653-      const elapsedIntro = currentTime - system.startTime;
-1654-      
-1655-      if (elapsedIntro < system.introDuration) {
-1656-        // Smooth easing from initial scale to target scale
-1657-        const progress = elapsedIntro / system.introDuration;
-1658-        const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out
-1659-        const currentScale = system.initialScale + (system.targetScale - system.initialScale) * easeOut;
-1660-        system.group.scale.setScalar(currentScale);
-1661-      } else {
-1662-        // Animation complete - set final scale and switch to stable mode
-1663-        system.group.scale.setScalar(system.targetScale);
-1664-        system.currentScale = system.targetScale; // Initialize proximity scaling
-1665-        system.introAnimation = false;
-1666-        console.log('Intro animation complete - switching to stable mode');
-1667-        
-1668-        // Make physics more stable/still after intro
-1669-        CONSTRAINT_CONFIG.springStrength = CONSTRAINT_CONFIG.stableSpringStrength;
-1670-        CONSTRAINT_CONFIG.damping = CONSTRAINT_CONFIG.stableDamping;
-1671-        
-1672-        // Enable mouse interaction immediately after intro completes
-1673-        if (!system.mouseInteractionEnabled) {
-1674-          system.mouseInteractionEnabled = true;
-1675-          console.log('Mouse interaction enabled after intro completion');
-1676-        }
-1677-      }
-1678-    }
-1679-    const nodes = system.nodes;
-1680-    const constraints = system.constraints;
-1681-    
-1682-    // Black hole mouse interaction (if enabled and after delay)
-1683-    if (CONSTRAINT_CONFIG.followMouse && system.mousePosition && system.mouseInteractionEnabled) {
-1684-      let nodesAffected = 0;
-1685-      
-1686-      // Create black hole effect - strong attractive force toward mouse
-1687-      nodes.forEach(node => {
-1688-        const dx = system.mousePosition.x - node.x;
-1689-        const dy = system.mousePosition.y - node.y;
-1690-        const dz = system.mousePosition.z - node.z;
-1691-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-1692-        
-1693-        if (distance < CONSTRAINT_CONFIG.mouseRadius && distance > 0.1) {
-1694-          nodesAffected++;
-1695-          
-1696-          // Strong attractive force (black hole effect)
-1697-          // Force increases as nodes get closer to the "event horizon"
-1698-          const eventHorizon = 0.5;
-1699-          const forceMultiplier = distance < eventHorizon ? 10.0 : 1.0;
-1700-          const force = (CONSTRAINT_CONFIG.mouseForce / (distance + 0.5)) * forceMultiplier;
-1701-          
-1702-          // Pull nodes toward mouse position (attractive force)
-1703-          const normalizedDx = dx / distance;
-1704-          const normalizedDy = dy / distance;
-1705-          const normalizedDz = dz / distance;
-1706-          
-1707-          node.vx += normalizedDx * force * 0.05;
-1708-          node.vy += normalizedDy * force * 0.05;
-1709-          node.vz += normalizedDz * force * 0.05;
-1710-        }
-1711-      });
-1712-      
-1713-      // Debug: Log affected nodes count every 60 frames
-1714-      if (system.frameCount % 60 === 0 && nodesAffected > 0) {
-1715-        console.log('Black hole affecting', nodesAffected, 'nodes');
-1716-      }
-1717-    }
-1718-    
-1719-    // Proximity-based shrinking effect (only after intro animation completes)
-1720-    if (CONSTRAINT_CONFIG.shrinkOnProximity && system.mousePosition && system.mouseInteractionEnabled && !system.introAnimation) {
-1721-      // Calculate distance from mouse to constraint system center
-1722-      const systemCenter = system.group.position;
-1723-      const mouseDistance = system.mousePosition.distanceTo(systemCenter);
-1724-      
-1725-      // Calculate target scale based on mouse proximity
-1726-      if (mouseDistance < CONSTRAINT_CONFIG.shrinkRadius) {
-1727-        const proximityRatio = mouseDistance / CONSTRAINT_CONFIG.shrinkRadius;
-1728-        system.targetProximityScale = CONSTRAINT_CONFIG.minShrinkScale + 
-1729-          (1.0 - CONSTRAINT_CONFIG.minShrinkScale) * proximityRatio;
-1730-      } else {
-1731-        system.targetProximityScale = 1.0;
-1732-      }
-1733-      
-1734-      // Smoothly interpolate to target scale
-1735-      const lerpFactor = 0.05;
-1736-      system.currentScale += (system.targetProximityScale - system.currentScale) * lerpFactor;
-1737-      system.group.scale.setScalar(system.currentScale);
-1738-      
-1739-      // Debug: Log shrinking effect every 60 frames
-1740-      if (system.frameCount % 60 === 0 && system.currentScale < 0.95) {
-1741-        console.log('Proximity shrinking - scale:', system.currentScale.toFixed(2), 'distance:', mouseDistance.toFixed(2));
-1742-      }
-1743-    }
-1744-    
-1745-    // Particle emission system (only after intro animation completes)
-1746-    if (CONSTRAINT_CONFIG.particleEmissions && system.hubPositions.length > 0 && !system.introAnimation) {
-1747-      const currentTime = performance.now();
-1748-      
-1749-      // Emit new particles every interval
-1750-      if (currentTime - system.lastEmissionTime >= CONSTRAINT_CONFIG.emissionInterval) {
-1751-        system.lastEmissionTime = currentTime;
-1752-        
-1753-        // Collect unique target hubs for this emission burst
-1754-        const targetHubs = [];
-1755-        
-1756-        // Create particles for this emission burst
-1757-        for (let i = 0; i < CONSTRAINT_CONFIG.particlesPerEmission; i++) {
-1758-          // Weighted hub selection favoring thefog (Sophia's realm)
-1759-          let targetHub;
-1760-          let targetHubIndex;
-1761-          
-1762-          if (Math.random() < CONSTRAINT_CONFIG.thefogPreference) {
-1763-            // Prefer thefog (Sophia's realm)
-1764-            const thefogHub = system.hubPositions.find(hub => hub.isThefog);
-1765-            if (thefogHub) {
-1766-              targetHub = thefogHub;
-1767-              targetHubIndex = system.hubPositions.indexOf(thefogHub);
-1768-            } else {
-1769-              // Fallback if thefog not found
-1770-              targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
-1771-              targetHub = system.hubPositions[targetHubIndex];
-1772-            }
-1773-          } else {
-1774-            // Random hub selection
-1775-            targetHubIndex = Math.floor(Math.random() * system.hubPositions.length);
-1776-            targetHub = system.hubPositions[targetHubIndex];
-1777-          }
-1778-          
-1779-          targetHubs.push({ 
-1780-            index: targetHubIndex, 
-1781-            hubInfo: targetHub, 
-1782-            position: targetHub.position 
-1783-          });
-1784-          
-1785-          // Create particle mesh - purple glow for thefog, cyan for others
-1786-          const particleGeometry = new THREE.SphereGeometry(CONSTRAINT_CONFIG.particleSize, 8, 6);
-1787-          const particleColor = targetHub.isThefog ? 0x8800ff : 0x00e5ff; // Purple for thefog
-1788-          const particleMaterial = new THREE.MeshBasicMaterial({ 
-1789-            color: particleColor, 
-1790-            transparent: true, 
-1791-            opacity: 0.8 
-1792-          });
-1793-          const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
-1794-          
-1795-          // Start at constraint system center
-1796-          particleMesh.position.copy(system.group.position);
-1797-          
-1798-          // Store particle data
-1799-          const particle = {
-1800-            mesh: particleMesh,
-1801-            startPos: system.group.position.clone(),
-1802-            targetPos: targetHub.position.clone(),
-1803-            progress: 0.0,
-1804-            speed: CONSTRAINT_CONFIG.particleSpeed,
-1805-            targetHubIndex: targetHubIndex,
-1806-            isThefog: targetHub.isThefog
-1807-          };
-1808-          
-1809-          system.particles.push(particle);
-1810-          system.particleGroup.add(particleMesh);
-1811-        }
-1812-        
-1813-        // Create mesh stretch effects toward emission targets
-1814-        if (CONSTRAINT_CONFIG.meshStretch && targetHubs.length > 0) {
-1815-          targetHubs.forEach(targetHub => {
-1816-            // Calculate direction from constraint center to hub
-1817-            const systemCenter = system.group.position;
-1818-            const stretchDirection = new THREE.Vector3()
-1819-              .copy(targetHub.position)
-1820-              .sub(systemCenter)
-1821-              .normalize();
-1822-            
-1823-            // Apply thefog boost for Sophia's realm connections
-1824-            const baseStrength = CONSTRAINT_CONFIG.stretchMagnitude;
-1825-            const baseDuration = CONSTRAINT_CONFIG.stretchDuration;
-1826-            const isThefogConnection = targetHub.hubInfo.isThefog;
-1827-            
-1828-            const effectiveStrength = isThefogConnection ? 
-1829-              baseStrength * CONSTRAINT_CONFIG.thefogStretchBoost : 
-1830-              baseStrength;
-1831-              
-1832-            const effectiveDuration = isThefogConnection ?
-1833-              baseDuration * CONSTRAINT_CONFIG.thefogDurationBoost :
-1834-              baseDuration;
-1835-            
-1836-            // Create stretch effect with enhanced reach toward hub centers
-1837-            const stretchEffect = {
-1838-              direction: stretchDirection,
-1839-              strength: effectiveStrength,
-1840-              startTime: currentTime,
-1841-              duration: effectiveDuration, // Longer duration for thefog
-1842-              buildup: 0.0, // Start at 0, build up gradually
-1843-              decay: 1.0, // Will decay from 1.0 to 0.0 after buildup completes
-1844-              buildupPhase: true, // Currently building up strength
-1845-              buildupDuration: effectiveDuration * 0.5, // 50% of total time for gradual buildup
-1846-              hubTarget: targetHub.position.clone(), // Store actual hub position for closer reach
-1847-              isThefog: isThefogConnection,
-1848-              concentrated: isThefogConnection // Flag for tighter diameter
-1849-            };
-1850-            
-1851-            system.activeStretchEffects.push(stretchEffect);
-1852-          });
-1853-        }
-1854-        
-1855-        // Debug: Log particle emission with thefog preference tracking
-1856-        const thefogCount = targetHubs.filter(hub => hub.hubInfo.isThefog).length;
-1857-        if (system.frameCount % 180 === 0) { // Every 3 seconds
-1858-          console.log('Emitted', CONSTRAINT_CONFIG.particlesPerEmission, 'particles. Active:', system.particles.length, 
-1859-                      '| thefog:', thefogCount, '/', targetHubs.length);
-1860-        }
-1861-      }
-1862-      
-1863-      // Update existing particles
-1864-      system.particles = system.particles.filter(particle => {
-1865-        particle.progress += particle.speed;
-1866-        
-1867-        if (particle.progress >= 1.0) {
-1868-          // Particle reached destination - remove it
-1869-          system.particleGroup.remove(particle.mesh);
-1870-          return false;
-1871-        } else {
-1872-          // Update particle position along path
-1873-          particle.mesh.position.lerpVectors(particle.startPos, particle.targetPos, particle.progress);
-1874-          return true;
-1875-        }
-1876-      });
-1877-    }
-1878-    
-1879-    // Mesh stretching animation (apply before constraint physics)
-1880-    if (CONSTRAINT_CONFIG.meshStretch && system.activeStretchEffects.length > 0) {
-1881-      const currentTime = performance.now();
-1882-      
-1883-      // Update and filter active stretch effects with gradual buildup
-1884-      system.activeStretchEffects = system.activeStretchEffects.filter(effect => {
-1885-        const elapsed = currentTime - effect.startTime;
-1886-        const progress = elapsed / effect.duration;
-1887-        
-1888-        if (progress >= 1.0) {
-1889-          // Effect expired
-1890-          return false;
-1891-        } else {
-1892-          if (effect.buildupPhase) {
-1893-            // Gradual buildup phase
-1894-            const buildupProgress = Math.min(elapsed / effect.buildupDuration, 1.0);
-1895-            effect.buildup = buildupProgress * CONSTRAINT_CONFIG.stretchSpeed;
-1896-            
-1897-            if (buildupProgress >= 1.0) {
-1898-              effect.buildupPhase = false;
-1899-              effect.buildup = 1.0;
-1900-            }
-1901-          } else {
-1902-            // Decay phase (smooth ease-out curve)
-1903-            const decayStart = effect.buildupDuration;
-1904-            const decayElapsed = elapsed - decayStart;
-1905-            const decayDuration = effect.duration - decayStart;
-1906-            const decayProgress = decayElapsed / decayDuration;
-1907-            effect.decay = 1.0 - (decayProgress * decayProgress); // Quadratic ease-out
-1908-          }
-1909-          return true;
-1910-        }
-1911-      });
-1912-      
-1913-      // Apply stretch effects to node positions
-1914-      system.nodes.forEach((node, i) => {
-1915-        const originalPos = system.originalNodePositions[i];
-1916-        
-1917-        // Initialize lightening for this frame
-1918-        node.lightening = 0;
-1919-        
-1920-        // Calculate total stretch displacement from all active effects
-1921-        let totalStretchX = 0;
-1922-        let totalStretchY = 0;
-1923-        let totalStretchZ = 0;
-1924-        
-1925-        // Apply all active stretch effects
-1926-        system.activeStretchEffects.forEach(effect => {
-1927-          // Calculate how much this node should be displaced toward hub target
-1928-          const nodeFromCenter = new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z);
-1929-          const dot = nodeFromCenter.dot(effect.direction);
-1930-          
-1931-          // Only stretch nodes that are in the positive direction of stretch
-1932-          if (dot > 0) {
-1933-            // For thefog (concentrated streams), only affect nodes more aligned with direction
-1934-            let participates = true;
-1935-            if (effect.concentrated) {
-1936-              // Tighter diameter - only nodes with strong directional alignment participate
-1937-              const alignmentThreshold = CONSTRAINT_CONFIG.thefogConcentration;
-1938-              const nodeDistance = nodeFromCenter.length();
-1939-              const alignment = nodeDistance > 0 ? dot / nodeDistance : 0;
-1940-              participates = alignment > alignmentThreshold;
-1941-              
-1942-              // Further reduce participation for thefog (25% fewer strands)
-1943-              if (participates && Math.random() > CONSTRAINT_CONFIG.thefogParticipation) {
-1944-                participates = false;
-1945-              }
-1946-            }
-1947-            
-1948-            if (participates) {
-1949-              // Use buildup for gradual stretch, then decay for pullback
-1950-              const currentStrength = effect.buildupPhase ? 
-1951-                effect.strength * effect.buildup : 
-1952-                effect.strength * effect.decay;
-1953-              
-1954-              // Enhanced stretching that pulls nodes closer to actual hub centers
-1955-              const baseStretchAmount = dot * currentStrength;
-1956-              
-1957-              // Additional pull toward exact hub position for closer reach
-1958-              const hubDirection = new THREE.Vector3()
-1959-                .copy(effect.hubTarget)
-1960-                .sub(new THREE.Vector3(originalPos.x, originalPos.y, originalPos.z))
-1961-                .normalize();
-1962-              
-1963-              const hubPull = baseStretchAmount * 0.3; // 30% additional pull toward hub center
-1964-              
-1965-              const stretchX = effect.direction.x * baseStretchAmount + hubDirection.x * hubPull;
-1966-              const stretchY = effect.direction.y * baseStretchAmount + hubDirection.y * hubPull;
-1967-              const stretchZ = effect.direction.z * baseStretchAmount + hubDirection.z * hubPull;
-1968-              
-1969-              totalStretchX += stretchX;
-1970-              totalStretchY += stretchY;
-1971-              totalStretchZ += stretchZ;
-1972-              
-1973-              // Calculate lighting effect intensity based on stretch amount
-1974-              if (CONSTRAINT_CONFIG.stretchLighting) {
-1975-                const stretchMagnitude = Math.sqrt(stretchX*stretchX + stretchY*stretchY + stretchZ*stretchZ);
-1976-                const lightening = Math.min(stretchMagnitude / (effect.strength * 0.5), 1.0) * CONSTRAINT_CONFIG.maxLightening;
-1977-                node.lightening = Math.max(node.lightening || 0, lightening);
-1978-              }
-1979-            }
-1980-          }
-1981-        });
-1982-        
-1983-        // Apply stretch displacement as offset from physics position
-1984-        node.stretchX = totalStretchX;
-1985-        node.stretchY = totalStretchY;
-1986-        node.stretchZ = totalStretchZ;
-1987-      });
-1988-      
-1989-      // Debug: Log active stretch effects with thefog tracking and lighting
-1990-      if (system.frameCount % 60 === 0 && system.activeStretchEffects.length > 0) {
-1991-        const thefogStretches = system.activeStretchEffects.filter(e => e.isThefog).length;
-1992-        const concentratedStretches = system.activeStretchEffects.filter(e => e.concentrated).length;
-1993-        const buildingUp = system.activeStretchEffects.filter(e => e.buildupPhase).length;
-1994-        const maxDecay = Math.max(...system.activeStretchEffects.map(e => e.buildupPhase ? e.buildup : e.decay)).toFixed(2);
-1995-        const lightenedNodes = system.nodes.filter(n => (n.lightening || 0) > 0.1).length;
-1996-        const maxLightening = Math.max(...system.nodes.map(n => n.lightening || 0)).toFixed(2);
-1997-        console.log('Mesh:', system.activeStretchEffects.length, 'effects (thefog:', thefogStretches, 
-1998-                   'concentrated:', concentratedStretches, 'building:', buildingUp, ') strength:', maxDecay, 
-1999-                   'lit nodes:', lightenedNodes, 'max light:', maxLightening);
-2000-      }
-2001-    } else {
-2002-      // No active stretch effects - clear stretch offsets and lighting
-2003-      system.nodes.forEach(node => {
-2004-        node.stretchX = 0;
-2005-        node.stretchY = 0;
-2006-        node.stretchZ = 0;
-2007-        node.lightening = 0;
-2008-      });
-2009-    }
-2010-    
-2011-    // Apply constraint forces
-2012-    constraints.forEach(constraint => {
-2013-      const nodeA = nodes[constraint.nodeA];
-2014-      const nodeB = nodes[constraint.nodeB];
-2015-      
-2016-      const dx = nodeB.x - nodeA.x;
-2017-      const dy = nodeB.y - nodeA.y;
-2018-      const dz = nodeB.z - nodeA.z;
-2019-      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-2020-      
-2021-      if (distance > 0) {
-2022-        const difference = (constraint.restLength - distance) / distance;
-2023-        const force = difference * CONSTRAINT_CONFIG.springStrength;
-2024-        
-2025-        const offsetX = dx * force * 0.5;
-2026-        const offsetY = dy * force * 0.5;
-2027-        const offsetZ = dz * force * 0.5;
-2028-        
-2029-        nodeA.vx -= offsetX;
-2030-        nodeA.vy -= offsetY;
-2031-        nodeA.vz -= offsetZ;
-2032-        
-2033-        nodeB.vx += offsetX;
-2034-        nodeB.vy += offsetY;
-2035-        nodeB.vz += offsetZ;
-2036-      }
-2037-    });
-2038-    
-2039-    // Update node positions
-2040-    nodes.forEach((node, i) => {
-2041-      if (!node.fixed) {
-2042-        // Apply constraint ratio (pulls back to original position)
-2043-        if (CONSTRAINT_CONFIG.constraintRatio > 0) {
-2044-          const pullX = (node.ox - node.x) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
-2045-          const pullY = (node.oy - node.y) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
-2046-          const pullZ = (node.oz - node.z) * CONSTRAINT_CONFIG.constraintRatio * 0.05;
-2047-          
-2048-          node.vx += pullX;
-2049-          node.vy += pullY;
-2050-          node.vz += pullZ;
-2051-        }
-2052-        
-2053-        // Add very slight upward force to counteract any drift (instead of downward gravity)
-2054-        node.vy += 0.0002;
-2055-        
-2056-        // Update position
-2057-        node.x += node.vx;
-2058-        node.y += node.vy;
-2059-        node.z += node.vz;
-2060-        
-2061-        // Apply damping
-2062-        node.vx *= CONSTRAINT_CONFIG.damping;
-2063-        node.vy *= CONSTRAINT_CONFIG.damping;
-2064-        node.vz *= CONSTRAINT_CONFIG.damping;
-2065-        
-2066-        // Add boundaries to prevent excessive drift
-2067-        const maxDrift = 5.0;
-2068-        if (Math.abs(node.x) > maxDrift || Math.abs(node.y) > maxDrift || Math.abs(node.z) > maxDrift) {
-2069-          // Strong pull back toward center if drifting too far
-2070-          node.vx += (0 - node.x) * 0.01;
-2071-          node.vy += (0 - node.y) * 0.01;
-2072-          node.vz += (0 - node.z) * 0.01;
-2073-        }
-2074-        
-2075-        // Update visual node position and appearance
-2076-        if (system.nodeInstances[i]) {
-2077-          // Apply stretch offset to visual position
-2078-          const visualX = node.x + (node.stretchX || 0);
-2079-          const visualY = node.y + (node.stretchY || 0);
-2080-          const visualZ = node.z + (node.stretchZ || 0);
-2081-          system.nodeInstances[i].position.set(visualX, visualY, visualZ);
-2082-          
-2083-          // Apply lightening effect during stretching
-2084-          if (CONSTRAINT_CONFIG.stretchLighting && node.lightening > 0) {
-2085-            const baseOpacity = CONSTRAINT_CONFIG.nodeOpacity;
-2086-            const lightenedOpacity = Math.max(baseOpacity * (1.0 - node.lightening), 0.1); // Don't go completely transparent
-2087-            system.nodeInstances[i].material.opacity = lightenedOpacity;
-2088-            
-2089-            // Add stronger glow effect for stretched nodes
-2090-            if (node.lightening > 0.2) {
-2091-              system.nodeInstances[i].material.emissive.setHex(0x4422ff); // Brighter purple glow
-2092-              system.nodeInstances[i].material.emissiveIntensity = node.lightening * 0.8; // Stronger intensity
-2093-            } else {
-2094-              system.nodeInstances[i].material.emissive.setHex(0x000000);
-2095-              system.nodeInstances[i].material.emissiveIntensity = 0;
-2096-            }
-2097-            
-2098-            // Force material update
-2099-            system.nodeInstances[i].material.needsUpdate = true;
-2100-          } else {
-2101-            // Reset to normal appearance
-2102-            system.nodeInstances[i].material.opacity = CONSTRAINT_CONFIG.nodeOpacity;
-2103-            system.nodeInstances[i].material.emissive.setHex(0x000000);
-2104-            system.nodeInstances[i].material.emissiveIntensity = 0;
-2105-            system.nodeInstances[i].material.needsUpdate = true;
-2106-          }
-2107-        }
-2108-      }
-2109-    });
-2110-    
-2111-    // Update constraint lines
-2112-    if (system.constraintLines) {
-2113-      const linePositions = system.constraintLines.geometry.attributes.position.array;
-2114-      constraints.forEach((constraint, i) => {
-2115-        const nodeA = nodes[constraint.nodeA];
-2116-        const nodeB = nodes[constraint.nodeB];
-2117-        const i6 = i * 6;
-2118-        
-2119-        // Apply stretch offsets to constraint line endpoints
-2120-        linePositions[i6] = nodeA.x + (nodeA.stretchX || 0);
-2121-        linePositions[i6 + 1] = nodeA.y + (nodeA.stretchY || 0);
-2122-        linePositions[i6 + 2] = nodeA.z + (nodeA.stretchZ || 0);
-2123-        linePositions[i6 + 3] = nodeB.x + (nodeB.stretchX || 0);
-2124-        linePositions[i6 + 4] = nodeB.y + (nodeB.stretchY || 0);
-2125-        linePositions[i6 + 5] = nodeB.z + (nodeB.stretchZ || 0);
-2126-      });
-2127-      system.constraintLines.geometry.attributes.position.needsUpdate = true;
-2128-    }
-2129-  }
-2130-  
-2131-  // Data Highway System - Create capability-based pulses
-2132-  animateDataHighways(elapsed);
-2133-  
-2134-  // Animate spider web waves
-2135-  if (window._webRings) {
-2136-    window._webRings.forEach(ring => {
-2137-      const userData = ring.userData;
-2138-      const positions = ring.geometry.attributes.position.array;
-2139-      const originalPos = userData.originalPositions;
-2140-      
-2141-      // Multiple wave parameters for organic motion
-2142-      const waveSpeed1 = elapsed * 0.8;
-2143-      const waveSpeed2 = elapsed * 1.2;
-2144-      const waveSpeed3 = elapsed * 0.6;
-2145-      
-2146-      // Wave amplitude decreases toward center (inner rings have smaller waves)
-2147-      const waveAmp = 0.15 * (userData.radius / 12); // Scale by distance from center
-2148-      
-2149-      for (let i = 0; i <= userData.segmentCount; i++) {
-2150-        const i3 = i * 3;
-2151-        const angle = (i / userData.segmentCount) * Math.PI * 2;
-2152-        
-2153-        // Combine multiple sine waves for natural water-like motion
-2154-        const wave1 = Math.sin(waveSpeed1 + angle * 3) * waveAmp;
-2155-        const wave2 = Math.sin(waveSpeed2 + angle * 2 + userData.ringIndex * 0.5) * (waveAmp * 0.6);
-2156-        const wave3 = Math.cos(waveSpeed3 + angle * 4 + userData.radius * 0.1) * (waveAmp * 0.4);
-2157-        
-2158-        // Apply wave height to Y coordinate
-2159-        positions[i3] = originalPos[i3];     // X unchanged
-2160-        positions[i3 + 1] = wave1 + wave2 + wave3; // Y with waves
-2161-        positions[i3 + 2] = originalPos[i3 + 2];   // Z unchanged
-2162-      }
-2163-      
-2164-      ring.geometry.attributes.position.needsUpdate = true;
-2165-    });
-2166-  }
-2167-  
-2168-  // Update camera controls
-2169-  if (window.cameraControls) {
-2170-    window.cameraControls.update();
-2171-  }
-2172-  
-2173-  renderer.render(scene, camera);
-2174-}
-2175-
-2176-// ──────── DATA HIGHWAY SYSTEM ──────────────────────────────────
-2177-
-2178-function animateDataHighways(elapsed) {
-2179-  const highways = window._dataHighways;
-2180-  if (!highways || !window._meshData || !window._webGroup) return;
-2181-  
-2182-  const currentTime = performance.now();
-2183-  
-2184-  // Create new neural connections based on capability pressure (every 2 seconds for more activity)
-2185-  if (currentTime - highways.lastPulseTime > 2000) {
-2186-    highways.lastPulseTime = currentTime;
-2187-    
-2188-    // Find high-pressure capabilities from mesh data
-2189-    const highPressureCapabilities = window._meshData.darkCircles
-2190-      ? window._meshData.darkCircles.filter(cap => cap.pressure > 0.3)
-2191-      : [];
-2192-    
-2193-    // Create neural connections for each high-pressure capability
-2194-    highPressureCapabilities.forEach(capability => {
-2195-      // Determine capability type for coloring
-2196-      const capType = getCapabilityType(capability.name);
-2197-      const color = highways.capabilityColors[capType] || highways.capabilityColors.default;
-2198-      
-2199-      // Find source and destination hubs with highest pressure for this capability
-2200-      const hubPressures = Object.entries(capability.byHub).sort((a, b) => b[1] - a[1]);
-2201-      if (hubPressures.length >= 2) {
-2202-        const sourceHub = hubPressures[0][0];
-2203-        const destHub = hubPressures[1][0];
-2204-        
-2205-        console.log(`Data highway: Creating pulse ${capability.name} (${capability.pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
-2206-        createDataPulse(sourceHub, destHub, color, capability.pressure, capability.name);
-2207-      }
-2208-    });
-2209-  }
-2210-  
-2211-  // Debug: Log connection count every 60 frames
-2212-  if (animationFrame % 60 === 0 && highways.connections.length > 0) {
-2213-    console.log(`Neural highways: ${highways.connections.length} active connections`);
-2214-  }
-2215-  
-2216-  // Check for pulse meetings in the web
-2217-  highways.connections.forEach((connectionA, indexA) => {
-2218-    highways.connections.forEach((connectionB, indexB) => {
-2219-      if (indexA < indexB && connectionA.pulseSphere && connectionB.pulseSphere) {
-2220-        const posA = connectionA.pulseSphere.position;
-2221-        const posB = connectionB.pulseSphere.position;
-2222-        const distance = posA.distanceTo(posB);
-2223-        
-2224-        // If both particle beams are in web layer and close together
-2225-        const bothInWeb = Math.abs(posA.y + 2.5) < 1.0 && Math.abs(posB.y + 2.5) < 1.0;
-2226-        if (bothInWeb && distance < 2.5) {
-2227-          // Create dramatic meeting effect - bright flash and expansion
-2228-          connectionA.pulseSphere.material.emissiveIntensity = 3.0;
-2229-          connectionB.pulseSphere.material.emissiveIntensity = 3.0;
-2230-          connectionA.pulseSphere.scale.setScalar(0.8); // Bigger flash
-2231-          connectionB.pulseSphere.scale.setScalar(0.8);
-2232-          connectionA.pulseSphere.material.opacity = 1.0;
-2233-          connectionB.pulseSphere.material.opacity = 1.0;
-2234-          
-2235-          console.log(`Particle beam meeting: ${connectionA.sourceAgent} meets ${connectionB.sourceAgent} in web`);
-2236-        }
-2237-      }
-2238-    });
-2239-  });
-2240-  
-2241-  // Animate web-routed connections with traveling pulses
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
@@ -2141,9 +1218,6 @@ function init() {
   // Scene setup
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000); // Pure black background for higher contrast
-  
-  // Add atmospheric fog for depth
-  scene.fog = new THREE.Fog(0x000510, 10, 100);
   
   const canvas = document.getElementById('scene');
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -2980,7 +2054,6 @@ function animate() {
         // Enable mouse interaction immediately after intro completes
         if (!system.mouseInteractionEnabled) {
           system.mouseInteractionEnabled = true;
-          console.log('🖱️ MOUSE INTERACTION ENABLED - Dynamic fog will now follow your cursor!');
           console.log('Mouse interaction enabled after intro completion');
         }
       }
@@ -3975,8 +3048,8 @@ window.addEventListener('click', (event) => {
 // Mouse movement tracking for constraint system
 window.addEventListener('mousemove', (event) => {
   // Debug: Simple test that mouse events are firing (throttled)
-  if (window._constraintSystem && window._constraintSystem.frameCount % 60 === 0) {
-    console.log('🖱️ Mouse tracking - system:', !!window._constraintSystem, 'enabled:', !!window._constraintSystem.mouseInteractionEnabled, 'pos:', event.clientX, event.clientY);
+  if (window._constraintSystem && window._constraintSystem.frameCount % 120 === 0) {
+    console.log('Mouse event fired - system exists:', !!window._constraintSystem, 'enabled:', !!window._constraintSystem.mouseInteractionEnabled);
   }
   
   if (window._constraintSystem && CONSTRAINT_CONFIG.followMouse && window._constraintSystem.mouseInteractionEnabled) {
@@ -4341,205 +3414,4 @@ init();
 
 </script>
 </body>
-</html>};
-
-window.minimizeWindow = function(windowId) {
-  const window = document.getElementById(windowId);
-  const taskbarItem = [...document.querySelectorAll('.taskbar-item')]
-    .find(item => item.onclick?.toString().includes(windowId));
-  
-  window.classList.add('minimized');
-  windowStates[windowId].minimized = true;
-  if (taskbarItem) taskbarItem.classList.remove('active');
-};
-
-window.closeWindow = function(windowId) {
-  document.getElementById(windowId).style.display = 'none';
-  const taskbarItem = [...document.querySelectorAll('.taskbar-item')]
-    .find(item => item.onclick?.toString().includes(windowId));
-  if (taskbarItem) taskbarItem.style.display = 'none';
-};
-
-window.resetCamera = function() {
-  if (window.camera && window.cameraControls) {
-    window.camera.position.set(0, 8, 20);
-    window.cameraControls.target.set(0, 0, 0);
-    window.cameraControls.update();
-    addOutputLine('Camera reset to default position', 'success');
-  }
-};
-
-// Window dragging
-let dragData = null;
-
-window.startDrag = function(event, windowId) {
-  const windowEl = document.getElementById(windowId);
-  const rect = windowEl.getBoundingClientRect();
-  
-  dragData = {
-    windowId,
-    offsetX: event.clientX - rect.left,
-    offsetY: event.clientY - rect.top
-  };
-  
-  document.addEventListener('mousemove', drag);
-  document.addEventListener('mouseup', stopDrag);
-  event.preventDefault();
-};
-
-function drag(event) {
-  if (!dragData) return;
-  
-  const windowEl = document.getElementById(dragData.windowId);
-  const x = event.clientX - dragData.offsetX;
-  const y = event.clientY - dragData.offsetY;
-  
-  windowEl.style.left = Math.max(0, Math.min(x, window.innerWidth - windowEl.offsetWidth)) + 'px';
-  windowEl.style.top = Math.max(0, Math.min(y, window.innerHeight - windowEl.offsetHeight)) + 'px';
-}
-
-function stopDrag() {
-  dragData = null;
-  document.removeEventListener('mousemove', drag);
-  document.removeEventListener('mouseup', stopDrag);
-}
-
-// Command system
-window.executeCommand = function(command) {
-  addOutputLine(`> ${command}`, 'info');
-  
-  setTimeout(async () => {
-    switch(command) {
-      case 'mesh-status':
-        try {
-          const response = await fetch('/api/mesh');
-          const meshData = await response.json();
-          if (meshData && meshData.agents) {
-            addOutputLine(`Mesh Status: ${meshData.agents.length} agents online`, 'success');
-            addOutputLine(`Hubs: ${[...new Set(meshData.agents.map(a => a.hub))].join(', ')}`, 'info');
-          } else {
-            addOutputLine('Mesh API offline - using demo data', 'error');
-          }
-        } catch (e) {
-          addOutputLine('Mesh API unavailable', 'error');
-        }
-        break;
-        
-      case 'agent-health':
-        addOutputLine('Scanning agent health...', 'info');
-        setTimeout(() => {
-          addOutputLine('All agents responding normally', 'success');
-        }, 1000);
-        break;
-        
-      case 'spawn-agent':
-        addOutputLine('Spawning new agent...', 'info');
-        setTimeout(() => {
-          const agentId = 'nexal-' + Math.random().toString(36).substr(2, 6);
-          addOutputLine(`Agent spawned: ${agentId}`, 'success');
-        }, 1500);
-        break;
-        
-      case 'dark-circles':
-        addOutputLine('Analyzing dark circles...', 'info');
-        setTimeout(() => {
-          addOutputLine('Dark circle analysis complete', 'success');
-        }, 1200);
-        break;
-        
-      case 'pulse-test':
-        addOutputLine('Network pulse test initiated...', 'info');
-        setTimeout(() => {
-          addOutputLine('All nodes responding < 50ms', 'success');
-        }, 2000);
-        break;
-        
-      default:
-        addOutputLine(`Executed: ${command}`, 'success');
-    }
-  }, 200 + Math.random() * 500);
-};
-
-window.testCommand = function() {
-  addOutputLine('> system test', 'info');
-  setTimeout(() => {
-    addOutputLine('System test passed - all interfaces operational', 'success');
-    addOutputLine('3D visualization: ✓ Active', 'info');
-    addOutputLine('Command system: ✓ Online', 'info');
-    addOutputLine('Federation mesh: ✓ Connected', 'info');
-  }, 800);
-};
-
-window.executeCustomCommand = function() {
-  const input = document.getElementById('command-input');
-  const command = input.value.trim();
-  
-  if (!command) return;
-  
-  addOutputLine(`> ${command}`, 'info');
-  input.value = '';
-  
-  setTimeout(() => {
-    if (command.toLowerCase().includes('help')) {
-      addOutputLine('Available commands: mesh-status, agent-health, spawn-agent', 'info');
-      addOutputLine('Use buttons for quick access to common operations', 'info');
-    } else if (command.toLowerCase().includes('clear')) {
-      document.getElementById('command-output').innerHTML = 
-        '<div class="output-line info">[SYSTEM] Command output cleared</div>';
-    } else {
-      addOutputLine(`Command processed: ${command}`, 'success');
-    }
-  }, 300);
-};
-
-function addOutputLine(text, type = 'info') {
-  const output = document.getElementById('command-output');
-  const line = document.createElement('div');
-  line.className = `output-line ${type}`;
-  
-  const timestamp = new Date().toLocaleTimeString('en-US', { 
-    hour12: false, 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit'
-  });
-  
-  line.textContent = `[${timestamp}] ${text}`;
-  output.appendChild(line);
-  
-  // Auto-scroll to bottom
-  output.scrollTop = output.scrollHeight;
-  
-  // Limit lines to prevent memory issues
-  while (output.children.length > 100) {
-    output.removeChild(output.firstChild);
-  }
-}
-
-// Clock update
-function updateClock() {
-  const clock = document.getElementById('clock');
-  const now = new Date();
-  const time = now.toLocaleTimeString('en-US', { 
-    hour12: false, 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  });
-  clock.textContent = time;
-}
-
-setInterval(updateClock, 1000);
-updateClock();
-
-// Window resize handling
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// Initialize
-init();
-
-</script>
-</body>
+</html>

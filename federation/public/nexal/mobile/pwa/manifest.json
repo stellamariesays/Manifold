@@ -1,0 +1,74 @@
+{
+  "name": "Nexal Network",
+  "short_name": "Nexal",
+  "description": "Mobile interface for the Nexal Federation Network - Intelligence Coordination Protocol",
+  "start_url": "/nexal/mobile/pwa/",
+  "display": "standalone",
+  "background_color": "#000510",
+  "theme_color": "#00e5ff",
+  "orientation": "any",
+  "categories": ["productivity", "utilities", "networking"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png", 
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "sizes": "512x512", 
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "screenshot-desktop.png", 
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Federation Status",
+      "short_name": "Status",
+      "url": "/nexal/mobile/pwa/?view=status",
+      "description": "View current federation mesh status"
+    },
+    {
+      "name": "Agent Visualization",
+      "short_name": "Agents", 
+      "url": "/nexal/mobile/pwa/?view=agents",
+      "description": "3D visualization of federation agents"
+    }
+  ],
+  "features": [
+    "cross-origin-isolated",
+    "web-share",
+    "web-share-target"
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
+}

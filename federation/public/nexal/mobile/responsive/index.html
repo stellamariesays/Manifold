@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexal Network — Mobile Interface</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:    #00e5ff;
+      --violet:  #aa00ff;
+      --green:   #00ff88;
+      --pink:    #ff0077;
+      --gold:    #ffcc00;
+      --bg:      #000510;
+      --panel:   rgba(0,10,30,0.9);
+      --border:  rgba(0,229,255,0.3);
+      --text:    #b0e0f8;
+      --accent:  #00e5ff;
+    }
+
+    html, body {
+      width: 100%; height: 100vh;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Rajdhani', monospace;
+      color: var(--text);
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+
+    /* Mobile UI Overlay */
+    .mobile-ui {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Mobile Header */
+    .mobile-header {
+      pointer-events: auto;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .mobile-header h1 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      background: linear-gradient(45deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .mobile-controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    .mobile-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mobile-btn:active {
+      background: var(--accent);
+      color: var(--bg);
+      transform: scale(0.95);
+    }
+
+    /* Mobile Bottom Panel */
+    .mobile-bottom {
+      pointer-events: auto;
+      margin-top: auto;
+      background: var(--panel);
+      border-top: 1px solid var(--border);
+      padding: 15px;
+      backdrop-filter: blur(10px);
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+    }
+
+    .mobile-bottom.active {
+      transform: translateY(0);
+    }
+
+    .federation-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+      gap: 15px;
+      text-align: center;
+    }
+
+    .stat-item {
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: rgba(0,229,255,0.1);
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: var(--text);
+      opacity: 0.7;
+    }
+
+    /* Touch Controls Hints */
+    .touch-hints {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      animation: fadeInOut 4s ease-in-out;
+    }
+
+    .touch-hints h3 {
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    .touch-hints p {
+      font-size: 0.9rem;
+      color: var(--text);
+      opacity: 0.8;
+    }
+
+    @keyframes fadeInOut {
+      0%, 100% { opacity: 0; }
+      20%, 80% { opacity: 1; }
+    }
+
+    /* Responsive adjustments */
+    @media (max-height: 600px) {
+      .mobile-header {
+        padding: 8px 15px;
+      }
+      .mobile-header h1 {
+        font-size: 1rem;
+      }
+      .mobile-btn {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D Scene Canvas -->
+  <canvas id="scene"></canvas>
+
+  <!-- Mobile UI Overlay -->
+  <div class="mobile-ui">
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+      <h1>NEXAL</h1>
+      <div class="mobile-controls">
+        <button class="mobile-btn" onclick="toggleStats()">Stats</button>
+        <button class="mobile-btn" onclick="centerView()">Center</button>
+      </div>
+    </div>
+
+    <!-- Touch Control Hints -->
+    <div class="touch-hints">
+      <h3>Touch Controls</h3>
+      <p>Drag to rotate • Pinch to zoom • Two fingers to pan</p>
+    </div>
+
+    <!-- Mobile Bottom Panel -->
+    <div class="mobile-bottom" id="mobileStats">
+      <div class="federation-stats">
+        <div class="stat-item">
+          <div class="stat-value" id="agentCount">--</div>
+          <div class="stat-label">Agents</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="hubCount">--</div>
+          <div class="stat-label">Hubs</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="capabilityCount">--</div>
+          <div class="stat-label">Capabilities</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">LIVE</div>
+          <div class="stat-label">Status</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    // Mobile-optimized 3D scene
+    let scene, camera, renderer, controls;
+    let federationData = null;
+    let animationFrameId;
+
+    // Mobile UI state
+    let statsVisible = false;
+
+    function initMobile3D() {
+      // Scene setup
+      scene = new THREE.Scene();
+      scene.fog = new THREE.Fog(0x000510, 10, 50); // Reduced fog distance for mobile
+      
+      // Camera with mobile-optimized settings
+      const aspect = window.innerWidth / window.innerHeight;
+      camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 100);
+      camera.position.set(0, 0, 15);
+      
+      // Renderer with mobile optimizations
+      const canvas = document.getElementById('scene');
+      renderer = new THREE.WebGLRenderer({ 
+        canvas,
+        antialias: window.devicePixelRatio === 1, // Only antialias on low-DPI
+        alpha: true,
+        powerPreference: 'default' // Let browser choose appropriate GPU
+      });
+      
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for performance
+      renderer.setClearColor(0x000510, 1);
+      
+      // Simple touch controls
+      setupTouchControls();
+      
+      // Create simplified federation visualization
+      createMobileFederationScene();
+      
+      // Start render loop
+      animate();
+      
+      // Load federation data
+      loadFederationData();
+      
+      console.log('Mobile Nexal interface initialized');
+    }
+
+    function setupTouchControls() {
+      let isRotating = false;
+      let isPinching = false;
+      let lastTouches = [];
+      
+      const canvas = document.getElementById('scene');
+      
+      canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        lastTouches = Array.from(e.touches);
+        
+        if (e.touches.length === 1) {
+          isRotating = true;
+        } else if (e.touches.length === 2) {
+          isPinching = true;
+        }
+      });
+      
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        
+        if (isRotating && e.touches.length === 1) {
+          const deltaX = e.touches[0].clientX - lastTouches[0].clientX;
+          const deltaY = e.touches[0].clientY - lastTouches[0].clientY;
+          
+          // Rotate scene based on touch movement
+          scene.rotation.y += deltaX * 0.01;
+          scene.rotation.x += deltaY * 0.01;
+          
+          // Constrain X rotation
+          scene.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, scene.rotation.x));
+        }
+        
+        if (isPinching && e.touches.length === 2) {
+          const touch1 = e.touches[0];
+          const touch2 = e.touches[1];
+          const currentDistance = Math.sqrt(
+            Math.pow(touch2.clientX - touch1.clientX, 2) +
+            Math.pow(touch2.clientY - touch1.clientY, 2)
+          );
+          
+          if (lastTouches.length === 2) {
+            const lastDistance = Math.sqrt(
+              Math.pow(lastTouches[1].clientX - lastTouches[0].clientX, 2) +
+              Math.pow(lastTouches[1].clientY - lastTouches[0].clientY, 2)
+            );
+            
+            const scale = currentDistance / lastDistance;
+            camera.position.multiplyScalar(1 / scale);
+            
+            // Constrain zoom
+            const distance = camera.position.length();
+            if (distance < 5) camera.position.normalize().multiplyScalar(5);
+            if (distance > 50) camera.position.normalize().multiplyScalar(50);
+          }
+        }
+        
+        lastTouches = Array.from(e.touches);
+      });
+      
+      canvas.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 0) {
+          isRotating = false;
+          isPinching = false;
+        }
+        lastTouches = Array.from(e.touches);
+      });
+    }
+
+    function createMobileFederationScene() {
+      // Simplified federation visualization for mobile performance
+      
+      // Central hub (simplified)
+      const hubGeometry = new THREE.SphereGeometry(1, 16, 16); // Reduced segments
+      const hubMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0.8
+      });
+      const centralHub = new THREE.Mesh(hubGeometry, hubMaterial);
+      scene.add(centralHub);
+      
+      // Agent nodes (simplified)
+      const agentGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+      const agentMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+      
+      // Create a ring of agent nodes
+      const agentCount = 12; // Reduced for mobile performance
+      for (let i = 0; i < agentCount; i++) {
+        const agent = new THREE.Mesh(agentGeometry, agentMaterial.clone());
+        const angle = (i / agentCount) * Math.PI * 2;
+        const radius = 8;
+        
+        agent.position.x = Math.cos(angle) * radius;
+        agent.position.z = Math.sin(angle) * radius;
+        agent.position.y = (Math.random() - 0.5) * 2;
+        
+        scene.add(agent);
+      }
+      
+      // Connection lines (simplified)
+      const lineGeometry = new THREE.BufferGeometry();
+      const linePositions = [];
+      
+      for (let i = 0; i < agentCount; i++) {
+        const angle = (i / agentCount) * Math.PI * 2;
+        const radius = 8;
+        
+        linePositions.push(0, 0, 0); // Center
+        linePositions.push(
+          Math.cos(angle) * radius,
+          (Math.random() - 0.5) * 2,
+          Math.sin(angle) * radius
+        );
+      }
+      
+      lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+      
+      const lineMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x00e5ff,
+        transparent: true,
+        opacity: 0.3
+      });
+      
+      const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+      scene.add(lines);
+    }
+
+    function animate() {
+      animationFrameId = requestAnimationFrame(animate);
+      
+      // Simple rotation animation
+      const time = Date.now() * 0.0005;
+      
+      // Rotate the scene slightly
+      scene.children.forEach((child, index) => {
+        if (child.type === 'Mesh' && index > 0) { // Skip central hub
+          child.rotation.y += 0.01;
+          child.position.y += Math.sin(time + index) * 0.002;
+        }
+      });
+      
+      renderer.render(scene, camera);
+    }
+
+    async function loadFederationData() {
+      try {
+        const response = await fetch('/api/agents');
+        federationData = await response.json();
+        updateMobileStats();
+      } catch (error) {
+        console.log('Using fallback federation data for mobile');
+        federationData = {
+          agents: Array(23).fill().map((_, i) => ({ id: i, name: `Agent-${i}` })),
+          hubs: Array(4).fill().map((_, i) => ({ id: i, name: `Hub-${i}` })),
+          capabilities: Array(60).fill().map((_, i) => ({ id: i, name: `Cap-${i}` }))
+        };
+        updateMobileStats();
+      }
+    }
+
+    function updateMobileStats() {
+      if (!federationData) return;
+      
+      document.getElementById('agentCount').textContent = federationData.agents?.length || 23;
+      document.getElementById('hubCount').textContent = federationData.hubs?.length || 4;
+      document.getElementById('capabilityCount').textContent = federationData.capabilities?.length || 60;
+    }
+
+    // Mobile UI functions
+    function toggleStats() {
+      const panel = document.getElementById('mobileStats');
+      statsVisible = !statsVisible;
+      panel.classList.toggle('active', statsVisible);
+    }
+
+    function centerView() {
+      // Reset camera position
+      camera.position.set(0, 0, 15);
+      scene.rotation.set(0, 0, 0);
+    }
+
+    // Handle orientation and resize
+    function handleResize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', () => {
+      setTimeout(handleResize, 100); // Delay to let orientation settle
+    });
+
+    // Initialize when page loads
+    document.addEventListener('DOMContentLoaded', initMobile3D);
+  </script>
+</body>
+</html>
