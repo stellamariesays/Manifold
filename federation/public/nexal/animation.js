@@ -1,14 +1,16 @@
 /**
  * animation.js — Main animation loop and data highway system.
+ * 3D LAYER ONLY. No imports from ui.js. No DOM touches.
+ *
  * Exports: animate, animateDataHighways, createDataPulse
  *
- * Reads scene state from globals set by scene.js:
+ * Reads scene state via proper exports from scene.js (getScene, getCamera,
+ * getRenderer) — no window._renderer / window._camera / window._scene globals.
+ *
+ * Still reads these window globals set by scene.js (legacy, non-DOM state):
  *   window.agentGroups, window._constraintSystem, window._webRings,
  *   window._dataHighways, window._meshData, window.cameraControls,
- *   window.camera, window.mobileBrightnessBoost
- *
- * Also writes window._createDataPulse so scene.js timeout can call it
- * after the module loads.
+ *   window.camera, window.mobileBrightnessBoost, window.hubCenters
  */
 import * as THREE from 'three';
 import { CONSTRAINT_CONFIG, agentGroups, getScene, getCamera, getRenderer } from './scene.js';
@@ -538,9 +540,9 @@ export function createDataPulse(sourceHub, destHub, color, pressure, capabilityN
     return;
   }
 
-  const sourceAgents = window.agentGroups?.filter(group =>
+  const sourceAgents = agentGroups?.filter(group =>
     group.userData && group.userData.agent && group.userData.agent.hub === sourceHub) || [];
-  const destAgents = window.agentGroups?.filter(group =>
+  const destAgents = agentGroups?.filter(group =>
     group.userData && group.userData.agent && group.userData.agent.hub === destHub) || [];
 
   let sourcePos, destPos, sourceAgentName, destAgentName;

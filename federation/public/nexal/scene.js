@@ -1,28 +1,27 @@
 /**
  * scene.js — Three.js scene initialization and topology building.
- * Exports: init, buildSpiderWeb, buildAgentTopologies, buildCentralNexus
+ * 3D LAYER ONLY. No imports from ui.js. No DOM touches except #scene canvas.
  *
- * Scene-level globals written here (accessed by animation.js via window.*):
- *   window.THREE, window.camera, window.cameraControls,
- *   window.isMobile, window.mobileBrightnessBoost,
- *   window.agentGroups, window.hubCenters,
- *   window._webGroup, window._webRings, window._dataHighways,
- *   window._constraintSystem
+ * Exports: init, buildSpiderWeb, buildAgentTopologies, buildCentralNexus,
+ *          getScene, getCamera, getRenderer, getClickableObjects,
+ *          CONSTRAINT_CONFIG, agentGroups
+ *
+ * Cross-layer communication goes through bridge.js (emitting events).
+ * The 2D layer listens for 'agent-selected', 'hub-hovered' on bridge.
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'https://unpkg.com/three@0.128.0/examples/jsm/controls/OrbitControls.js';
 import { makeKleinBottleGeometry, makeMobiusStripGeometry } from './geometry.js';
+import { bridge } from './bridge.js';
 
 window.THREE = THREE;
 
-// Module-level scene refs shared across exported functions
+// Module-level scene refs — accessed only through exported getters
 let scene, camera, renderer;
 export const agentGroups = [];
-window.agentGroups = agentGroups;
 let clickableObjects = [];
 
 // ──────── CONSTRAINT SYSTEM PARAMETERS ────────────────────────────────────
-// Easy parameter adjustment — modify these values to iterate on the system
 export const CONSTRAINT_CONFIG = {
   constraintRatio: 0.3,
   followMouse: true,
@@ -75,15 +74,17 @@ export const CONSTRAINT_CONFIG = {
   bloom: false,
 };
 
-export function getScene() { return scene; }
-export function getCamera() { return camera; }
-export function getRenderer() { return renderer; }
+// ── Getters (replaces window._renderer / window._camera / window._scene) ──
+export function getScene()            { return scene; }
+export function getCamera()           { return camera; }
+export function getRenderer()         { return renderer; }
 export function getClickableObjects() { return clickableObjects; }
 
 export function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
 
+  // Only DOM touch allowed in the 3D layer: the canvas element
   const canvas = document.getElementById('scene');
   camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -95,6 +96,7 @@ export function init() {
   camera.position.set(0, 8, 20);
   camera.lookAt(0, 0, 0);
 
+  // Keep window.camera for animation.js mouse interaction (nexal.js also uses it)
   window.camera = camera;
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -133,9 +135,6 @@ export function init() {
   const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6 * mobileBrightnessBoost);
   directionalLight2.position.set(-10, -10, -5);
   scene.add(directionalLight2);
-
-  // Expose renderer for resize handler in nexal.js
-  window._renderer = renderer;
 }
 
 export function buildSpiderWeb() {
@@ -223,10 +222,9 @@ export function buildSpiderWeb() {
     },
   };
 
-  // TEST: Create a visible test connection immediately
+  // TEST: Create a visible test connection after animation loop starts
   setTimeout(() => {
     console.log('Creating test neural connection...');
-    // animation.js exports createDataPulse; we call it via window after it sets up
     if (window._createDataPulse) {
       window._createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'TEST-CONNECTION');
       window._createDataPulse('thefog', 'relay', 0x00ff00, 1.0, 'TEST-CONNECTION-2');
@@ -336,7 +334,7 @@ export function buildAgentTopologies(agents) {
     agentGroups.push(group);
   });
 
-  // Hub center markers
+  // Hub center markers — clicking them emits 'agent-selected' or 'hub-hovered' via bridge
   Object.entries(hubCenters).forEach(([hubName, center], idx) => {
     const hubMarkerGeo = new THREE.SphereGeometry(0.3, 16, 16);
     const hubColor = hubColors[hubName] || 0x666666;
