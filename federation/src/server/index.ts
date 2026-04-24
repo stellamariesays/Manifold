@@ -1,7 +1,6 @@
 import { EventEmitter } from 'events'
 import { createServer as createHttpServer } from 'http'
 import WebSocket, { WebSocketServer } from 'ws'
-import { v4 as uuid } from 'uuid'
 import { PeerRegistry } from './peer-registry.js'
 import { CapabilityIndex } from './capability-index.js'
 import { MeshSync } from './mesh-sync.js'
@@ -10,25 +9,14 @@ import { PythonBridge } from './python-bridge.js'
 import { TaskRouter } from './task-router.js'
 import { HubCapabilityBloom } from './capability-bloom.js'
 import { PersistentCapabilityCache } from './capability-cache.js'
-import * as wireCodec from '../protocol/wire-codec.js'
 import { TaskHistory } from './task-history.js'
 import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
 import { DetectionLedger } from './detection-ledger.js'
 import { DetectionCoord } from './detection-coord.js'
 import { DetectionSync } from './detection-sync.js'
-import { parseMessage } from '../protocol/validation.js'
-import type {
-  FederationMessage,
-  CapabilityQueryMessage,
-  AgentRequestMessage,
-  MeshSyncMessageV2,
-  MeshSyncMessage,
-  TaskRequest,
-  TaskResult,
-} from '../protocol/messages.js'
+import { WebSocketHandler } from './websocket-handler.js'
 import type { ServerEvents, MeshStatus, PeerInfo, AgentResult } from '../shared/types.js'
-import type { PeerEntry } from './peer-registry.js'
 import type { BridgeSnapshot } from './python-bridge.js'
 
 export interface ManifoldServerConfig {
@@ -113,6 +101,7 @@ export class ManifoldServer extends EventEmitter {
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
   readonly detectionSync: DetectionSync
+  readonly wsHandler: WebSocketHandler
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -219,7 +208,26 @@ export class ManifoldServer extends EventEmitter {
       debug: this.config.debug,
     })
 
-    this._wirePeerRegistry()
+    // WebSocket handler — owns connection lifecycle and message routing
+    this.wsHandler = new WebSocketHandler({
+      hub: this.hub,
+      debug: !!this.config.debug,
+      capIndex: this.capIndex,
+      peerRegistry: this.peerRegistry,
+      meshSync: this.meshSync,
+      taskRouter: this.taskRouter,
+      detectionCoord: this.detectionCoord,
+      rebuildBloom: () => this._rebuildBloom(),
+      registerAgent: (name, capabilities, seams) => this.registerAgent(name, capabilities, seams),
+    })
+
+    // Forward handler events to server-level listeners
+    this.wsHandler.on('agent:join', (agent) => this.emit('agent:join', agent))
+    this.wsHandler.on('agent:leave', (agent) => this.emit('agent:leave', agent))
+    this.wsHandler.on('peer:connect', (peer) => this.emit('peer:connect', peer))
+    this.wsHandler.on('peer:disconnect', (peer) => this.emit('peer:disconnect', peer))
+    this.wsHandler.on('mesh:sync', (hub) => this.emit('mesh:sync', hub))
+    this.wsHandler.on('mesh:delta', (hub) => this.emit('mesh:delta', hub))
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -287,19 +295,22 @@ export class ManifoldServer extends EventEmitter {
       this.peerRegistry.addPeer(peerAddr)
     }
 
-    // 6. Start gossip sampler
+    // 6. Wire peer registry message routing into WebSocketHandler
+    this.wsHandler.wirePeerRegistry()
+
+    // 7. Start gossip sampler
     this.peerRegistry.start()
 
-    // 6. Start periodic mesh sync
+    // 8. Start periodic mesh sync
     this.meshSync.start(this.capIndex, this.peerRegistry)
 
-    // 7. Start task router
+    // 9. Start task router
     this.taskRouter.start(this.capIndex, this.peerRegistry, this.allowlist, this.rateLimiter)
 
-    // 8. Start task history
+    // 10. Start task history
     await this.taskHistory.start()
 
-    // 9. Start metrics collector
+    // 11. Start metrics collector
     this.metrics.start(this.taskRouter, this.peerRegistry, this.capIndex, this.taskHistory)
 
     // Wire task completion to history
@@ -327,10 +338,10 @@ export class ManifoldServer extends EventEmitter {
       this.log(`Runner agents removed from mesh: ${agents.join(', ')}`)
     })
 
-    // 10. Wire detection coordination broadcast
+    // 12. Wire detection coordination broadcast
     this.detectionCoord.setBroadcast((msg) => {
-      // Broadcast to all local clients
-      this.localWss?.clients.forEach(ws => {
+      // Broadcast to all local clients via handler
+      this.wsHandler.localClients.forEach(ws => {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify(msg))
         }
@@ -339,7 +350,7 @@ export class ManifoldServer extends EventEmitter {
       this.peerRegistry.broadcast(JSON.stringify(msg))
     })
 
-    // 11. Start cross-hub detection sync
+    // 13. Start cross-hub detection sync
     this.detectionSync.start()
 
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
@@ -461,18 +472,8 @@ export class ManifoldServer extends EventEmitter {
       const wss = new WebSocketServer({ port: this.config.federationPort })
       this.federationWss = wss
 
-      wss.on('connection', (ws: WebSocket, req) => {
-        const remote = req.socket.remoteAddress ?? 'unknown'
-        this.log(`Inbound federation connection from ${remote}`)
-        this.peerRegistry.registerInbound(ws, remote)
-
-        // Handle messages from local clients connecting to federation port directly
-        ws.on('message', (data) => {
-          const raw = typeof data === 'string' ? data : data.toString()
-          const msg = parseMessage(raw)
-          if (msg) this._handleClientMessage(msg, ws)
-        })
-      })
+      // Delegate connection handling to WebSocketHandler
+      this.wsHandler.bindFederation(wss)
 
       wss.on('error', reject)
       wss.on('listening', () => {
@@ -487,328 +488,14 @@ export class ManifoldServer extends EventEmitter {
       const wss = new WebSocketServer({ port: this.config.localPort })
       this.localWss = wss
 
-      wss.on('connection', (ws: WebSocket) => {
-        this.log('Local client connected')
-
-        ws.on('message', (data) => {
-          const raw = typeof data === 'string' ? data : data.toString()
-          const msg = parseMessage(raw)
-          if (msg) this._handleClientMessage(msg, ws)
-        })
-
-        ws.on('error', (err) => {
-          this.log(`Local client error: ${err.message}`)
-        })
-      })
+      // Delegate connection handling to WebSocketHandler
+      this.wsHandler.bindLocal(wss)
 
       wss.on('error', reject)
       wss.on('listening', () => {
         this.log(`Local WebSocket on port ${this.config.localPort}`)
         resolve()
       })
-    })
-  }
-
-  private _handleClientMessage(msg: FederationMessage | Record<string, any>, ws: WebSocket): void {
-    // Handle Phase 2 task messages
-    const msgType = (msg as Record<string, any>).type as string
-
-    if (msgType === 'task_request') {
-      const task = (msg as any).task as TaskRequest
-      this.taskRouter.routeTask(task, ws)
-      return
-    }
-
-    if (msgType === 'task_result') {
-      const result = (msg as any).result as TaskResult
-      this.taskRouter.handleResult(result)
-      return
-    }
-
-    if (msgType === 'task_forward') {
-      this.taskRouter.handleForward(msg as any)
-      return
-    }
-
-    if (msgType === 'agent_runner_ready') {
-      const rawAgents = (msg as any).agents
-      // Normalize: agents can be strings or {name, capabilities, seams} objects
-      const agents: string[] = rawAgents.map((a: any) => typeof a === 'string' ? a : a.name)
-      this.taskRouter.registerRunner(ws, agents)
-
-      // Register runner agents in the capability index so they're mesh-visible
-      // Preserve full capabilities from the runner's registration message
-      for (let i = 0; i < agents.length; i++) {
-        const agentName = agents[i]
-        const rawAgent = rawAgents[i]
-        const newCaps = (typeof rawAgent === 'object' && Array.isArray(rawAgent.capabilities))
-          ? rawAgent.capabilities
-          : [agentName]
-        // Don't overwrite richer capabilities from a prior registration
-        const existing = this.capIndex.getAgent(agentName, this.hub)
-        const capabilities = (existing && existing.capabilities.length > newCaps.length)
-          ? existing.capabilities
-          : newCaps
-        this.capIndex.upsertAgent({
-          name: agentName,
-          hub: this.hub,
-          capabilities,
-          pressure: 0,
-          isLocal: true,
-        }, true)
-      }
-      this._rebuildBloom()
-      this.log(`Runner agents registered in mesh: ${agents.join(', ')}`)
-      return
-    }
-
-    if (msgType === 'agent_register') {
-      const { name, capabilities, seams } = msg as any
-      if (name && capabilities) {
-        this.registerAgent(name, capabilities, seams)
-        this._rebuildBloom()
-        const payload = JSON.stringify({ type: 'agent_register_ack', name, status: 'ok' })
-        ws.send(payload)
-      }
-      return
-    }
-
-    // Phase 3: Detection messages
-    if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
-        msgType === 'detection_challenge' || msgType === 'detection_outcome') {
-      this.detectionCoord.handleMessage(msg as any)
-      return
-    }
-
-    // Phase 1 message handling
-    const fedMsg = msg as FederationMessage
-    switch (fedMsg.type) {
-      case 'mesh_sync':
-        this._handleMeshSync(fedMsg)
-        break
-      case 'mesh_delta':
-        this._handleMeshDelta(fedMsg)
-        break
-      case 'mesh_delta_ack':
-        this._handleMeshDeltaAck(fedMsg)
-        break
-      case 'capability_query':
-        this._handleCapabilityQuery(fedMsg, ws)
-        break
-      case 'agent_request':
-        this._handleAgentRequest(fedMsg, ws)
-        break
-      case 'ping':
-        ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
-        break
-      default:
-        break
-    }
-  }
-
-  private _handleMeshSync(msg: MeshSyncMessageV2 | MeshSyncMessage): void {
-    for (const agent of msg.agents) {
-      const isLocal = agent.hub === this.hub
-      const { added, capChanges } = this.capIndex.upsertAgent(agent, isLocal)
-
-      if (added) {
-        const full = this.capIndex.getAgent(agent.name, agent.hub)!
-        this.emit('agent:join', full)
-      } else if (capChanges.added.length > 0 || capChanges.removed.length > 0) {
-        this.log(`Capability change for ${agent.name}@${agent.hub}`)
-      }
-    }
-
-    this.capIndex.updateDarkCircles(msg.hub, msg.darkCircles)
-    this.peerRegistry.updateAgentCount(msg.hub, msg.agents.length)
-    this.emit('mesh:sync', msg.hub)
-
-    // ACK the version if present (delta sync)
-    if ('version' in msg && msg.version) {
-      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: msg.hub, version: msg.version })
-    }
-  }
-
-  private _handleMeshDelta(msg: FederationMessage): void {
-    const delta = msg as any
-    if (delta.agentDeltas) {
-      for (const ad of delta.agentDeltas) {
-        if (ad.op === 'upsert') {
-          const isLocal = ad.agent.hub === this.hub
-          const { added, capChanges } = this.capIndex.upsertAgent(ad.agent, isLocal)
-          if (added) {
-            const full = this.capIndex.getAgent(ad.agent.name, ad.agent.hub)!
-            this.emit('agent:join', full)
-          } else if (capChanges.added.length > 0 || capChanges.removed.length > 0) {
-            this.log(`Capability change for ${ad.agent.name}@${ad.agent.hub}`)
-          }
-        } else if (ad.op === 'remove') {
-          this.capIndex.removeAgent(ad.agent.name, ad.agent.hub)
-          this.emit('agent:leave', ad.agent)
-        }
-      }
-      this._rebuildBloom()
-    }
-
-    if (delta.darkCircleDeltas) {
-      // Collect current dark circles for this hub, apply deltas, then update
-      for (const dcd of delta.darkCircleDeltas) {
-        if (dcd.op === 'upsert') {
-          this.capIndex.updateDarkCircles(dcd.hub, [dcd.circle])
-        }
-        // remove dark circle would need a removeDarkCircle method — for now, upsert handles it
-      }
-    }
-
-    this.emit('mesh:delta', delta.hub)
-
-    // ACK the version
-    if (delta.toVersion) {
-      this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: delta.hub, version: delta.toVersion })
-    }
-  }
-
-  private _handleMeshDeltaAck(msg: FederationMessage): void {
-    const ack = msg as any
-    this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: ack.hub, version: ack.version })
-  }
-
-  private _handleCapabilityQuery(msg: CapabilityQueryMessage, replyTo: WebSocket): void {
-    const agents = this.capIndex.findByCapability(msg.capability, msg.minPressure)
-
-    const response = {
-      type: 'capability_response' as const,
-      requestId: msg.requestId,
-      agents: agents.map(a => ({
-        name: a.name,
-        hub: a.hub,
-        capabilities: a.capabilities,
-        pressure: a.pressure,
-        seams: a.seams,
-        lastSeen: a.lastSeen,
-      })),
-    }
-
-    if (replyTo.readyState === WebSocket.OPEN) {
-      replyTo.send(JSON.stringify(response))
-    }
-
-    // Also fan out to peers
-    this.peerRegistry.broadcast(JSON.stringify({
-      ...msg,
-      requestId: uuid(), // New requestId for federation hop
-    }))
-  }
-
-  private _handleAgentRequest(msg: AgentRequestMessage, replyTo: WebSocket): void {
-    const [agentName, agentHub] = msg.target.includes('@')
-      ? msg.target.split('@')
-      : [msg.target, this.hub]
-
-    const agent = this.capIndex.getAgent(agentName, agentHub ?? this.hub)
-
-    if (!agent) {
-      const errorResponse = {
-        type: 'agent_response' as const,
-        requestId: msg.requestId,
-        success: false,
-        error: `Agent not found: ${msg.target}`,
-      }
-      if (replyTo.readyState === WebSocket.OPEN) {
-        replyTo.send(JSON.stringify(errorResponse))
-      }
-      return
-    }
-
-    if (agent.isLocal) {
-      // Local agent — acknowledge (full execution is Phase 2)
-      const response = {
-        type: 'agent_response' as const,
-        requestId: msg.requestId,
-        success: true,
-        result: {
-          status: 'acknowledged',
-          agent: `${agent.name}@${agent.hub}`,
-          message: 'Work request received (execution bridge in Phase 2)',
-        },
-      }
-      if (replyTo.readyState === WebSocket.OPEN) {
-        replyTo.send(JSON.stringify(response))
-      }
-    } else {
-      // Route to remote hub
-      const routed = this.peerRegistry.sendTo(agent.hub, JSON.stringify(msg))
-      if (!routed) {
-        const errorResponse = {
-          type: 'agent_response' as const,
-          requestId: msg.requestId,
-          success: false,
-          error: `Peer hub ${agent.hub} not connected`,
-        }
-        if (replyTo.readyState === WebSocket.OPEN) {
-          replyTo.send(JSON.stringify(errorResponse))
-        }
-      }
-    }
-  }
-
-  private _wirePeerRegistry(): void {
-    this.peerRegistry.on('message', (msg: FederationMessage | Record<string, any>, _peer: PeerEntry) => {
-      const msgType = (msg as Record<string, any>).type as string
-
-      // Handle Phase 2 task messages from remote peers
-      if (msgType === 'task_request') {
-        const task = (msg as any).task as TaskRequest
-        // Remote task — pass source hub for allowlist check
-        this.taskRouter.routeTask(task, null, _peer.hub)
-        return
-      }
-
-      if (msgType === 'task_result') {
-        const result = (msg as any).result as TaskResult
-        this.taskRouter.handleResult(result)
-        return
-      }
-
-      if (msgType === 'task_forward') {
-        this.taskRouter.handleForward(msg as any)
-        return
-      }
-
-      // Phase 3: Detection messages from remote peers
-      if (msgType === 'detection_claim' || msgType === 'detection_verify' ||
-          msgType === 'detection_challenge' || msgType === 'detection_outcome') {
-        this.detectionCoord.handleMessage(msg as any)
-        return
-      }
-
-      if (msgType === 'mesh_sync') {
-        this._handleMeshSync(msg as MeshSyncMessageV2 | MeshSyncMessage)
-      }
-    })
-
-    this.peerRegistry.on('peer:connect', (peer: PeerInfo) => {
-      this.log(`Peer connected: ${peer.hub}`)
-      this.meshSync.onPeerConnect(peer.hub)
-      // Drain forward queue — new peer might unlock queued tasks
-      this.taskRouter.drainForwardQueue()
-      this.emit('peer:connect', peer)
-      // Send our state immediately
-      this.meshSync.sync()
-      // Sync detection claims with new peer
-      this.detectionSync.registerPeer(peer.hub)
-    })
-
-    this.peerRegistry.on('peer:disconnect', (peer: { hub: string; address: string }) => {
-      this.meshSync.onPeerDisconnect(peer.hub)
-      this.log(`Peer disconnected: ${peer.hub}`)
-      const removed = this.capIndex.removeHub(peer.hub)
-      for (const key of removed) {
-        const [name, hub] = key.split('@')
-        this.emit('agent:leave', { name, hub })
-      }
-      this.emit('peer:disconnect', peer)
-      this._rebuildBloom()
     })
   }
 

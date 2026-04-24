@@ -1,4 +1,6 @@
-detection-ledger-satelitea.jsonl
+# Runtime data — detection ledgers are per-hub, don't commit
+detection-ledger-*.jsonl
+
 data/task-history/
 
 # Backup files
