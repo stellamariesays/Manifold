@@ -2,22 +2,27 @@
  * data.js — Federation mesh data loading.
  * Exports: loadAgentsAndBuild
  *
- * Calls build/update functions once mesh data is fetched.
+ * Neutral layer: no Three.js, no DOM touches, no UI imports.
+ * After a successful (or fallback) fetch it emits 'mesh-updated' on bridge
+ * and calls the 3D build callbacks. bridge.js is the only cross-layer dep.
  */
+import { bridge } from './bridge.js';
 
 /**
- * @param {{ buildSpiderWeb, buildAgentTopologies, buildCentralNexus, updateAgentsList, updateStatusPanel, animate }} callbacks
+ * @param {{ buildSpiderWeb, buildAgentTopologies, buildCentralNexus, animate }} callbacks
  */
 export async function loadAgentsAndBuild(callbacks) {
   let agents = [];
+  let meshData = null;
 
   try {
     const response = await fetch('/api/mesh');
-    const meshData = await response.json();
+    meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
       // Store mesh data globally for data highways (animation.js reads it)
-      window._meshData = meshData;
+      // Guard: window is undefined in Node.js test environments
+      if (typeof window !== 'undefined') window._meshData = meshData;
       console.log('Mesh data loaded:', meshData.agents.length, 'agents,',
                   meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
     }
@@ -43,11 +48,14 @@ export async function loadAgentsAndBuild(callbacks) {
     ];
   }
 
+  // Build the 3D scene
   callbacks.buildSpiderWeb();
   callbacks.buildAgentTopologies(agents);
   callbacks.buildCentralNexus();
-  callbacks.updateAgentsList(agents);
-  callbacks.updateStatusPanel(agents);
 
+  // Notify the 2D layer (and anyone else who cares) via bridge
+  bridge.emit('mesh-updated', { agents });
+
+  // Start animation loop
   callbacks.animate();
 }
