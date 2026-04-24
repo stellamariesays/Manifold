@@ -1,2 +1,10 @@
 detection-ledger-satelitea.jsonl
 data/task-history/
+
+# Backup files
+*.bak
+*.bak-*
+*.backup
+
+# Detection ledger data files
+data/detection-ledger-*.jsonl
