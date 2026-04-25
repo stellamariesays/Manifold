@@ -107,44 +107,96 @@ export function runFogBehaviors(elapsed) {
 // ── Built-in: follow-hub-centroid ─────────────────────────────────────────
 
 /**
- * Smoothly moves the fog group toward the weighted centroid of all orbiting
- * hub markers.
+ * Smoothly moves the fog group toward a weighted attractor derived from the
+ * orbiting hub markers.
+ *
+ * mode: 'centroid'  — pull toward mean position of all hubs (subtle, near-origin)
+ * mode: 'nearest'   — pull toward the single closest hub to fog's current position
+ * mode: 'named'     — pull toward a specific named hub (see primaryHub)
+ * mode: 'weighted'  — weighted sum: each hub contributes inverse-distance weight
  *
  * Config (editable on the behavior object after registration):
- *   lerpSpeed     number   0–1  How quickly the fog chases the centroid (0.02 = slow)
+ *   mode          string   'weighted' | 'centroid' | 'nearest' | 'named'
+ *   primaryHub    string   hub name for 'named' mode (default: 'thefog')
+ *   lerpSpeed     number   0–1  How quickly the fog chases the target (0.04 default)
  *   yScale        number        Vertical influence factor (0 = fog ignores Y of hubs)
  *   maxDrift      number        Maximum displacement from scene origin in any axis
  *   basePosition  Vector3       The "rest" position the fog returns to when no hubs exist
  */
 const followHubCentroid = {
   id: 'follow-hub-centroid',
-  lerpSpeed: 0.02,       // tune: higher = snappier chase
-  yScale: 0.3,           // hubs orbit at various heights; damp vertical pull
-  maxDrift: 4.0,         // scene units — fog won't wander too far from origin
+  mode: 'weighted',      // 'weighted' gives most visible drift
+  primaryHub: 'thefog',
+  lerpSpeed: 0.04,       // tune: higher = snappier chase
+  yScale: 0.4,           // damp vertical pull
+  maxDrift: 6.0,         // scene units — fog won't wander further than this
   basePosition: new THREE.Vector3(0, 1, 0),
 
+  _target: new THREE.Vector3(0, 1, 0),  // reused each frame
+
   update(ctx) {
-    const { system, hubGroups, THREE } = ctx;
+    const { system, hubGroups } = ctx;
 
     if (hubGroups.length === 0) return;
 
-    // Compute centroid of all orbiting hub markers
-    const centroid = new THREE.Vector3();
-    hubGroups.forEach(hub => centroid.add(hub.position));
-    centroid.divideScalar(hubGroups.length);
+    const fogPos = system.group.position;
+    const target = this._target;
+    target.copy(this.basePosition);
 
-    // Apply yScale to reduce vertical thrash
-    centroid.y = this.basePosition.y + (centroid.y - this.basePosition.y) * this.yScale;
+    if (this.mode === 'centroid') {
+      // Simple mean — tends to stay near origin when hubs are symmetric
+      target.set(0, 0, 0);
+      hubGroups.forEach(hub => target.add(hub.position));
+      target.divideScalar(hubGroups.length);
 
-    // Clamp to maxDrift radius from scene origin
-    if (centroid.length() > this.maxDrift) {
-      centroid.normalize().multiplyScalar(this.maxDrift);
+    } else if (this.mode === 'nearest') {
+      // Closest hub — fog snaps toward whichever hub is nearest
+      let minDist = Infinity;
+      hubGroups.forEach(hub => {
+        const d = fogPos.distanceTo(hub.position);
+        if (d < minDist) { minDist = d; target.copy(hub.position); }
+      });
+
+    } else if (this.mode === 'named') {
+      // Follow a specific named hub
+      const named = hubGroups.find(h => h.userData.hubName === this.primaryHub);
+      if (named) target.copy(named.position);
+      else {
+        // fallback to centroid
+        target.set(0, 0, 0);
+        hubGroups.forEach(hub => target.add(hub.position));
+        target.divideScalar(hubGroups.length);
+      }
+
+    } else {
+      // 'weighted' — inverse-distance weighting from fog center
+      // Hubs closer to the fog pull harder; produces visible drift
+      target.set(0, 0, 0);
+      let totalWeight = 0;
+      hubGroups.forEach(hub => {
+        const d = Math.max(fogPos.distanceTo(hub.position), 0.5);
+        const w = 1 / (d * d);   // inverse-square: strong pull when close
+        target.addScaledVector(hub.position, w);
+        totalWeight += w;
+      });
+      if (totalWeight > 0) target.divideScalar(totalWeight);
     }
 
-    // Blend weight: if behavior.weight < 1, interpolate toward a proportional target
-    const speed = this.lerpSpeed * (ctx.delta * 60) * (this.weight ?? 1);
+    // Apply yScale — reduce vertical thrash
+    target.y = this.basePosition.y + (target.y - this.basePosition.y) * this.yScale;
 
-    system.group.position.lerp(centroid, Math.min(speed, 1));
+    // Clamp to maxDrift from scene origin
+    if (target.length() > this.maxDrift) {
+      target.normalize().multiplyScalar(this.maxDrift);
+    }
+
+    // Smooth chase
+    const speed = this.lerpSpeed * (ctx.delta * 60) * (this.weight ?? 1);
+    fogPos.lerp(target, Math.min(speed, 1));
+
+    // Also update constraint system's emission source so particles follow
+    // (hubPositions[].position are used for particle targeting — they're separate)
+    // The group.position IS the fog world origin, so nothing else needed here.
   },
 };
 
