@@ -127,9 +127,9 @@ const followHubCentroid = {
   id: 'follow-hub-centroid',
   mode: 'named',         // track Sophia's hub (thefog) directly
   primaryHub: 'thefog',
-  lerpSpeed: 0.03,       // tune: higher = snappier chase (thefog orbits slowly so 0.03 is fine)
-  yScale: 0.4,           // damp vertical pull
-  maxDrift: 6.0,         // scene units — fog won't wander further than this
+  lerpSpeed: 0.015,      // gentle chase — fog lags behind hub noticeably
+  yScale: 0.2,           // damp vertical pull significantly
+  maxDrift: 2.5,         // scene units from basePosition — subtle drift only
   basePosition: new THREE.Vector3(0, 1, 0),
 
   _target: new THREE.Vector3(0, 1, 0),  // reused each frame
@@ -182,21 +182,27 @@ const followHubCentroid = {
       if (totalWeight > 0) target.divideScalar(totalWeight);
     }
 
+    // Scale the target displacement — don't chase the hub all the way there,
+    // just drift toward it by a fraction (maxDrift controls how far from base)
+    const displacement = target.clone().sub(this.basePosition);
+    const dispLen = displacement.length();
+    if (dispLen > 0) {
+      const scale = Math.min(dispLen, this.maxDrift) / dispLen;
+      target.copy(this.basePosition).addScaledVector(displacement, scale * 0.25);
+    }
+
     // Apply yScale — reduce vertical thrash
     target.y = this.basePosition.y + (target.y - this.basePosition.y) * this.yScale;
-
-    // Clamp to maxDrift from scene origin
-    if (target.length() > this.maxDrift) {
-      target.normalize().multiplyScalar(this.maxDrift);
-    }
 
     // Smooth chase
     const speed = this.lerpSpeed * (ctx.delta * 60) * (this.weight ?? 1);
     fogPos.lerp(target, Math.min(speed, 1));
 
-    // Also update constraint system's emission source so particles follow
-    // (hubPositions[].position are used for particle targeting — they're separate)
-    // The group.position IS the fog world origin, so nothing else needed here.
+    // Hard clamp: never let the fog stray more than maxDrift from basePosition
+    const actualDisp = fogPos.clone().sub(this.basePosition);
+    if (actualDisp.length() > this.maxDrift) {
+      fogPos.copy(this.basePosition).addScaledVector(actualDisp.normalize(), this.maxDrift);
+    }
   },
 };
 
