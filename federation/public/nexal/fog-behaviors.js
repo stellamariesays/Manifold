@@ -125,9 +125,9 @@ export function runFogBehaviors(elapsed) {
  */
 const followHubCentroid = {
   id: 'follow-hub-centroid',
-  mode: 'weighted',      // 'weighted' gives most visible drift
+  mode: 'named',         // track Sophia's hub (thefog) directly
   primaryHub: 'thefog',
-  lerpSpeed: 0.04,       // tune: higher = snappier chase
+  lerpSpeed: 0.03,       // tune: higher = snappier chase (thefog orbits slowly so 0.03 is fine)
   yScale: 0.4,           // damp vertical pull
   maxDrift: 6.0,         // scene units — fog won't wander further than this
   basePosition: new THREE.Vector3(0, 1, 0),
