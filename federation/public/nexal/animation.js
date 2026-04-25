@@ -607,7 +607,7 @@ export function createDataPulse(sourceHub, destHub, color, pressure, capabilityN
   }
 
   const pulseGeometry = new THREE.SphereGeometry(0.3, 8, 6);
-  const pulseMaterial = new THREE.MeshBasicMaterial({
+  const pulseMaterial = new THREE.MeshPhongMaterial({
     color, transparent: true, opacity: 0.95,
     emissive: new THREE.Color(color),
     emissiveIntensity: 0.8 * (window.mobileBrightnessBoost || 1.0),
