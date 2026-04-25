@@ -42,7 +42,7 @@ import { agentGroups } from './scene.js';
 // ── Registry ──────────────────────────────────────────────────────────────
 
 const _registry = new Map();   // id → behavior object
-let _lastElapsed = 0;
+let _lastElapsed = null;       // null = not yet initialized (skip first frame)
 
 export function registerFogBehavior(behavior) {
   if (!behavior || typeof behavior.id !== 'string') {
@@ -79,6 +79,9 @@ export function getFogBehaviors() {
 export function runFogBehaviors(elapsed) {
   const system = window._constraintSystem;
   if (!system) return;
+
+  // Skip first frame to avoid huge delta spike (elapsed since page load)
+  if (_lastElapsed === null) { _lastElapsed = elapsed; return; }
 
   const delta = elapsed - _lastElapsed;
   _lastElapsed = elapsed;
