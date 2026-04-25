@@ -4,6 +4,10 @@
  *
  * Exports: animate, animateDataHighways, createDataPulse
  *
+ * Imports fog-behaviors.js for the pluggable fog behavior system.
+ * Use registerFogBehavior() / unregisterFogBehavior() from fog-behaviors.js
+ * to add new fog motion behaviors without touching this file.
+ *
  * Reads scene state via proper exports from scene.js (getScene, getCamera,
  * getRenderer) — no window._renderer / window._camera / window._scene globals.
  *
@@ -14,6 +18,7 @@
  */
 import * as THREE from 'three';
 import { CONSTRAINT_CONFIG, agentGroups, getScene, getCamera, getRenderer } from './scene.js';
+import { runFogBehaviors } from './fog-behaviors.js';
 
 // Global frame counter (read by animateDataHighways)
 let animationFrame = 0;
@@ -376,6 +381,10 @@ export function animate() {
       system.constraintLines.geometry.attributes.position.needsUpdate = true;
     }
   }
+
+  // Run polymorphic fog behaviors (e.g. follow-hub-centroid)
+  // Must run after hub positions are updated above.
+  runFogBehaviors(elapsed);
 
   animateDataHighways(elapsed);
 
