@@ -26,7 +26,7 @@ import { buildDetectionRouter } from './routes/detection.js'
 import { buildMeshRouter } from './routes/mesh.js'
 import { buildTeacupsRouter } from './routes/teacups.js'
 import { buildDashboardRouter } from './routes/dashboard.js'
-import { buildAuthRouter } from './routes/auth.js'
+import { registerAuthRoutes } from './routes/auth.js'
 import { buildAdminRouter } from './routes/admin.js'
 import { buildMeshletRouter } from './routes/meshlet.js'
 import type { MeshletManager } from './meshlet-manager.js'
@@ -128,7 +128,7 @@ export class RestApi {
 
     // Auth (access code verification — public, rate-limited)
     const publicRouter: Router = express.Router()
-    buildAuthRouter(publicRouter)
+    registerAuthRoutes(publicRouter)
     buildAdminRouter(publicRouter)
     this.app.use('/', publicRouter)
 
