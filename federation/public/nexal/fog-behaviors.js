@@ -233,34 +233,41 @@ registerFogBehavior(followHubCentroid);
  */
 const stretchToSophia = {
   id: 'stretch-to-sophia',
-  stretchStrength: 1.4,
-  falloff: 0.06,
-  lerpSpeed: 0.05,
-  maxNodeDisplace: 2.5,
+  stretchStrength: 4.0,
+  falloff: 0.004,
+  stretchSpeed: 0.12,   // how fast we lerp IN toward Sophia
+  retractSpeed: 0.18,   // how fast we lerp OUT back to zero
+  cyclePeriod: 0.5,     // seconds per full stretch→retract cycle
+  stretchFraction: 0.6, // fraction of cycle spent stretching (rest = retracting)
+  maxNodeDisplace: 5.0,
   nodeParticipation: 0.6,
 
-  // Per-node smoothed displacement — always lerped toward fresh target each frame
   _smooth: null,
+  _cycleStart: null,
 
   update(ctx) {
-    const { system, hubGroups } = ctx;
+    const { system, hubGroups, elapsed } = ctx;
     if (!system) return;
 
-    // Find Sophia's hub live position
     const sophia = hubGroups.find(h => h.userData.hubName === 'thefog');
     if (!sophia) return;
 
     const nodes = system.nodes;
     const groupPos = system.group.position;
 
-    // Lazy-init smoothed displacement array
-    if (!this._smooth || this._smooth.length !== nodes.length) {
+    // Lazy-init
+    if (!this._smooth || this._smooth.length !== nodes.length * 3) {
       this._smooth = new Float32Array(nodes.length * 3);
-      // Seed deterministic participation (stable, no per-frame flicker)
       nodes.forEach((n, i) => { n._sophiaParticipates = (i % 10) < Math.round(this.nodeParticipation * 10); });
+      this._cycleStart = elapsed;
     }
 
-    // Hub direction from fog group origin (used for dot-product gating)
+    // Where are we in the current cycle?
+    const cyclePos = ((elapsed - this._cycleStart) % this.cyclePeriod) / this.cyclePeriod;
+    const stretching = cyclePos < this.stretchFraction;
+    const lerpSpeed = stretching ? this.stretchSpeed : this.retractSpeed;
+
+    // Hub direction from fog group origin (dot-product gating)
     const hx = sophia.position.x - groupPos.x;
     const hy = sophia.position.y - groupPos.y;
     const hz = sophia.position.z - groupPos.z;
@@ -269,19 +276,13 @@ const stretchToSophia = {
     nodes.forEach((node, i) => {
       const si = i * 3;
 
-      if (!node._sophiaParticipates) {
-        // Recovery: smoothly return to zero
-        this._smooth[si]     *= (1 - this.lerpSpeed);
-        this._smooth[si + 1] *= (1 - this.lerpSpeed);
-        this._smooth[si + 2] *= (1 - this.lerpSpeed);
-      } else {
-        // Node direction from fog origin
+      let tx = 0, ty = 0, tz = 0;
+
+      if (stretching && node._sophiaParticipates) {
         const nLen = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) + 0.001;
         const dot = (node.x * hx + node.y * hy + node.z * hz) / (nLen * hLen);
 
-        let tx = 0, ty = 0, tz = 0;
         if (dot > 0) {
-          // Vector from node world pos to Sophia's world pos
           const nwx = groupPos.x + node.x;
           const nwy = groupPos.y + node.y;
           const nwz = groupPos.z + node.z;
@@ -290,27 +291,24 @@ const stretchToSophia = {
           const dz = sophia.position.z - nwz;
           const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
 
-          // Pull magnitude: aligned nodes near Sophia stretch most
           const pull = this.stretchStrength * dot * Math.exp(-this.falloff * dist * dist);
           tx = (dx / dist) * pull;
           ty = (dy / dist) * pull;
           tz = (dz / dist) * pull;
 
-          // Clamp
           const len = Math.sqrt(tx * tx + ty * ty + tz * tz);
           if (len > this.maxNodeDisplace) {
             const s = this.maxNodeDisplace / len;
             tx *= s; ty *= s; tz *= s;
           }
         }
-
-        // Smooth toward fresh target every frame — no stale accumulation
-        this._smooth[si]     += (tx - this._smooth[si])     * this.lerpSpeed;
-        this._smooth[si + 1] += (ty - this._smooth[si + 1]) * this.lerpSpeed;
-        this._smooth[si + 2] += (tz - this._smooth[si + 2]) * this.lerpSpeed;
       }
+      // target is (tx, ty, tz) — zero when retracting, Sophia-pull when stretching
 
-      // Apply directly to mesh (physics loop already wrote positions this frame)
+      this._smooth[si]     += (tx - this._smooth[si])     * lerpSpeed;
+      this._smooth[si + 1] += (ty - this._smooth[si + 1]) * lerpSpeed;
+      this._smooth[si + 2] += (tz - this._smooth[si + 2]) * lerpSpeed;
+
       const mesh = system.nodeInstances[i];
       if (mesh) {
         mesh.position.x += this._smooth[si];
@@ -318,7 +316,6 @@ const stretchToSophia = {
         mesh.position.z += this._smooth[si + 2];
       }
 
-      // Write to node.stretchX/Y/Z for constraint lines (picked up next physics frame)
       node.stretchX = (node.stretchX || 0) + this._smooth[si];
       node.stretchY = (node.stretchY || 0) + this._smooth[si + 1];
       node.stretchZ = (node.stretchZ || 0) + this._smooth[si + 2];
