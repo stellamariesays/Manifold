@@ -153,6 +153,21 @@ export function animate() {
       system.group.scale.setScalar(system.currentScale);
     }
 
+    // Sync hubPositions from live orbiting hub meshes each frame
+    {
+      const liveHubs = agentGroups.filter(g => g.userData && g.userData.isOrbitingHub);
+      if (liveHubs.length > 0) {
+        system.hubPositions.forEach(hp => {
+          const live = liveHubs.find(g => g.userData.hubName === hp.name);
+          if (live) {
+            const worldPos = new THREE.Vector3();
+            live.getWorldPosition(worldPos);
+            hp.position.copy(worldPos);
+          }
+        });
+      }
+    }
+
     // Particle emission
     if (CONSTRAINT_CONFIG.particleEmissions && system.hubPositions.length > 0 && !system.introAnimation) {
       const currentTime = performance.now();
