@@ -211,3 +211,123 @@ const followHubCentroid = {
 
 // Register on module load
 registerFogBehavior(followHubCentroid);
+
+// ── Built-in: stretch-to-hubs ─────────────────────────────────────────────
+
+/**
+ * Elastically stretches the fog nodes toward each orbiting hub's live world
+ * position, making the cloud visually reach out toward each hub.
+ *
+ * Each fog node calculates a weighted pull from every hub based on the node's
+ * "facing direction" toward that hub. Nodes on the side closest to a hub
+ * stretch toward it; nodes on the opposite side are unaffected.
+ *
+ * Config:
+ *   stretchStrength   number   Max node displacement per hub (scene units). Default 3.0
+ *   falloff           number   How quickly the pull falls off with hub distance. Default 0.12
+ *   recoverySpeed     number   0–1 lerp speed back to original position. Default 0.06
+ *   maxNodeDisplace   number   Hard cap on per-node total displacement. Default 4.5
+ *   nodeParticipation number   Fraction of nodes that participate (0–1). Default 0.65
+ */
+const stretchToHubs = {
+  id: 'stretch-to-hubs',
+  stretchStrength: 3.0,
+  falloff: 0.12,
+  recoverySpeed: 0.06,
+  maxNodeDisplace: 4.5,
+  nodeParticipation: 0.65,
+
+  // Per-node persistent stretch targets (lazy-init)
+  _nodeTargets: null,
+  _hubWorldPositions: [],
+
+  update(ctx) {
+    const { system, hubGroups, THREE } = ctx;
+    if (!system || hubGroups.length === 0) return;
+
+    const nodes = system.nodes;
+    const groupPos = system.group.position;   // fog group world position
+
+    // Lazy-init per-node targets
+    if (!this._nodeTargets || this._nodeTargets.length !== nodes.length) {
+      this._nodeTargets = nodes.map(n => ({ sx: 0, sy: 0, sz: 0 }));
+      // Seed participation flag deterministically so it doesn't flicker
+      nodes.forEach((n, i) => { n._stretchParticipates = (i / nodes.length) < this.nodeParticipation; });
+    }
+
+    // Collect hub world positions (hub markers orbit, so read from live group.position)
+    const hubs = hubGroups.map(h => ({
+      name: h.userData.hubName,
+      wx: h.position.x,
+      wy: h.position.y,
+      wz: h.position.z,
+    }));
+
+    nodes.forEach((node, i) => {
+      if (!node._stretchParticipates) return;
+      const t = this._nodeTargets[i];
+
+      // Node world pos = group pos + node local pos (group scale=1 after intro)
+      const nwx = groupPos.x + node.x;
+      const nwy = groupPos.y + node.y;
+      const nwz = groupPos.z + node.z;
+
+      let totalSx = 0, totalSy = 0, totalSz = 0;
+
+      hubs.forEach(hub => {
+        // Vector from node world pos to hub world pos
+        const dx = hub.wx - nwx;
+        const dy = hub.wy - nwy;
+        const dz = hub.wz - nwz;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
+
+        // Only nodes "facing" the hub (positive dot with direction from fog origin to hub) get pulled
+        const fx = hub.wx - groupPos.x;
+        const fy = hub.wy - groupPos.y;
+        const fz = hub.wz - groupPos.z;
+        const fLen = Math.sqrt(fx * fx + fy * fy + fz * fz) + 0.001;
+        // Node direction from fog origin
+        const nLen = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) + 0.001;
+        const dot = (node.x * fx + node.y * fy + node.z * fz) / (nLen * fLen);
+        if (dot < 0) return;  // node faces away — skip
+
+        // Soft falloff by distance: closer hubs stretch harder
+        const pull = this.stretchStrength * dot * Math.exp(-this.falloff * dist * dist);
+
+        totalSx += (dx / dist) * pull;
+        totalSy += (dy / dist) * pull;
+        totalSz += (dz / dist) * pull;
+      });
+
+      // Clamp total displacement
+      const totalLen = Math.sqrt(totalSx * totalSx + totalSy * totalSy + totalSz * totalSz);
+      if (totalLen > this.maxNodeDisplace) {
+        const s = this.maxNodeDisplace / totalLen;
+        totalSx *= s; totalSy *= s; totalSz *= s;
+      }
+
+      // Lerp toward target (smooth, not instant)
+      t.sx += (totalSx - t.sx) * 0.08;
+      t.sy += (totalSy - t.sy) * 0.08;
+      t.sz += (totalSz - t.sz) * 0.08;
+
+      // Apply directly to the mesh instance position (fog behaviors run after
+      // the constraint physics loop has already written node positions to meshes,
+      // so we add the stretch delta directly here for the current frame).
+      const mesh = system.nodeInstances[i];
+      if (mesh) {
+        mesh.position.x += t.sx;
+        mesh.position.y += t.sy;
+        mesh.position.z += t.sz;
+      }
+
+      // Also store on node so constraint lines pick it up (they read node.stretchX
+      // in the *next* physics pass — acceptable one-frame lag on lines).
+      node.stretchX = (node.stretchX || 0) + t.sx;
+      node.stretchY = (node.stretchY || 0) + t.sy;
+      node.stretchZ = (node.stretchZ || 0) + t.sz;
+    });
+  },
+};
+
+registerFogBehavior(stretchToHubs);
