@@ -397,9 +397,155 @@
   </div>
 </div>
 
+<!-- ── QUERY PANEL ──────────────────────────────────────────────────── -->
+<div id="query-panel" class="panel" style="
+  bottom: 20px; right: 20px; width: 420px;
+  display: flex; flex-direction: column; gap: 10px;
+">
+  <div style="font-size:11px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+    <span style="color:var(--green); animation: pulse 2s infinite;">●</span>
+    Federation Query
+    <span id="query-user" style="margin-left:auto; font-size:9px; color:rgba(0,229,255,0.4); letter-spacing:1px;"></span>
+  </div>
+  <textarea id="query-input" rows="4" style="
+    width:100%; background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2);
+    border-radius:3px; padding:10px 12px; color:var(--text);
+    font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.5;
+    resize:none; outline:none; transition:border-color 0.2s;
+  " placeholder="Ask the mesh…"></textarea>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button id="query-preset-btn" style="
+      padding:5px 10px; background:rgba(170,0,255,0.1); border:1px solid rgba(170,0,255,0.3);
+      border-radius:3px; color:var(--violet); font-size:9px; letter-spacing:1px;
+      cursor:pointer; white-space:nowrap; transition:all 0.2s;
+    " title="Load the BTC trading plan prompt">Load Preset</button>
+    <button id="query-submit-btn" style="
+      flex:1; padding:8px; background:rgba(0,229,255,0.08); border:1px solid var(--cyan);
+      border-radius:3px; color:var(--cyan); font-family:'Rajdhani',monospace;
+      font-size:13px; font-weight:600; letter-spacing:3px; text-transform:uppercase;
+      cursor:pointer; transition:all 0.2s;
+    ">Send</button>
+  </div>
+  <div id="query-response" style="
+    display:none; max-height:300px; overflow-y:auto;
+    background:rgba(0,0,0,0.3); border:1px solid rgba(0,229,255,0.12);
+    border-radius:3px; padding:12px; font-family:'Share Tech Mono',monospace;
+    font-size:10px; line-height:1.6; color:var(--text); white-space:pre-wrap;
+  "></div>
+  <div id="query-status" style="font-size:9px; letter-spacing:1px; color:rgba(0,229,255,0.35); min-height:12px;"></div>
+</div>
+
 <!-- 3D Scene -->
 <canvas id="scene"></canvas>
 
 <script type="module" src="./nexal.js"></script>
+
+<script type="module">
+// ── Session guard ─────────────────────────────────────────────────────────
+const token = sessionStorage.getItem('nexal_token');
+const user  = sessionStorage.getItem('nexal_user');
+if (!token) {
+  window.location.replace('/nexal/login.html');
+}
+if (user) {
+  const el = document.getElementById('query-user');
+  if (el) el.textContent = user;
+}
+
+// ── Query panel ───────────────────────────────────────────────────────────
+const PRESET_PROMPT =
+`Look into current sentiment around Bitcoin, Iran, fed funds, and the gold narrative. ` +
+`Consider using the Stingray tool for live indicator data. ` +
+`Then write a 5-week trading plan for Bitcoin — can use up to 5× leverage long or short.`;
+
+const presetBtn  = document.getElementById('query-preset-btn');
+const submitBtn  = document.getElementById('query-submit-btn');
+const inputEl    = document.getElementById('query-input');
+const responseEl = document.getElementById('query-response');
+const statusEl   = document.getElementById('query-status');
+
+presetBtn.addEventListener('click', () => {
+  inputEl.value = PRESET_PROMPT;
+  inputEl.style.borderColor = 'rgba(170,0,255,0.5)';
+  setTimeout(() => inputEl.style.borderColor = '', 600);
+});
+
+// Focus style
+inputEl.addEventListener('focus', () => inputEl.style.borderColor = 'var(--cyan)');
+inputEl.addEventListener('blur',  () => inputEl.style.borderColor = '');
+
+submitBtn.addEventListener('click', async () => {
+  const prompt = inputEl.value.trim();
+  if (!prompt) return;
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Routing…';
+  statusEl.textContent  = 'Dispatching to federation mesh…';
+  responseEl.style.display = 'none';
+
+  try {
+    // Route to Stella (trillian hub) via task API
+    const res = await fetch('/tasks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionStorage.getItem('nexal_token') ?? ''}`,
+      },
+      body: JSON.stringify({
+        target: 'stella@trillian',
+        command: 'prompt',
+        args: { message: prompt },
+      }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Poll for result if async
+    const taskId = data.taskId ?? data.id;
+    if (taskId) {
+      statusEl.textContent = `Task ${taskId.slice(0,8)}… queued — polling…`;
+      await _pollTask(taskId);
+    } else if (data.result) {
+      _showResult(data.result);
+    } else {
+      _showResult(JSON.stringify(data, null, 2));
+    }
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send';
+  }
+});
+
+async function _pollTask(taskId) {
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const r = await fetch(`/tasks/${taskId}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d.status === 'complete' || d.status === 'done') {
+        _showResult(d.result ?? d.output ?? JSON.stringify(d, null, 2));
+        return;
+      }
+      if (d.status === 'error' || d.status === 'failed') {
+        statusEl.textContent = `Task failed: ${d.error ?? 'unknown'}`;
+        return;
+      }
+      statusEl.textContent = `Status: ${d.status} (${i + 1}/60)…`;
+    } catch {}
+  }
+  statusEl.textContent = 'Timeout — no result after 3 minutes.';
+}
+
+function _showResult(text) {
+  responseEl.style.display = 'block';
+  responseEl.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+  statusEl.textContent = 'Response received ✓';
+  responseEl.scrollTop = 0;
+}
+</script>
 </body>
 </html>
