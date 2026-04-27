@@ -64,7 +64,7 @@ export const CONSTRAINT_CONFIG = {
   stableSpringStrength: 0.02,
   stableDamping: 0.95,
 
-  reflectedGround: true,
+  reflectedGround: false,
   whiteTheme: false,
   nodeOpacity: 0.8,
   lineOpacity: 0.3,
@@ -193,6 +193,7 @@ export function buildSpiderWeb() {
 
   window._webGroup = webGroup;
   window._webRings = webRings;
+  webGroup.visible = false;  // hidden — circular grid removed from view
 
   window._dataHighways = {
     connections: [],
