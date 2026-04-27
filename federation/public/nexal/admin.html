@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal — Access Code Admin</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 2rem; background: #0d1117; color: #e6edf3; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .auth { margin-bottom: 1.5rem; }
+    input { padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid #30363d; background: #161b22; color: #e6edf3; }
+    button { padding: 0.4rem 1rem; border-radius: 4px; border: 1px solid #30363d; background: #238636; color: #fff; cursor: pointer; }
+    button:hover { background: #2ea043; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #21262d; font-size: 0.85rem; }
+    th { background: #161b22; position: sticky; top: 0; }
+    .status-unused { color: #3fb950; }
+    .status-used { color: #f85149; }
+    .stats { margin-bottom: 1rem; color: #8b949e; }
+    .container { max-width: 960px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔑 Nexal Access Code Admin</h1>
+    <div class="auth">
+      <input type="password" id="apiKey" placeholder="Admin API Key" />
+      <button onclick="loadCodes()">Load Codes</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <table id="codesTable" style="display:none;">
+      <thead>
+        <tr><th>Code</th><th>Username</th><th>Created</th><th>Used</th><th>Status</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <script>
+    async function loadCodes() {
+      const key = document.getElementById('apiKey').value;
+      const res = await fetch('/admin/codes', { headers: { 'x-api-key': key } });
+      if (!res.ok) { alert('Failed: ' + (await res.json()).error); return; }
+      const { codes, count } = await res.json();
+      const used = codes.filter(c => c.usedAt).length;
+      document.getElementById('stats').textContent = `${count} total · ${used} used · ${count - used} unused`;
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      for (const c of codes) {
+        const status = c.usedAt ? 'used' : 'unused';
+        tbody.innerHTML += `<tr>
+          <td><code>${c.code}</code></td>
+          <td>${c.username ?? '—'}</td>
+          <td>${c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'}</td>
+          <td>${c.usedAt ? new Date(c.usedAt).toLocaleString() : '—'}</td>
+          <td class="status-${status}">${status}</td>
+        </tr>`;
+      }
+      document.getElementById('codesTable').style.display = 'table';
+    }
+  </script>
+</body>
+</html>

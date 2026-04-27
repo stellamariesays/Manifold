@@ -26,6 +26,8 @@ import { buildDetectionRouter } from './routes/detection.js'
 import { buildMeshRouter } from './routes/mesh.js'
 import { buildTeacupsRouter } from './routes/teacups.js'
 import { buildDashboardRouter } from './routes/dashboard.js'
+import { buildAuthRouter } from './routes/auth.js'
+import { buildAdminRouter } from './routes/admin.js'
 
 export interface RestApiOptions {
   hub: string
@@ -118,6 +120,12 @@ export class RestApi {
 
     // Nexal / topology UI routes (public, no auth required)
     registerNexalRoutes(this.app)
+
+    // Auth (access code verification — public, rate-limited)
+    const publicRouter: Router = express.Router()
+    buildAuthRouter(publicRouter)
+    buildAdminRouter(publicRouter)
+    this.app.use('/', publicRouter)
 
     // Authenticated API router
     const router: Router = express.Router()
