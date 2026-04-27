@@ -222,11 +222,11 @@ registerOrbitType({
 
 setHubOrbitParams('hog', {
   type: 'ellipse',
-  semiMajor:     9,
-  semiMinor:     5,
-  inclination:   0.35,           // 20° tilt
-  ascendingNode: 0,              // reference direction
-  speed:         0.055,
+  semiMajor:     18,
+  semiMinor:     10,
+  inclination:   0.35,
+  ascendingNode: 0,
+  speed:         0.0825,
   phase:         0,
   yBob:          0.2,
   yBobFreq:      1,
@@ -234,11 +234,11 @@ setHubOrbitParams('hog', {
 
 setHubOrbitParams('trillian', {
   type: 'ellipse',
-  semiMajor:     7,
-  semiMinor:     10,             // wider than tall → oblate ellipse rotated
-  inclination:   0.65,           // 37° — noticeably tilted
-  ascendingNode: Math.PI * 0.6,  // 108° around
-  speed:         0.042,
+  semiMajor:     14,
+  semiMinor:     20,
+  inclination:   0.65,
+  ascendingNode: Math.PI * 0.6,
+  speed:         0.063,
   phase:         Math.PI * 0.4,
   yBob:          0.25,
   yBobFreq:      1,
@@ -246,11 +246,11 @@ setHubOrbitParams('trillian', {
 
 setHubOrbitParams('thefog', {
   type: 'ellipse',
-  semiMajor:     11,
-  semiMinor:     6,
-  inclination:   1.05,           // 60° — steeply inclined, rises high
-  ascendingNode: Math.PI * 1.2,  // 216° around
-  speed:         0.038,
+  semiMajor:     22,
+  semiMinor:     12,
+  inclination:   1.05,
+  ascendingNode: Math.PI * 1.2,
+  speed:         0.057,
   phase:         Math.PI * 0.8,
   yBob:          0.3,
   yBobFreq:      1,
@@ -258,11 +258,11 @@ setHubOrbitParams('thefog', {
 
 setHubOrbitParams('relay', {
   type: 'ellipse',
-  semiMajor:     8,
-  semiMinor:     4,
+  semiMajor:     16,
+  semiMinor:     8,
   inclination:   0.5,
   ascendingNode: Math.PI * 0.3,
-  speed:         0.07,
+  speed:         0.105,
   phase:         Math.PI * 1.2,
   yBob:          0.15,
   yBobFreq:      2,
@@ -270,11 +270,11 @@ setHubOrbitParams('relay', {
 
 setHubOrbitParams('bobiverse', {
   type: 'ellipse',
-  semiMajor:     6,
-  semiMinor:     9,
-  inclination:   1.3,            // near-polar orbit
+  semiMajor:     12,
+  semiMinor:     18,
+  inclination:   1.3,
   ascendingNode: Math.PI * 0.9,
-  speed:         0.048,
+  speed:         0.072,
   phase:         Math.PI * 1.6,
   yBob:          0.35,
   yBobFreq:      1,

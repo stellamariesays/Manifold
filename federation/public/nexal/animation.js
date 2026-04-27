@@ -533,7 +533,7 @@ export function animateDataHighways(elapsed) {
 
   const currentTime = performance.now();
 
-  if (currentTime - highways.lastPulseTime > 2000) {
+  if (currentTime - highways.lastPulseTime > 6000) {
     highways.lastPulseTime = currentTime;
 
     const highPressureCapabilities = window._meshData.darkCircles
@@ -545,10 +545,11 @@ export function animateDataHighways(elapsed) {
       const color = highways.capabilityColors[capType] || highways.capabilityColors.default;
       const hubPressures = Object.entries(capability.byHub).sort((a, b) => b[1] - a[1]);
       if (hubPressures.length >= 2) {
-        const sourceHub = hubPressures[0][0];
-        const destHub = hubPressures[1][0];
-        console.log(`Data highway: Creating pulse ${capability.name} (${capability.pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
-        createDataPulse(sourceHub, destHub, color, capability.pressure, capability.name);
+        // Randomly flip direction so pulses travel both ways
+        const [hubA, hubB] = Math.random() < 0.5
+          ? [hubPressures[0][0], hubPressures[1][0]]
+          : [hubPressures[1][0], hubPressures[0][0]];
+        createDataPulse(hubA, hubB, color, capability.pressure, capability.name);
       }
     });
   }
