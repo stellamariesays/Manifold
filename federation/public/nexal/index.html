@@ -257,17 +257,20 @@
       font-size: 9px; color: rgba(255,255,255,0.4);
     }
 
-    /* SOPHIA Panel */
+    /* SOPHIA Query Panel */
     #sophia-panel {
       bottom: 60px; left: 20px;
-      width: 280px;
+      width: 320px;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
     }
 
     #sophia-panel .sophia-title {
       font-size: 24px;
       font-weight: 700;
       color: var(--violet);
-      margin-bottom: 8px;
+      margin-bottom: 2px;
       letter-spacing: 4px;
       text-shadow: 0 0 15px var(--violet);
     }
@@ -276,15 +279,54 @@
       font-size: 9px;
       color: rgba(170,0,255,0.6);
       letter-spacing: 2px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       text-transform: uppercase;
     }
 
-    .sophia-controls {
-      display: flex; gap: 8px;
+    /* Agent routing selector */
+    .agent-select {
+      width: 100%;
+      padding: 4px 8px;
+      background: rgba(170,0,255,0.1);
+      border: 1px solid rgba(170,0,255,0.25);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .agent-select:focus {
+      border-color: var(--violet);
     }
 
-    .sophia-btn {
+    /* Query input */
+    .query-input-row {
+      display: flex; gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .query-input {
+      flex: 1;
+      padding: 6px 10px;
+      background: rgba(0,10,30,0.6);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .query-input:focus {
+      border-color: var(--cyan);
+    }
+    .query-input::placeholder {
+      color: rgba(176,224,248,0.3);
+    }
+
+    .query-send-btn {
       padding: 6px 12px;
       background: rgba(170,0,255,0.15);
       border: 1px solid rgba(170,0,255,0.3);
@@ -293,14 +335,109 @@
       font-size: 10px;
       letter-spacing: 1px;
       cursor: pointer;
-      transition: all 0.2s;
       text-transform: uppercase;
+      transition: all 0.2s;
     }
-
-    .sophia-btn:hover {
+    .query-send-btn:hover {
       background: rgba(170,0,255,0.25);
       border-color: var(--violet);
     }
+
+    /* Response area */
+    .query-response {
+      background: rgba(0,10,30,0.4);
+      border: 1px solid rgba(0,229,255,0.1);
+      border-radius: 3px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      min-height: 40px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text);
+      position: relative;
+      word-break: break-word;
+    }
+
+    .query-response .response-tag {
+      position: absolute;
+      top: 4px; right: 6px;
+      font-size: 8px;
+      color: rgba(0,229,255,0.4);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .query-response .copy-btn {
+      position: absolute;
+      bottom: 4px; right: 6px;
+      padding: 2px 6px;
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 2px;
+      color: rgba(0,229,255,0.5);
+      font-size: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+    .query-response .copy-btn:hover {
+      background: rgba(0,229,255,0.2);
+      color: var(--cyan);
+    }
+
+    /* Typewriter cursor */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 6px;
+      height: 14px;
+      background: var(--violet);
+      animation: blink 0.8s step-end infinite;
+      vertical-align: text-bottom;
+      margin-left: 1px;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Collapsible history */
+    .history-toggle {
+      font-size: 9px;
+      color: rgba(0,229,255,0.4);
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .history-toggle:hover { color: var(--cyan); }
+    .history-toggle::before { content: '▸'; transition: transform 0.2s; display: inline-block; }
+    .history-toggle.open::before { transform: rotate(90deg); }
+
+    .query-history {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .query-history.open {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,229,255,0.06);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .history-item:hover { color: var(--cyan); }
+    .history-item .history-q { color: rgba(255,255,255,0.5); }
+    .history-item .history-a { color: var(--text); font-size: 9px; margin-top: 2px; }
 
     /* Right Status Panel */
     #status-panel {
@@ -530,14 +667,35 @@
     </div>
   </div>
 
-  <!-- SOPHIA Panel -->
+  <!-- SOPHIA Query Panel -->
   <div id="sophia-panel" class="panel">
     <div class="sophia-title">SOPHIA</div>
     <div class="sophia-subtitle">Create Creation 10</div>
-    <div class="sophia-controls">
-      <button class="sophia-btn">Navigate</button>
-      <button class="sophia-btn">Initiate</button>
+
+    <!-- Agent routing selector -->
+    <select class="agent-select" id="agent-route">
+      <option value="auto">⟐ Auto-route</option>
+      <option value="sophia">◈ Sophia</option>
+      <option value="stella">◉ Stella</option>
+      <option value="mesh">⬡ Mesh Broadcast</option>
+    </select>
+
+    <!-- Query input -->
+    <div class="query-input-row">
+      <input type="text" class="query-input" id="query-input" placeholder="Ask the mesh… (Q)" autocomplete="off" spellcheck="false">
+      <button class="query-send-btn" id="query-send">Send</button>
     </div>
+
+    <!-- Response area -->
+    <div class="query-response" id="query-response" style="display:none">
+      <span class="response-tag" id="response-tag"></span>
+      <div id="response-text"></div>
+      <button class="copy-btn" id="copy-btn" title="Copy response">📋 Copy</button>
+    </div>
+
+    <!-- Collapsible history -->
+    <div class="history-toggle" id="history-toggle">History</div>
+    <div class="query-history" id="query-history"></div>
   </div>
 
   <!-- Status Panel -->
@@ -603,6 +761,141 @@
 
 <!-- 3D Scene -->
 <canvas id="scene"></canvas>
+
+<!-- Query Panel Logic -->
+<script>
+(function() {
+  const queryInput = document.getElementById('query-input');
+  const querySend = document.getElementById('query-send');
+  const queryResponse = document.getElementById('query-response');
+  const responseText = document.getElementById('response-text');
+  const responseTag = document.getElementById('response-tag');
+  const copyBtn = document.getElementById('copy-btn');
+  const historyToggle = document.getElementById('history-toggle');
+  const historyDiv = document.getElementById('query-history');
+  const agentRoute = document.getElementById('agent-route');
+
+  let history = [];
+  let isStreaming = false;
+  let abortCtrl = null;
+
+  // Q hotkey — focus query input from anywhere
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'q' || e.key === 'Q') {
+      if (document.activeElement === queryInput) return;
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT')) return;
+      e.preventDefault();
+      queryInput.focus();
+    }
+    // Escape — cancel streaming or clear input
+    if (e.key === 'Escape') {
+      if (isStreaming && abortCtrl) {
+        abortCtrl.abort();
+        isStreaming = false;
+        querySend.textContent = 'Send';
+        responseTag.textContent = 'cancelled';
+      }
+      queryInput.value = '';
+      queryInput.blur();
+    }
+  });
+
+  // Typewriter streaming effect
+  function typewriter(element, text, speed) {
+    return new Promise((resolve) => {
+      let i = 0;
+      const cursor = document.createElement('span');
+      cursor.className = 'typewriter-cursor';
+      element.textContent = '';
+      element.appendChild(cursor);
+
+      function type() {
+        if (abortCtrl && abortCtrl.signal.aborted) {
+          cursor.remove();
+          resolve();
+          return;
+        }
+        if (i < text.length) {
+          element.insertBefore(document.createTextNode(text.charAt(i)), cursor);
+          i++;
+          setTimeout(type, speed || 18);
+        } else {
+          cursor.remove();
+          resolve();
+        }
+      }
+      type();
+    });
+  }
+
+  async function sendQuery() {
+    const q = queryInput.value.trim();
+    if (!q || isStreaming) return;
+
+    isStreaming = true;
+    abortCtrl = new AbortController();
+    querySend.textContent = '…';
+    queryResponse.style.display = 'block';
+    responseText.textContent = '';
+    const route = agentRoute.value;
+    responseTag.textContent = route === 'auto' ? 'sophia · auto' : route;
+
+    // Simulated streaming response (replace with real endpoint)
+    const fakeResponses = [
+      'Mesh analysis complete. 7 active nodes, 3 dormant sectors detected. Capability pressure nominal at 0.34. Recommend expanding thefog coverage in the southern quadrant.',
+      'Federation sync positive. All hubs reporting within tolerance. Dark circle resolution: 2 pending, 14 resolved. Cross-hub latency: 23ms average.',
+      'Scout sweep returned. New void detected at coordinates [0.42, -0.17, 0.89]. Pressure reading: 0.67 — elevated. Initiating reach scan.',
+      'Agent consensus reached. Task rerouting from stella → trillian via mesh broadcast. Estimated completion: 4.2 seconds. No bottlenecks detected.',
+    ];
+    const response = fakeResponses[Math.floor(Math.random() * fakeResponses.length)];
+
+    await typewriter(responseText, response, 16);
+
+    isStreaming = false;
+    abortCtrl = null;
+    querySend.textContent = 'Send';
+
+    // Add to history
+    history.push({ q, a: response, route, time: new Date().toLocaleTimeString() });
+    renderHistory();
+  }
+
+  querySend.addEventListener('click', sendQuery);
+  queryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendQuery();
+  });
+
+  // Copy button
+  copyBtn.addEventListener('click', () => {
+    const text = responseText.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+    });
+  });
+
+  // History toggle
+  historyToggle.addEventListener('click', () => {
+    historyToggle.classList.toggle('open');
+    historyDiv.classList.toggle('open');
+  });
+
+  function renderHistory() {
+    historyDiv.innerHTML = '';
+    history.slice().reverse().forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `<div class="history-q">${item.time} — ${item.route}: ${item.q}</div><div class="history-a">${item.a.substring(0, 80)}…</div>`;
+      div.addEventListener('click', () => {
+        queryResponse.style.display = 'block';
+        responseText.textContent = item.a;
+        responseTag.textContent = item.route;
+      });
+      historyDiv.appendChild(div);
+    });
+  }
+})();
+</script>
 
 <script type="module" src="./nexal.js"></script>
 </body>
