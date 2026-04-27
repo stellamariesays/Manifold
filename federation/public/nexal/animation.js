@@ -19,6 +19,7 @@
 import * as THREE from 'three';
 import { CONSTRAINT_CONFIG, agentGroups, getScene, getCamera, getRenderer } from './scene.js';
 import { runFogBehaviors } from './fog-behaviors.js';
+import { getHubOrbitPosition, getHubOrbitParams } from './hub-orbits.js';
 
 // Global frame counter (read by animateDataHighways)
 let animationFrame = 0;
@@ -34,16 +35,27 @@ export function animate() {
     const userData = group.userData;
 
     if (userData && userData.isHubCenter && userData.isOrbitingHub) {
-      const orbitTime = elapsed * userData.orbitSpeed;
-      const currentAngle = userData.orbitAngle + orbitTime;
+      const hubName = userData.hubName;
 
-      const orbitalX = Math.cos(currentAngle) * userData.orbitRadius;
-      const orbitalZ = Math.sin(currentAngle) * userData.orbitRadius;
-      const orbitalY = userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2;
+      // Use polymorphic orbit if params registered, else fall back to legacy circle
+      const orbitPos = getHubOrbitParams(hubName)
+        ? getHubOrbitPosition(hubName, elapsed)
+        : (() => {
+            const orbitTime = elapsed * userData.orbitSpeed;
+            const currentAngle = userData.orbitAngle + orbitTime;
+            return new THREE.Vector3(
+              Math.cos(currentAngle) * userData.orbitRadius,
+              userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2,
+              Math.sin(currentAngle) * userData.orbitRadius,
+            );
+          })();
+
+      const orbitalX = orbitPos.x;
+      const orbitalY = orbitPos.y;
+      const orbitalZ = orbitPos.z;
 
       group.position.set(orbitalX, orbitalY, orbitalZ);
 
-      const hubName = userData.hubName;
       if (window._dataHighways && window._dataHighways.hubCenters[hubName]) {
         window._dataHighways.hubCenters[hubName] = new THREE.Vector3(orbitalX, orbitalY, orbitalZ);
       }
