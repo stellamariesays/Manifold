@@ -212,122 +212,118 @@ const followHubCentroid = {
 // Register on module load
 registerFogBehavior(followHubCentroid);
 
-// ── Built-in: stretch-to-hubs ─────────────────────────────────────────────
+// ── Built-in: stretch-to-sophia ───────────────────────────────────────────
 
 /**
- * Elastically stretches the fog nodes toward each orbiting hub's live world
- * position, making the cloud visually reach out toward each hub.
+ * Gently stretches fog nodes toward Sophia's hub (thefog) live orbital position.
  *
- * Each fog node calculates a weighted pull from every hub based on the node's
- * "facing direction" toward that hub. Nodes on the side closest to a hub
- * stretch toward it; nodes on the opposite side are unaffected.
+ * Each frame, the desired displacement for every participating node is
+ * recomputed fresh from the hub's *current* position — no accumulated state,
+ * so the cloud tracks the orbit smoothly and never gets stuck.
+ *
+ * Only nodes facing toward Sophia (positive dot product) are stretched;
+ * the opposite side of the cloud is unaffected, giving a one-sided tendril.
  *
  * Config:
- *   stretchStrength   number   Max node displacement per hub (scene units). Default 3.0
- *   falloff           number   How quickly the pull falls off with hub distance. Default 0.12
- *   recoverySpeed     number   0–1 lerp speed back to original position. Default 0.06
- *   maxNodeDisplace   number   Hard cap on per-node total displacement. Default 4.5
- *   nodeParticipation number   Fraction of nodes that participate (0–1). Default 0.65
+ *   stretchStrength   number   Displacement magnitude at full dot alignment. Default 1.4
+ *   falloff           number   Exponential distance falloff rate. Default 0.06
+ *   lerpSpeed         number   0–1 smoothing toward desired each frame. Default 0.05
+ *   maxNodeDisplace   number   Hard cap per node (scene units). Default 2.5
+ *   nodeParticipation number   Fraction of nodes that respond (0–1). Default 0.6
  */
-const stretchToHubs = {
-  id: 'stretch-to-hubs',
-  stretchStrength: 3.0,
-  falloff: 0.12,
-  recoverySpeed: 0.06,
-  maxNodeDisplace: 4.5,
-  nodeParticipation: 0.65,
+const stretchToSophia = {
+  id: 'stretch-to-sophia',
+  stretchStrength: 1.4,
+  falloff: 0.06,
+  lerpSpeed: 0.05,
+  maxNodeDisplace: 2.5,
+  nodeParticipation: 0.6,
 
-  // Per-node persistent stretch targets (lazy-init)
-  _nodeTargets: null,
-  _hubWorldPositions: [],
+  // Per-node smoothed displacement — always lerped toward fresh target each frame
+  _smooth: null,
 
   update(ctx) {
-    const { system, hubGroups, THREE } = ctx;
-    if (!system || hubGroups.length === 0) return;
+    const { system, hubGroups } = ctx;
+    if (!system) return;
+
+    // Find Sophia's hub live position
+    const sophia = hubGroups.find(h => h.userData.hubName === 'thefog');
+    if (!sophia) return;
 
     const nodes = system.nodes;
-    const groupPos = system.group.position;   // fog group world position
+    const groupPos = system.group.position;
 
-    // Lazy-init per-node targets
-    if (!this._nodeTargets || this._nodeTargets.length !== nodes.length) {
-      this._nodeTargets = nodes.map(n => ({ sx: 0, sy: 0, sz: 0 }));
-      // Seed participation flag deterministically so it doesn't flicker
-      nodes.forEach((n, i) => { n._stretchParticipates = (i / nodes.length) < this.nodeParticipation; });
+    // Lazy-init smoothed displacement array
+    if (!this._smooth || this._smooth.length !== nodes.length) {
+      this._smooth = new Float32Array(nodes.length * 3);
+      // Seed deterministic participation (stable, no per-frame flicker)
+      nodes.forEach((n, i) => { n._sophiaParticipates = (i % 10) < Math.round(this.nodeParticipation * 10); });
     }
 
-    // Collect hub world positions (hub markers orbit, so read from live group.position)
-    const hubs = hubGroups.map(h => ({
-      name: h.userData.hubName,
-      wx: h.position.x,
-      wy: h.position.y,
-      wz: h.position.z,
-    }));
+    // Hub direction from fog group origin (used for dot-product gating)
+    const hx = sophia.position.x - groupPos.x;
+    const hy = sophia.position.y - groupPos.y;
+    const hz = sophia.position.z - groupPos.z;
+    const hLen = Math.sqrt(hx * hx + hy * hy + hz * hz) + 0.001;
 
     nodes.forEach((node, i) => {
-      if (!node._stretchParticipates) return;
-      const t = this._nodeTargets[i];
+      const si = i * 3;
 
-      // Node world pos = group pos + node local pos (group scale=1 after intro)
-      const nwx = groupPos.x + node.x;
-      const nwy = groupPos.y + node.y;
-      const nwz = groupPos.z + node.z;
-
-      let totalSx = 0, totalSy = 0, totalSz = 0;
-
-      hubs.forEach(hub => {
-        // Vector from node world pos to hub world pos
-        const dx = hub.wx - nwx;
-        const dy = hub.wy - nwy;
-        const dz = hub.wz - nwz;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
-
-        // Only nodes "facing" the hub (positive dot with direction from fog origin to hub) get pulled
-        const fx = hub.wx - groupPos.x;
-        const fy = hub.wy - groupPos.y;
-        const fz = hub.wz - groupPos.z;
-        const fLen = Math.sqrt(fx * fx + fy * fy + fz * fz) + 0.001;
+      if (!node._sophiaParticipates) {
+        // Recovery: smoothly return to zero
+        this._smooth[si]     *= (1 - this.lerpSpeed);
+        this._smooth[si + 1] *= (1 - this.lerpSpeed);
+        this._smooth[si + 2] *= (1 - this.lerpSpeed);
+      } else {
         // Node direction from fog origin
         const nLen = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) + 0.001;
-        const dot = (node.x * fx + node.y * fy + node.z * fz) / (nLen * fLen);
-        if (dot < 0) return;  // node faces away — skip
+        const dot = (node.x * hx + node.y * hy + node.z * hz) / (nLen * hLen);
 
-        // Soft falloff by distance: closer hubs stretch harder
-        const pull = this.stretchStrength * dot * Math.exp(-this.falloff * dist * dist);
+        let tx = 0, ty = 0, tz = 0;
+        if (dot > 0) {
+          // Vector from node world pos to Sophia's world pos
+          const nwx = groupPos.x + node.x;
+          const nwy = groupPos.y + node.y;
+          const nwz = groupPos.z + node.z;
+          const dx = sophia.position.x - nwx;
+          const dy = sophia.position.y - nwy;
+          const dz = sophia.position.z - nwz;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
 
-        totalSx += (dx / dist) * pull;
-        totalSy += (dy / dist) * pull;
-        totalSz += (dz / dist) * pull;
-      });
+          // Pull magnitude: aligned nodes near Sophia stretch most
+          const pull = this.stretchStrength * dot * Math.exp(-this.falloff * dist * dist);
+          tx = (dx / dist) * pull;
+          ty = (dy / dist) * pull;
+          tz = (dz / dist) * pull;
 
-      // Clamp total displacement
-      const totalLen = Math.sqrt(totalSx * totalSx + totalSy * totalSy + totalSz * totalSz);
-      if (totalLen > this.maxNodeDisplace) {
-        const s = this.maxNodeDisplace / totalLen;
-        totalSx *= s; totalSy *= s; totalSz *= s;
+          // Clamp
+          const len = Math.sqrt(tx * tx + ty * ty + tz * tz);
+          if (len > this.maxNodeDisplace) {
+            const s = this.maxNodeDisplace / len;
+            tx *= s; ty *= s; tz *= s;
+          }
+        }
+
+        // Smooth toward fresh target every frame — no stale accumulation
+        this._smooth[si]     += (tx - this._smooth[si])     * this.lerpSpeed;
+        this._smooth[si + 1] += (ty - this._smooth[si + 1]) * this.lerpSpeed;
+        this._smooth[si + 2] += (tz - this._smooth[si + 2]) * this.lerpSpeed;
       }
 
-      // Lerp toward target (smooth, not instant)
-      t.sx += (totalSx - t.sx) * 0.08;
-      t.sy += (totalSy - t.sy) * 0.08;
-      t.sz += (totalSz - t.sz) * 0.08;
-
-      // Apply directly to the mesh instance position (fog behaviors run after
-      // the constraint physics loop has already written node positions to meshes,
-      // so we add the stretch delta directly here for the current frame).
+      // Apply directly to mesh (physics loop already wrote positions this frame)
       const mesh = system.nodeInstances[i];
       if (mesh) {
-        mesh.position.x += t.sx;
-        mesh.position.y += t.sy;
-        mesh.position.z += t.sz;
+        mesh.position.x += this._smooth[si];
+        mesh.position.y += this._smooth[si + 1];
+        mesh.position.z += this._smooth[si + 2];
       }
 
-      // Also store on node so constraint lines pick it up (they read node.stretchX
-      // in the *next* physics pass — acceptable one-frame lag on lines).
-      node.stretchX = (node.stretchX || 0) + t.sx;
-      node.stretchY = (node.stretchY || 0) + t.sy;
-      node.stretchZ = (node.stretchZ || 0) + t.sz;
+      // Write to node.stretchX/Y/Z for constraint lines (picked up next physics frame)
+      node.stretchX = (node.stretchX || 0) + this._smooth[si];
+      node.stretchY = (node.stretchY || 0) + this._smooth[si + 1];
+      node.stretchZ = (node.stretchZ || 0) + this._smooth[si + 2];
     });
   },
 };
 
-registerFogBehavior(stretchToHubs);
+registerFogBehavior(stretchToSophia);
