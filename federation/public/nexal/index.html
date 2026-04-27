@@ -21,7 +21,27 @@
       --text:    #b0e0f8;
       --accent:  #00e5ff;
       --danger:  #ff3366;
+
+      /* Glassmorphism */
+      --blur:    14px;
+      --glow:    0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+      --hover-glow: 0 0 30px rgba(0,229,255,0.18), inset 0 0 40px rgba(0,229,255,0.08);
     }
+
+    /* Bright mode overrides */
+    html.bright-mode {
+      --bg:      #0a1628;
+      --panel:   rgba(10,30,60,0.72);
+      --border:  rgba(0,229,255,0.4);
+      --text:    #d0f0ff;
+      --blur:    18px;
+      --glow:    0 0 30px rgba(0,229,255,0.15), inset 0 0 40px rgba(0,229,255,0.06);
+      --hover-glow: 0 0 40px rgba(0,229,255,0.25), inset 0 0 50px rgba(0,229,255,0.12);
+    }
+    html.bright-mode .panel { background: rgba(10,30,60,0.72); }
+    html.bright-mode .panel::before { opacity: 0.5; }
+    html.bright-mode .logo { text-shadow: 0 0 25px var(--cyan), 0 0 60px rgba(0,229,255,0.6); }
+    html.bright-mode #ticker-strip { background: rgba(10,30,60,0.85); border-top-color: rgba(0,229,255,0.3); }
 
     html, body {
       width: 100%; height: 100%;
@@ -46,33 +66,98 @@
       z-index: 10;
     }
 
+    /* ── PANEL BASE — Glassmorphism + Animated Corner Accents ── */
     .panel {
       pointer-events: all;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 4px;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
       position: absolute;
       padding: 14px 18px;
-      box-shadow: 0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+      box-shadow: var(--glow);
+      transition: box-shadow 0.35s ease, border-color 0.35s ease;
+      /* Entrance: hidden by default, animated via staggered class */
+      opacity: 0;
+      transform: translateY(12px);
+      animation: none;
+    }
+    .panel.entered {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.35s ease, border-color 0.35s ease;
     }
 
+    .panel:hover {
+      box-shadow: var(--hover-glow);
+      border-color: rgba(0,229,255,0.4);
+    }
+
+    /* Animated SVG corner accents (CSS-drawn) */
+    .panel::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 4px;
+      pointer-events: none;
+      background:
+        /* top-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 1px 14px no-repeat,
+        /* top-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 1px 14px no-repeat,
+        /* bottom-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 1px 14px no-repeat,
+        /* bottom-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 1px 14px no-repeat;
+      animation: cornerPulse 3s ease-in-out infinite;
+    }
+    @keyframes cornerPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* Scanline texture — subtler */
     .panel::before {
       content: '';
       position: absolute;
       inset: 0;
       background: repeating-linear-gradient(
         0deg, transparent, transparent 2px,
-        rgba(0,229,255,0.02) 2px, rgba(0,229,255,0.02) 4px
+        rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px
       );
       pointer-events: none;
       border-radius: 4px;
+      z-index: 1;
+    }
+
+    /* Staggered entrance delays per panel */
+    #title-panel { --enter-delay: 0s; }
+    #agents-panel { --enter-delay: 0.1s; }
+    #sophia-panel { --enter-delay: 0.2s; }
+    #status-panel { --enter-delay: 0.15s; }
+    #detail-panel { --enter-delay: 0s; }
+    #ticker-strip { --enter-delay: 0.3s; }
+
+    .panel.entered {
+      animation: slideIn 0.5s ease forwards;
+      animation-delay: var(--enter-delay, 0s);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* Title Panel */
     #title-panel {
       top: 18px; left: 20px;
       min-width: 280px;
+      display: flex;
+      flex-direction: column;
     }
 
     #title-panel .logo {
@@ -104,6 +189,26 @@
       width: 6px; height: 6px; border-radius: 50%;
       background: var(--green);
       animation: pulse 2s infinite;
+    }
+
+    /* Bright/dim mode toggle */
+    #mode-toggle {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 24px; height: 24px;
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 3px;
+      background: rgba(0,229,255,0.08);
+      color: var(--cyan);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      z-index: 2;
+    }
+    #mode-toggle:hover {
+      background: rgba(0,229,255,0.2);
+      border-color: var(--cyan);
     }
 
     @keyframes pulse {
@@ -154,7 +259,7 @@
 
     /* SOPHIA Panel */
     #sophia-panel {
-      bottom: 20px; left: 20px;
+      bottom: 60px; left: 20px;
       width: 280px;
     }
 
@@ -229,6 +334,8 @@
 
     #detail-panel.visible {
       display: block;
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .detail-title {
@@ -269,13 +376,95 @@
       text-transform: uppercase;
     }
 
+    /* ── TICKER STRIP ──────────────────────────────────────────── */
+    #ticker-strip {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 32px;
+      background: rgba(0,8,20,0.85);
+      border-top: 1px solid rgba(0,229,255,0.15);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      z-index: 10;
+      padding: 0 12px;
+      gap: 10px;
+    }
+
+    #ticker-strip .ticker-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #ticker-strip .ticker-label::before {
+      content: "▸ ";
+    }
+
+    #ticker-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    #ticker-scroll {
+      display: flex;
+      gap: 40px;
+      white-space: nowrap;
+      animation: tickerScroll 30s linear infinite;
+    }
+
+    .ticker-item {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(176,224,248,0.7);
+      flex-shrink: 0;
+    }
+
+    .ticker-item .ticker-time {
+      color: rgba(0,229,255,0.5);
+      margin-right: 6px;
+    }
+
+    .ticker-item .ticker-event-join { color: var(--green); }
+    .ticker-item .ticker-event-leave { color: var(--danger); }
+    .ticker-item .ticker-event-task { color: var(--gold); }
+
+    @keyframes tickerScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ── PULSING RINGS (CSS overlay for hub spheres) ───────────── */
+    .hub-ring-overlay {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      border: 1px solid rgba(0,229,255,0.4);
+      animation: ringPulse 2.5s ease-out infinite;
+      z-index: 5;
+    }
+    @keyframes ringPulse {
+      0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; }
+      100% { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+    }
+
     /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
     @media (max-width: 768px) {
       #title-panel,
       #agents-panel,
       #sophia-panel,
       #status-panel,
-      #detail-panel {
+      #detail-panel,
+      #ticker-strip {
         display: none !important;
       }
 
@@ -324,6 +513,7 @@
 <div id="hud">
   <!-- Title Panel -->
   <div id="title-panel" class="panel">
+    <button id="mode-toggle" title="Toggle bright/dim mode">◐</button>
     <div class="logo">MANIFOLD</div>
     <div class="sub">Numinous Architecture — Federation Mesh</div>
     <div class="version">
@@ -355,27 +545,31 @@
     <div class="status-title">Federation Status</div>
     <div class="status-row">
       <span class="status-label">Agents Online</span>
-      <span class="status-value" id="agent-count">-</span>
+      <span class="status-value" id="agent-count">—</span>
     </div>
     <div class="status-row">
       <span class="status-label">Capabilities</span>
-      <span class="status-value" id="capability-count">-</span>
+      <span class="status-value" id="capability-count">—</span>
     </div>
     <div class="status-row">
       <span class="status-label">Mesh Latency</span>
-      <span class="status-value">23ms</span>
+      <span class="status-value" id="mesh-latency">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Messages / Sec</span>
-      <span class="status-value">135/s</span>
+      <span class="status-label">Peers (Hubs)</span>
+      <span class="status-value" id="peer-count">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Uptime</span>
-      <span class="status-value">99.97%</span>
+      <span class="status-label">Hub Names</span>
+      <span class="status-value" id="hub-names" style="font-size:10px;letter-spacing:1px">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Relay</span>
-      <span class="status-value">nexal.network</span>
+      <span class="status-label">Last Updated</span>
+      <span class="status-value" id="last-updated">—</span>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px">CAPABILITY PRESSURE</div>
+      <div id="pressure-bars"></div>
     </div>
   </div>
 
@@ -394,6 +588,16 @@
       </div>
     </div>
     <div id="detail-capabilities"></div>
+  </div>
+</div>
+
+<!-- Ticker Strip -->
+<div id="ticker-strip" class="panel">
+  <span class="ticker-label">Feed</span>
+  <div id="ticker-content">
+    <div id="ticker-scroll">
+      <!-- Populated dynamically -->
+    </div>
   </div>
 </div>
 
