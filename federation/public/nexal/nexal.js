@@ -26,9 +26,9 @@ init();
 // ── Bridge: 2D layer listens to 3D events ─────────────────────────────────
 
 // When mesh data arrives, populate the HUD agent list and status panel
-bridge.on('mesh-updated', ({ agents }) => {
+bridge.on('mesh-updated', ({ agents, rtt }) => {
   updateAgentsList(agents);
-  updateStatusPanel(agents);
+  updateStatusPanel(agents, rtt);
 });
 
 // When user clicks an agent in 3D space, show the detail panel
