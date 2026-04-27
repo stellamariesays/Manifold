@@ -128,7 +128,7 @@ export function runFogBehaviors(elapsed) {
  */
 const followHubCentroid = {
   id: 'follow-hub-centroid',
-  mode: 'named',         // track Sophia's hub (thefog) directly
+  mode: 'centroid',
   primaryHub: 'thefog',
   lerpSpeed: 0.015,      // gentle chase — fog lags behind hub noticeably
   yScale: 0.2,           // damp vertical pull significantly
@@ -212,22 +212,24 @@ const followHubCentroid = {
 // Register on module load (disabled — pulse-to-sophia handles group movement)
 registerFogBehavior({ ...followHubCentroid, enabled: false });
 
-// ── Built-in: pulse-to-sophia ─────────────────────────────────────────────
+// ── Built-in: pulse-to-hub ────────────────────────────────────────────────
 
 /**
- * Every ~0.5s, lerps the entire fog GROUP toward Sophia's current orbital
- * position, then lerps back to base. No per-node math — just moves the group.
+ * Every cyclePeriod seconds, pulses the fog group toward whichever hub has
+ * the highest fogAttraction value (read live from window._hubMeta).
  *
- * Config:
- *   pullFraction  0–1   How far toward Sophia to move (0.3 = 30% of the way)
- *   cyclePeriod   secs  Full out-and-back period
- *   stretchRatio  0–1   Fraction of cycle spent moving out (rest = returning)
+ * fogAttraction is a 0–100 scalar set per-hub in the server config's hubMeta.
+ * Default is 0 (no attraction). The hub with the highest non-zero value wins.
+ * If no hub has fogAttraction > 0, the behavior does nothing.
+ *
+ * The fog group moves pullFraction * (attraction/100) of the way toward the
+ * hub, then returns to base — no per-node math, no coordinate confusion.
  */
-const pulseToSophia = {
-  id: 'pulse-to-sophia',
-  pullFraction: 0.35,
-  cyclePeriod: 0.5,
-  stretchRatio: 0.55,
+const pulseToHub = {
+  id: 'pulse-to-hub',
+  cyclePeriod: 0.5,   // seconds per full out-and-back
+  stretchRatio: 0.55, // fraction of cycle spent moving out
+  maxPullFraction: 0.35, // pull at attraction=100
 
   _base: null,
 
@@ -235,33 +237,35 @@ const pulseToSophia = {
     const { system, hubGroups, elapsed } = ctx;
     if (!system) return;
 
-    const sophia = hubGroups.find(h => h.userData.hubName === 'thefog');
-    if (!sophia) return;
+    // Find the hub with the highest fogAttraction from live mesh metadata
+    const hubMeta = (typeof window !== 'undefined' && window._hubMeta) ? window._hubMeta : {};
+    let bestHub = null;
+    let bestAttraction = 0;
+    hubGroups.forEach(h => {
+      const attraction = hubMeta[h.userData.hubName]?.fogAttraction ?? 0;
+      if (attraction > bestAttraction) {
+        bestAttraction = attraction;
+        bestHub = h;
+      }
+    });
 
-    // Capture base position once (the follow-hub-centroid behavior moves it,
-    // so snapshot it at the start of each cycle instead)
+    if (!bestHub || bestAttraction <= 0) return;
+
+    const pullFraction = this.maxPullFraction * (bestAttraction / 100);
+
+    // Snapshot base at cycle start
     if (!this._base) this._base = system.group.position.clone();
-
     const cyclePos = (elapsed % this.cyclePeriod) / this.cyclePeriod;
+    if (cyclePos < 0.02) this._base.copy(system.group.position);
+
+    // Triangle wave: out then back
     const t = cyclePos < this.stretchRatio
-      ? cyclePos / this.stretchRatio                        // 0→1 stretching out
-      : 1 - (cyclePos - this.stretchRatio) / (1 - this.stretchRatio); // 1→0 retracting
+      ? cyclePos / this.stretchRatio
+      : 1 - (cyclePos - this.stretchRatio) / (1 - this.stretchRatio);
+    const eased = t * t * (3 - 2 * t); // smoothstep
 
-    // Smooth with ease
-    const eased = t * t * (3 - 2 * t);
-
-    // At the start of each cycle, re-snapshot base from current group position
-    if (cyclePos < 0.02) {
-      this._base.copy(system.group.position);
-    }
-
-    // Target = lerp from base toward Sophia by pullFraction
-    system.group.position.lerpVectors(
-      this._base,
-      sophia.position,
-      eased * this.pullFraction,
-    );
+    system.group.position.lerpVectors(this._base, bestHub.position, eased * pullFraction);
   },
 };
 
-registerFogBehavior(pulseToSophia);
+registerFogBehavior(pulseToHub);
