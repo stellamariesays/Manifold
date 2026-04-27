@@ -1,13 +1,17 @@
 /**
- * auth.ts — /auth/verify endpoint for nexal.network access code validation.
+ * auth.ts — /auth/verify and /auth/token-check endpoints for nexal.network.
  *
  * POST /auth/verify  { username, code }
- *   → 200 { ok: true,  token: <jwt-ish>, username }
- *   → 401 { ok: false, error: 'invalid_code' | 'already_used' }
+ *   → 200 { ok: true,  token, username }   — first use only; code consumed
+ *   → 401 { ok: false, error: 'invalid_code' | 'code_taken' | 'already_used' }
  *
- * Codes are stored in data/access-codes.json.
- * On first use the code is bound to the username (case-insensitive).
- * Subsequent logins with the same username+code are allowed (idempotent).
+ * POST /auth/token-check  { token }
+ *   → 200 { ok: true,  username }   — token valid
+ *   → 401 { ok: false, error: 'invalid_token' }
+ *
+ * Single-use codes: once a code is redeemed the `used` flag is set and it
+ * cannot be used again. The signed token is the sole long-lived credential.
+ * To access from a new device, a fresh code is required.
  */
 import { type Router } from 'express'
 import fs from 'fs'
@@ -35,14 +39,35 @@ function saveCodes(codes: CodeEntry[]): void {
 }
 
 function makeToken(username: string, code: string): string {
-  // Simple HMAC token — not a full JWT but fine for this use case
   const secret = process.env.NEXAL_TOKEN_SECRET ?? 'nexal-secret-change-me'
   const payload = `${username.toLowerCase()}:${code.toUpperCase()}`
   const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32)
   return Buffer.from(payload).toString('base64') + '.' + sig
 }
 
+function verifyToken(token: string): { valid: boolean; username?: string } {
+  try {
+    const secret = process.env.NEXAL_TOKEN_SECRET ?? 'nexal-secret-change-me'
+    const [b64, sig] = token.split('.')
+    if (!b64 || !sig) return { valid: false }
+
+    const payload = Buffer.from(b64, 'base64').toString('utf8')
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 32)
+
+    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+      return { valid: false }
+    }
+
+    const username = payload.split(':')[0]
+    return { valid: true, username }
+  } catch {
+    return { valid: false }
+  }
+}
+
 export function buildAuthRouter(router: Router): void {
+
+  // ── POST /auth/verify ─────────────────────────────────────────────────
   router.post('/auth/verify', (req, res) => {
     const { username, code } = req.body as { username?: string; code?: string }
 
@@ -62,20 +87,37 @@ export function buildAuthRouter(router: Router): void {
       return
     }
 
-    // Already bound to a different username
-    if (entry.username && entry.username !== normUser) {
-      res.status(401).json({ ok: false, error: 'code_taken' })
+    // Code already used — single-use enforcement
+    if (entry.used) {
+      res.status(401).json({ ok: false, error: 'already_used' })
       return
     }
 
-    // Bind username on first use
-    if (!entry.username) {
-      entry.username = normUser
-      entry.used = true
-      saveCodes(codes)
-    }
+    // First use: bind username, mark consumed
+    entry.username = normUser
+    entry.used = true
+    saveCodes(codes)
 
     const token = makeToken(normUser, normCode)
     res.json({ ok: true, token, username: normUser })
+  })
+
+  // ── POST /auth/token-check ────────────────────────────────────────────
+  // Client calls this on load to validate a stored token without a code.
+  router.post('/auth/token-check', (req, res) => {
+    const { token } = req.body as { token?: string }
+
+    if (!token) {
+      res.status(400).json({ ok: false, error: 'missing_token' })
+      return
+    }
+
+    const result = verifyToken(token)
+    if (!result.valid) {
+      res.status(401).json({ ok: false, error: 'invalid_token' })
+      return
+    }
+
+    res.json({ ok: true, username: result.username })
   })
 }

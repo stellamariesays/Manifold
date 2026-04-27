@@ -451,15 +451,42 @@
 
 <script type="module">
 // ── Session guard ─────────────────────────────────────────────────────────
-const token = localStorage.getItem('nexal_token');
-const user  = localStorage.getItem('nexal_user');
-if (!token) {
-  window.location.replace('/nexal/login.html');
-}
-if (user) {
-  const el = document.getElementById('query-user');
-  if (el) el.textContent = user;
-}
+// Verify stored token server-side on every load.
+// If invalid/missing, clear storage and redirect to login.
+(async () => {
+  const token = localStorage.getItem('nexal_token');
+  if (!token) {
+    window.location.replace('/nexal/login.html');
+    return;
+  }
+  try {
+    const res = await fetch('/auth/token-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      localStorage.removeItem('nexal_token');
+      localStorage.removeItem('nexal_user');
+      window.location.replace('/nexal/login.html');
+      return;
+    }
+    // Update stored username from server response (source of truth)
+    if (data.username) {
+      localStorage.setItem('nexal_user', data.username);
+      const el = document.getElementById('query-user');
+      if (el) el.textContent = data.username;
+    }
+  } catch {
+    // Network error — allow through rather than locking out
+    const user = localStorage.getItem('nexal_user');
+    if (user) {
+      const el = document.getElementById('query-user');
+      if (el) el.textContent = user;
+    }
+  }
+})();
 
 // ── Query panel ───────────────────────────────────────────────────────────
 const PRESET_PROMPT =

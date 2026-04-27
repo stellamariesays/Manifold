@@ -405,8 +405,9 @@ btnEl.addEventListener('click', async () => {
       }, 600);
     } else {
       const messages = {
-        invalid_code: 'Access code not recognised.',
-        code_taken:   'This code is already bound to another handle.',
+        invalid_code:   'Access code not recognised.',
+        code_taken:     'This code is already bound to another handle.',
+        already_used:   'This code has already been redeemed. Each code is single-use — contact Hal for a new one.',
         missing_fields: 'Please complete all fields.',
       };
       errEl.textContent = messages[data.error] ?? 'Access denied.';
