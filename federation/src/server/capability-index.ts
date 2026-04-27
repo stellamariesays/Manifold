@@ -18,9 +18,6 @@ export class CapabilityIndex {
   /** Raw (unresolved) dark circle pressures per hub, keyed by "circleName:hub" */
   private rawPressures: Map<string, number> = new Map()
 
-  /** Attestation scores: "agentKey:capability" → { score, count, attested } */
-  private attestationScores: Map<string, { score: number; count: number; attested: boolean }> = new Map()
-
   // ── Agent management ────────────────────────────────────────────────────────
 
   upsertAgent(agent: AgentInfo, isLocal = false): { added: boolean; capChanges: { added: string[]; removed: string[] } } {
@@ -162,7 +159,6 @@ export class CapabilityIndex {
       }
 
       existing.byHub = existing.byHub ?? {}
-      existing.byHub[hub] = dc.pressure  // track which hubs report this circle
 
       this.darkCircles.set(key, existing)
     }
@@ -219,12 +215,10 @@ export class CapabilityIndex {
       // Recompute per-hub resolved pressures from raw
       let maxResolved = 0
       const hubs = Object.keys(circle.byHub ?? {})
-      if (!circle.byHub) circle.byHub = {}
 
       for (const hub of hubs) {
         const raw = this.rawPressures.get(`${circleName}:${hub}`) ?? 0
         const resolved = raw * factor
-        if (!circle.byHub) circle.byHub = {}
         circle.byHub[hub] = resolved
         if (resolved > maxResolved) maxResolved = resolved
       }
@@ -242,82 +236,6 @@ export class CapabilityIndex {
 
   getDarkCircle(name: string): DarkCircleInfo | undefined {
     return this.darkCircles.get(name)
-  }
-
-  // ── Stats ────────────────────────────────────────────────────────────────────
-
-  // ── Attestation tracking ──────────────────────────────────────────────────
-
-  /**
-   * Update attestation score for an agent+capability.
-   */
-  setAttestationScore(
-    agentKey: string,
-    capability: string,
-    score: number,
-    count: number,
-    attested: boolean,
-  ): void {
-    this.attestationScores.set(`${agentKey}:${capability}`, { score, count, attested })
-  }
-
-  /**
-   * Get attestation score for an agent+capability.
-   */
-  getAttestationScore(
-    agentKey: string,
-    capability: string,
-  ): { score: number; count: number; attested: boolean } | undefined {
-    return this.attestationScores.get(`${agentKey}:${capability}`)
-  }
-
-  /**
-   * Find agents by capability with optional attestedOnly filter.
-   * When attestedOnly is true, only returns agents whose capability is attested.
-   * Results are sorted: attested agents first (by score desc), then unattested.
-   */
-  findByCapabilityAttested(
-    capability: string,
-    options?: { attestedOnly?: boolean; minPressure?: number },
-  ): AgentResult[] {
-    const base = this.findByCapability(capability, options?.minPressure)
-
-    if (options?.attestedOnly) {
-      return base.filter(a => {
-        const key = `${a.name}@${a.hub}`
-        const att = this.attestationScores.get(`${key}:${capability}`)
-        return att?.attested === true
-      })
-    }
-
-    // Sort: attested first (by score desc), then unattested
-    return base.sort((a, b) => {
-      const aKey = `${a.name}@${a.hub}`
-      const bKey = `${b.name}@${b.hub}`
-      const aAtt = this.attestationScores.get(`${aKey}:${capability}`)
-      const bAtt = this.attestationScores.get(`${bKey}:${capability}`)
-
-      const aAttested = aAtt?.attested ? 1 : 0
-      const bAttested = bAtt?.attested ? 1 : 0
-
-      if (aAttested !== bAttested) return bAttested - aAttested
-      return (bAtt?.score ?? 0) - (aAtt?.score ?? 0)
-    })
-  }
-
-  /**
-   * Get all attestation data for an agent.
-   */
-  getAgentAttestations(agentKey: string): Array<{ capability: string; score: number; count: number; attested: boolean }> {
-    const results: Array<{ capability: string; score: number; count: number; attested: boolean }> = []
-    const prefix = `${agentKey}:`
-    for (const [key, value] of this.attestationScores) {
-      if (key.startsWith(prefix)) {
-        const capability = key.slice(prefix.length)
-        results.push({ capability, ...value })
-      }
-    }
-    return results
   }
 
   // ── Stats ────────────────────────────────────────────────────────────────────

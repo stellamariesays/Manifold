@@ -1,4 +1,4 @@
-import type { MeshSyncMessageV2, MeshDeltaMessage, MeshDeltaAckMessage } from '../protocol/messages.js'
+import type { MeshSyncMessage, MeshDeltaMessage, MeshDeltaAckMessage } from '../protocol/messages.js'
 import type { CapabilityIndex } from './capability-index.js'
 import type { PeerRegistry } from './peer-registry.js'
 import { DeltaSync } from './delta-sync.js'
@@ -134,7 +134,7 @@ export class MeshSync {
     // Always send full snapshot to local clients (they don't track versions)
     if (this.localBroadcast) {
       const snapshot = this.deltaSync.getFullSnapshot()
-      const fullMsg: MeshSyncMessageV2 = {
+      const fullMsg: MeshSyncMessage = {
         type: 'mesh_sync',
         hub: this.hub,
         version: this.deltaSync.getVersion(),
@@ -158,7 +158,7 @@ export class MeshSync {
 
       if (delta.type === 'full') {
         // Send full snapshot with version
-        const msg: MeshSyncMessageV2 = {
+        const msg: MeshSyncMessage = {
           type: 'mesh_sync',
           hub: this.hub,
           version: delta.version,
@@ -193,7 +193,7 @@ export class MeshSync {
     const localAgents = this.capIndex.getLocalAgents()
     const darkCircles = this.capIndex.getDarkCircles()
 
-    const msg: MeshSyncMessageV2 = {
+    const msg: MeshSyncMessage = {
       type: 'mesh_sync',
       hub: this.hub,
       agents: localAgents.map(a => ({
@@ -209,7 +209,6 @@ export class MeshSync {
         pressure: dc.pressure,
         hub: this.hub,
       })),
-      version: this.deltaSyncEnabled ? this.deltaSync.getVersion() : 0,
       timestamp: new Date().toISOString(),
     }
 

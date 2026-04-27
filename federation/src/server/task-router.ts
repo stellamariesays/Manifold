@@ -27,7 +27,6 @@ import type { RateLimiter } from './security.js'
 export interface PendingTask {
   task: TaskRequest
   origin: 'local' | 'remote'
-  originHub?: string      // hub that sent the task (for remote tasks, to send result back)
   sourceKey: string       // for backpressure tracking
   runnerId?: string       // local runner handling this task
   replyTo: WebSocket | null    // null if from remote peer
@@ -63,22 +62,8 @@ export class TaskRouter extends EventEmitter {
   private readonly completedTtlMs: number
   private readonly debug: boolean
 
-  /**
-   * Pending tasks keyed by (originHub, taskId) composite key.
-   * Using a composite key prevents cross-hub tasks from being falsely
-   * rejected as duplicates when different hubs happen to generate the
-   * same task ID.  Key format: "<originHub>:<taskId>".
-   * Use `pendingKey(task)` to derive the key; use `taskIdToKey` to
-   * look up the composite key from a bare task ID (needed when handling
-   * results/timeouts that carry only `result.id`).
-   */
+  /** Pending tasks keyed by task ID */
   private pending = new Map<string, PendingTask>()
-
-  /**
-   * Reverse lookup: bare taskId → composite pending key.
-   * Needed because task_result messages carry only `result.id`, not the origin.
-   */
-  private taskIdToKey = new Map<string, string>()
 
   /** Queued tasks waiting for a runner slot */
   private queue: Array<{ task: TaskRequest; agentName: string; replyTo: WebSocket | null; sourceKey: string }> = []
@@ -161,7 +146,6 @@ export class TaskRouter extends EventEmitter {
       if (pending.timeout) clearTimeout(pending.timeout)
     }
     this.pending.clear()
-    this.taskIdToKey.clear()
     this.queue = []
     this.pendingPerSource.clear()
     this.queuedPerSource.clear()
@@ -182,7 +166,6 @@ export class TaskRouter extends EventEmitter {
 
     ws.on('close', () => {
       this.runners.delete(runnerId)
-      this.emit('runner:disconnect', { runnerId, agents: agents as string[] })
       this.log(`Runner disconnected: ${runnerId.substring(0, 8)}...`)
     })
   }
@@ -229,17 +212,15 @@ export class TaskRouter extends EventEmitter {
       return
     }
 
-    // Check if we already have this task (dedup).
-    // Key is scoped to (originHub, taskId) so the same numeric/UUID task ID
-    // generated independently on two different hubs is NOT treated as a duplicate.
-    if (this.pending.has(this.pendingKey(task))) {
+    // Check if we already have this task (dedup)
+    if (this.pending.has(task.id)) {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
         error: 'Duplicate task ID',
         completed_at: new Date().toISOString(),
       }
-      this.sendResult(result, replyTo, sourceHub)
+      this.sendResult(result, replyTo)
       this.emit('task:complete', { result, task })
       return
     }
@@ -333,21 +314,18 @@ export class TaskRouter extends EventEmitter {
 
     // Set up pending task
     const timeoutMs = task.timeout_ms ?? this.defaultTimeoutMs
-    const pKey = this.pendingKey(task)
     const pending: PendingTask = {
       task,
       origin: replyTo ? 'local' : 'remote',
-      originHub: replyTo ? undefined : (task.origin || undefined),
       sourceKey,
       runnerId,
       replyTo,
       createdAt: Date.now(),
       timeout: setTimeout(() => {
-        this.handleTimeout(task.id, pKey)
+        this.handleTimeout(task.id)
       }, timeoutMs),
     }
-    this.pending.set(pKey, pending)
-    this.taskIdToKey.set(task.id, pKey)
+    this.pending.set(task.id, pending)
 
     // Track per-runner count
     const rCount = (this.pendingPerRunner.get(runnerId) ?? 0) + 1
@@ -402,7 +380,6 @@ export class TaskRouter extends EventEmitter {
     }
 
     // Track pending (waiting for result from remote hub)
-    const remotePKey = this.pendingKey(task)
     const pending: PendingTask = {
       task,
       origin: 'local',
@@ -410,11 +387,10 @@ export class TaskRouter extends EventEmitter {
       replyTo,
       createdAt: Date.now(),
       timeout: setTimeout(() => {
-        this.handleTimeout(task.id, remotePKey)
+        this.handleTimeout(task.id)
       }, task.timeout_ms ?? this.defaultTimeoutMs),
     }
-    this.pending.set(remotePKey, pending)
-    this.taskIdToKey.set(task.id, remotePKey)
+    this.pending.set(task.id, pending)
 
     // Track per-source count
     this.pendingPerSource.set(sourceKey, (this.pendingPerSource.get(sourceKey) ?? 0) + 1)
@@ -427,18 +403,16 @@ export class TaskRouter extends EventEmitter {
    * Handle a task_result from a runner or remote peer.
    */
   handleResult(result: TaskResult): void {
-    const pKey = this.taskIdToKey.get(result.id)
-    const pending = pKey ? this.pending.get(pKey) : undefined
+    const pending = this.pending.get(result.id)
 
-    if (!pending || !pKey) {
+    if (!pending) {
       this.log(`Received result for unknown task: ${result.id.substring(0, 8)}...`)
       return
     }
 
     // Clear timeout and remove from pending
     if (pending.timeout) clearTimeout(pending.timeout)
-    this.pending.delete(pKey)
-    this.taskIdToKey.delete(result.id)
+    this.pending.delete(result.id)
 
     // Decrement per-runner count
     if (pending.runnerId) {
@@ -456,7 +430,7 @@ export class TaskRouter extends EventEmitter {
     setTimeout(() => this.completed.delete(result.id), this.completedTtlMs)
 
     // Send result back to origin
-    this.sendResult(result, pending.replyTo, pending.originHub)
+    this.sendResult(result, pending.replyTo)
 
     this.log(`Result: ${result.status} for ${result.id.substring(0, 8)}... (${result.execution_ms ?? '?'}ms)`)
     this.emit('task:complete', { result, task: pending.task })
@@ -465,12 +439,11 @@ export class TaskRouter extends EventEmitter {
     this._drainQueue()
   }
 
-  private handleTimeout(taskId: string, pKey: string): void {
-    const pending = this.pending.get(pKey)
+  private handleTimeout(taskId: string): void {
+    const pending = this.pending.get(taskId)
     if (!pending) return
 
-    this.pending.delete(pKey)
-    this.taskIdToKey.delete(taskId)
+    this.pending.delete(taskId)
 
     // Decrement per-runner count
     if (pending.runnerId) {
@@ -545,7 +518,6 @@ export class TaskRouter extends EventEmitter {
 
       // Dispatch
       const timeoutMs = task.timeout_ms ?? this.defaultTimeoutMs
-      const drainPKey = this.pendingKey(task)
       const pending: PendingTask = {
         task,
         origin: replyTo ? 'local' : 'remote',
@@ -554,11 +526,10 @@ export class TaskRouter extends EventEmitter {
         replyTo,
         createdAt: Date.now(),
         timeout: setTimeout(() => {
-          this.handleTimeout(task.id, drainPKey)
+          this.handleTimeout(task.id)
         }, timeoutMs),
       }
-      this.pending.set(drainPKey, pending)
-      this.taskIdToKey.set(task.id, drainPKey)
+      this.pending.set(task.id, pending)
 
       const rCount = (this.pendingPerRunner.get(runnerId) ?? 0) + 1
       this.pendingPerRunner.set(runnerId, rCount)
@@ -574,23 +545,18 @@ export class TaskRouter extends EventEmitter {
     }
   }
 
-  private sendResult(result: TaskResult, ws: WebSocket | null, originHub?: string): void {
+  private sendResult(result: TaskResult, ws: WebSocket | null): void {
     const msg: TaskResultMessage = { type: 'task_result', result }
 
     if (ws && ws.readyState === 1) { // WebSocket.OPEN
       ws.send(JSON.stringify(msg))
-    } else if (originHub && originHub !== this.hub) {
-      // Remote task — send result back to originating hub via federation
-      const sent = this.peerRegistry.sendTo(originHub, JSON.stringify(msg))
-      if (!sent) {
-        this.log(`Failed to send result back to ${originHub} for task ${result.id.substring(0, 8)}...`)
-      }
     }
+    // If no ws (remote origin), the remote hub's router will deliver it
   }
 
   /** Get status of a task by ID */
   getTaskStatus(taskId: string): 'pending' | 'completed' | 'unknown' {
-    if (this.taskIdToKey.has(taskId)) return 'pending'
+    if (this.pending.has(taskId)) return 'pending'
     if (this.completed.has(taskId)) return 'completed'
     return 'unknown'
   }
@@ -644,22 +610,6 @@ export class TaskRouter extends EventEmitter {
     return Array.from(agents)
   }
 
-  /**
-   * Compute the dedup key for a task.
-   *
-   * Cross-hub tasks carry an `origin` field set to the hub that first
-   * submitted them.  Scoping the dedup key to (originHub, taskId) means
-   * that Hub-A/task-42 and Hub-B/task-42 are treated as distinct tasks
-   * rather than being incorrectly rejected as duplicates.
-   *
-   * For locally-originated tasks `origin` is either `this.hub` or absent;
-   * we default to `this.hub` in both cases.
-   */
-  private pendingKey(task: TaskRequest): string {
-    const origin = task.origin ?? this.hub
-    return `${origin}:${task.id}`
-  }
-
   private log(msg: string): void {
     if (this.debug) console.log(`[TaskRouter:${this.hub}] ${msg}`)
   }
@@ -703,7 +653,7 @@ export class TaskRouter extends EventEmitter {
     const { task, hopCount, maxHops, originHub } = msg
 
     // Don't re-forward if we've seen this task or it originated here
-    if (task.origin === this.hub || this.taskIdToKey.has(task.id)) return
+    if (task.origin === this.hub || this.pending.has(task.id)) return
 
     // Parse target
     const [, targetHub] = task.target.includes('@')
@@ -716,14 +666,10 @@ export class TaskRouter extends EventEmitter {
       return
     }
 
-    // Try direct send to target — use task_forward so the target's
-    // handleForward guard (origin check + dedup) applies
+    // Try direct send to target
     const sent = this.peerRegistry.sendTo(targetHub, JSON.stringify({
-      type: 'task_forward',
+      type: 'task_request',
       task,
-      hopCount: hopCount + 1,
-      maxHops,
-      originHub,
     }))
     if (sent) {
       this.log(`Forwarded task ${task.id.substring(0, 8)}... to ${targetHub} (hop ${hopCount})`)
@@ -782,17 +728,15 @@ export class TaskRouter extends EventEmitter {
       }))
       if (sent) {
         // Track as pending
-        const fwdPKey = this.pendingKey(entry.task)
         const pending: PendingTask = {
           task: entry.task,
           origin: 'local',
           sourceKey: entry.sourceKey,
           replyTo: entry.replyTo,
           createdAt: entry.enqueuedAt,
-          timeout: setTimeout(() => this.handleTimeout(entry.task.id, fwdPKey), taskTtl - elapsed),
+          timeout: setTimeout(() => this.handleTimeout(entry.task.id), taskTtl - elapsed),
         }
-        this.pending.set(fwdPKey, pending)
-        this.taskIdToKey.set(entry.task.id, fwdPKey)
+        this.pending.set(entry.task.id, pending)
         this.pendingPerSource.set(entry.sourceKey, (this.pendingPerSource.get(entry.sourceKey) ?? 0) + 1)
         this.log(`Forward queue delivered: ${entry.targetHub} (${entry.task.id.substring(0, 8)}...)`)
         this.emit('task:forward_delivered', { task: entry.task, targetHub: entry.targetHub })

@@ -3,7 +3,7 @@
 Agent Runner (Python) — executes agent scripts and connects to federation.
 
 Connects to the local federation WebSocket, listens for task_request messages,
-spawns agent scripts or dispatches to OpenClaw, captures JSON stdout, returns task_result.
+spawns agent scripts, captures JSON stdout, returns task_result.
 
 Usage:
     python3 agent-runner.py --config runner-config.json --ws ws://localhost:8768
@@ -16,28 +16,13 @@ Config format (JSON):
         "agents": [
             {
                 "name": "cron-monitor",
-                "type": "script",
                 "script": "projects/cron-monitor-void/cron-monitor-agent.py",
                 "cwd": "/home/marvin/.openclaw/workspace",
-                "timeout_ms": 60000,
+                "timeout_ms": 600,
                 "maxConcurrency": 1
-            },
-            {
-                "name": "stella",
-                "type": "openclaw",
-                "agentId": "stella",
-                "capabilities": ["agent-orchestration", "conversation-strategy"],
-                "timeout_ms": 120000,
-                "maxConcurrency": 3
             }
         ]
     }
-
-Agent types:
-    "script"   — runs a Python script via subprocess (default). Script receives
-                 (command, json_args) as positional args, writes JSON to stdout.
-    "openclaw" — dispatches to OpenClaw via `openclaw agent --json --agent <id>`.
-                 The task command+args become the prompt. Response parsed from JSON.
 """
 
 from __future__ import annotations
@@ -179,23 +164,6 @@ class AgentRunner:
 
         self.log(f"Executing: {agent_name} {command} (task {task.get('id', '?')[:8]}...)")
 
-        # Send ack
-        self._send({
-            "type": "task_ack",
-            "task_id": task.get("id", ""),
-            "queue_position": 0,
-        })
-
-        agent_type = agent_cfg.get("type", "script")
-        if agent_type == "openclaw":
-            self._execute_openclaw(task, agent_name, agent_cfg, timeout_ms)
-        else:
-            self._execute_script(task, agent_name, agent_cfg, timeout_ms, command, args)
-
-    # ── Script execution (original path) ────────────────────────────────
-
-    def _execute_script(self, task: dict, agent_name: str, agent_cfg: dict,
-                        timeout_ms: int, command: str, args: dict) -> None:
         start_time = time.monotonic()
 
         # Build command line
@@ -204,6 +172,13 @@ class AgentRunner:
             cmd.append(json.dumps(args))
 
         cwd = agent_cfg.get("cwd")
+
+        # Send ack
+        self._send({
+            "type": "task_ack",
+            "task_id": task.get("id", ""),
+            "queue_position": 0,
+        })
 
         try:
             proc = subprocess.run(
@@ -254,105 +229,6 @@ class AgentRunner:
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             })
             self.log(f"Timeout: {agent_name} ({timeout_ms}ms)")
-
-        except Exception as e:
-            execution_ms = int((time.monotonic() - start_time) * 1000)
-            self._send_result({
-                "id": task["id"],
-                "status": "error",
-                "error": str(e),
-                "executed_by": f"{agent_name}@{self.hub}",
-                "execution_ms": execution_ms,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            })
-
-    # ── OpenClaw execution ──────────────────────────────────────────────
-
-    def _execute_openclaw(self, task: dict, agent_name: str, agent_cfg: dict,
-                          timeout_ms: int) -> None:
-        """Execute a task via OpenClaw CLI (openclaw agent --json).
-
-        The agent config should have:
-            "type": "openclaw",
-            "agentId": "stella",        # OpenClaw agent ID (default: "main")
-            "channel": "telegram",       # optional delivery channel
-        """
-        start_time = time.monotonic()
-        agent_id = agent_cfg.get("agentId", "main")
-
-        # Build the prompt from the task
-        command = task.get("command", "")
-        args = task.get("args", {})
-        parts = [command]
-        if args:
-            parts.append(json.dumps(args))
-        prompt = " ".join(parts).strip() or "status"
-
-        cmd = ["openclaw", "agent", "--json", "--agent", agent_id, "-m", prompt]
-
-        # Optional channel
-        channel = agent_cfg.get("channel")
-        if channel:
-            cmd.extend(["--channel", channel])
-
-        self.log(f"OpenClaw dispatch: {agent_id} <- {prompt[:60]}...")
-
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout_ms / 1000,
-                env={**os.environ, "PATH": os.environ.get("PATH", "")},
-            )
-            execution_ms = int((time.monotonic() - start_time) * 1000)
-
-            if proc.returncode == 0 and proc.stdout.strip():
-                # openclaw agent --json returns {"reply": "...", ...}
-                try:
-                    raw = json.loads(proc.stdout.strip())
-                    # Extract the reply text; if it's JSON, parse it deeper
-                    reply = raw.get("reply", raw.get("message", proc.stdout.strip()))
-                    try:
-                        output = json.loads(reply) if isinstance(reply, str) else reply
-                    except (json.JSONDecodeError, TypeError):
-                        output = {"text": reply}
-                except json.JSONDecodeError:
-                    output = {"text": proc.stdout.strip()}
-
-                self._send_result({
-                    "id": task["id"],
-                    "status": "success",
-                    "output": output,
-                    "executed_by": f"{agent_name}@{self.hub}",
-                    "execution_ms": execution_ms,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                })
-                self.log(f"OpenClaw success: {agent_name} ({execution_ms}ms)")
-            else:
-                error = proc.stderr.strip() or f"Exit code {proc.returncode}"
-                self._send_result({
-                    "id": task["id"],
-                    "status": "error",
-                    "error": error,
-                    "output": {"raw": proc.stdout.strip()} if proc.stdout.strip() else None,
-                    "executed_by": f"{agent_name}@{self.hub}",
-                    "execution_ms": execution_ms,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                })
-                self.log(f"OpenClaw error: {agent_name} — {error[:100]} ({execution_ms}ms)")
-
-        except subprocess.TimeoutExpired:
-            execution_ms = int((time.monotonic() - start_time) * 1000)
-            self._send_result({
-                "id": task["id"],
-                "status": "timeout",
-                "error": f"OpenClaw agent timed out after {timeout_ms}ms",
-                "executed_by": f"{agent_name}@{self.hub}",
-                "execution_ms": execution_ms,
-                "completed_at": datetime.now(timezone.utc).isoformat(),
-            })
-            self.log(f"OpenClaw timeout: {agent_name} ({timeout_ms}ms)")
 
         except Exception as e:
             execution_ms = int((time.monotonic() - start_time) * 1000)
@@ -421,21 +297,9 @@ class AgentRunner:
         return ws_url.replace("ws://", "http://").replace("8768", "8767")
 
     def _register_all(self) -> None:
-        """Register agents via WebSocket agent_register messages."""
+        """POST /agents/register for each agent in config."""
         for name, cfg in self.agents.items():
             capabilities = cfg.get("capabilities", ["task-execution"])
-            seams = cfg.get("seams", [])
-            try:
-                self._send({
-                    "type": "agent_register",
-                    "name": name,
-                    "capabilities": capabilities,
-                    "seams": seams,
-                })
-                self.log(f"WS register {name} sent ({len(capabilities)} caps)")
-            except Exception as e:
-                self.log(f"WS register {name} failed: {e}")
-            # Also try REST for backward compat with older servers
             try:
                 body = json.dumps({"name": name, "capabilities": capabilities}).encode()
                 req = Request(
@@ -447,8 +311,8 @@ class AgentRunner:
                 with urlopen(req, timeout=5) as resp:
                     result = json.loads(resp.read())
                     self.log(f"REST register {name}: {result.get('status', '?')} ({len(capabilities)} caps)")
-            except Exception:
-                pass  # WS path is primary, REST is optional
+            except Exception as e:
+                self.log(f"REST register {name} failed: {e} (WS path still active)")
 
     def _deregister_all(self) -> None:
         """DELETE /agents/:name for each agent on shutdown."""

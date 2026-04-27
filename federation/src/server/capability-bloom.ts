@@ -29,8 +29,8 @@ export interface BloomFilterOptions {
 }
 
 export class BloomFilter {
-  size: number        // number of bits
-  hashCount: number   // number of hash functions
+  readonly size: number        // number of bits
+  readonly hashCount: number   // number of hash functions
   private bits: Uint8Array     // bit storage (byte-packed)
 
   constructor(options?: BloomFilterOptions) {
@@ -50,8 +50,8 @@ export class BloomFilter {
   /** Reconstruct from serialized data. */
   static fromSerialized(size: number, hashCount: number, bits: Uint8Array): BloomFilter {
     const bf = Object.create(BloomFilter.prototype) as BloomFilter
-    ;(bf as any).size = size
-    ;(bf as any).hashCount = hashCount
+    bf.size = size
+    bf.hashCount = hashCount
     bf.bits = bits
     return bf
   }

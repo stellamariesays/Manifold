@@ -16,13 +16,11 @@ import { MetricsCollector } from './metrics.js'
 import { TaskAllowlist, RateLimiter, createAuthMiddleware, type SecurityConfig } from './security.js'
 import { DetectionLedger } from './detection-ledger.js'
 import { DetectionCoord } from './detection-coord.js'
-import { DetectionSync } from './detection-sync.js'
 import { parseMessage } from '../protocol/validation.js'
 import type {
   FederationMessage,
   CapabilityQueryMessage,
   AgentRequestMessage,
-  MeshSyncMessageV2,
   MeshSyncMessage,
   TaskRequest,
   TaskResult,
@@ -52,10 +50,6 @@ export interface ManifoldServerConfig {
 
   /** Peer federation server addresses to connect to / bootstrap from */
   peers?: string[]
-
-  /** External address to advertise to peers (e.g. ws://100.86.105.39:8766).
-   *  If not set, defaults to ws://localhost:{federationPort}. */
-  advertiseAddress?: string
 
   /**
    * Path to Python manifold atlas JSON for local mesh state.
@@ -112,7 +106,6 @@ export class ManifoldServer extends EventEmitter {
   readonly rateLimiter: RateLimiter
   readonly detectionCoord: DetectionCoord
   readonly detectionLedger: DetectionLedger
-  readonly detectionSync: DetectionSync
   private pythonBridge: PythonBridge | null = null
 
   private started = false
@@ -127,20 +120,18 @@ export class ManifoldServer extends EventEmitter {
       identity: {},
       peers: [],
       atlasPath: '',
-      advertiseAddress: '',
       syncIntervalMs: 15_000,
       restEnabled: true,
       security: {},
       gossipEnabled: true,
       gossipViewSize: 8,
       gossipShuffleIntervalMs: 10_000,
-      wireFormat: 'json' as const,
       debug: false,
       ...config,
     }
     this.hub = config.name
 
-    const selfAddress = this.config.advertiseAddress || `ws://localhost:${this.config.federationPort}`
+    const selfAddress = `ws://localhost:${this.config.federationPort}`
 
     this.peerRegistry = new PeerRegistry({
       selfHub: this.hub,
@@ -177,7 +168,6 @@ export class ManifoldServer extends EventEmitter {
       hub: this.hub,
       port: this.config.restPort,
       debug: this.config.debug,
-      apiKey: this.config.security?.apiKey ?? undefined,
     })
 
     this.taskRouter = new TaskRouter({
@@ -208,14 +198,6 @@ export class ManifoldServer extends EventEmitter {
       ledger: this.detectionLedger,
       capIndex: this.capIndex,
       peerRegistry: this.peerRegistry,
-      debug: this.config.debug,
-    })
-
-    this.detectionSync = new DetectionSync({
-      hub: this.hub,
-      detectionCoord: this.detectionCoord,
-      peerRegistry: this.peerRegistry,
-      gossipIntervalMs: 60_000,
       debug: this.config.debug,
     })
 
@@ -318,15 +300,6 @@ export class ManifoldServer extends EventEmitter {
       })
     })
 
-    // Remove runner agents from mesh when runner disconnects
-    this.taskRouter.on('runner:disconnect', ({ agents }) => {
-      for (const agentName of agents) {
-        this.capIndex.removeAgent(agentName, this.hub)
-      }
-      this._rebuildBloom()
-      this.log(`Runner agents removed from mesh: ${agents.join(', ')}`)
-    })
-
     // 10. Wire detection coordination broadcast
     this.detectionCoord.setBroadcast((msg) => {
       // Broadcast to all local clients
@@ -338,9 +311,6 @@ export class ManifoldServer extends EventEmitter {
       // Broadcast to all federation peers
       this.peerRegistry.broadcast(JSON.stringify(msg))
     })
-
-    // 11. Start cross-hub detection sync
-    this.detectionSync.start()
 
     this.log(`Started hub "${this.hub}" on ports: federation=${this.config.federationPort}, local=${this.config.localPort}, rest=${this.config.restPort}`)
   }
@@ -354,7 +324,7 @@ export class ManifoldServer extends EventEmitter {
       const agents = this.capIndex.getAllAgents().map(a => ({
         agent: { name: a.name, hub: a.hub, capabilities: a.capabilities, pressure: a.pressure, seams: a.seams, lastSeen: a.lastSeen },
         cachedAt: Date.now(),
-        isLocal: !!a.isLocal,
+        isLocal: a.isLocal,
       }))
       const darkCircles = this.capIndex.getDarkCircles().map(dc => ({
         name: dc.name,
@@ -367,7 +337,6 @@ export class ManifoldServer extends EventEmitter {
       this.log(`Cache save failed (non-fatal): ${err}`)
     }
 
-    this.detectionSync.stop()
     this.meshSync.stop()
     this.peerRegistry.stop()
     this.taskRouter.stop()
@@ -531,45 +500,8 @@ export class ManifoldServer extends EventEmitter {
     }
 
     if (msgType === 'agent_runner_ready') {
-      const rawAgents = (msg as any).agents
-      // Normalize: agents can be strings or {name, capabilities, seams} objects
-      const agents: string[] = rawAgents.map((a: any) => typeof a === 'string' ? a : a.name)
+      const agents = (msg as any).agents as string[]
       this.taskRouter.registerRunner(ws, agents)
-
-      // Register runner agents in the capability index so they're mesh-visible
-      // Preserve full capabilities from the runner's registration message
-      for (let i = 0; i < agents.length; i++) {
-        const agentName = agents[i]
-        const rawAgent = rawAgents[i]
-        const newCaps = (typeof rawAgent === 'object' && Array.isArray(rawAgent.capabilities))
-          ? rawAgent.capabilities
-          : [agentName]
-        // Don't overwrite richer capabilities from a prior registration
-        const existing = this.capIndex.getAgent(agentName, this.hub)
-        const capabilities = (existing && existing.capabilities.length > newCaps.length)
-          ? existing.capabilities
-          : newCaps
-        this.capIndex.upsertAgent({
-          name: agentName,
-          hub: this.hub,
-          capabilities,
-          pressure: 0,
-          isLocal: true,
-        }, true)
-      }
-      this._rebuildBloom()
-      this.log(`Runner agents registered in mesh: ${agents.join(', ')}`)
-      return
-    }
-
-    if (msgType === 'agent_register') {
-      const { name, capabilities, seams } = msg as any
-      if (name && capabilities) {
-        this.registerAgent(name, capabilities, seams)
-        this._rebuildBloom()
-        const payload = JSON.stringify({ type: 'agent_register_ack', name, status: 'ok' })
-        ws.send(payload)
-      }
       return
     }
 
@@ -606,7 +538,7 @@ export class ManifoldServer extends EventEmitter {
     }
   }
 
-  private _handleMeshSync(msg: MeshSyncMessageV2 | MeshSyncMessage): void {
+  private _handleMeshSync(msg: MeshSyncMessage): void {
     for (const agent of msg.agents) {
       const isLocal = agent.hub === this.hub
       const { added, capChanges } = this.capIndex.upsertAgent(agent, isLocal)
@@ -624,7 +556,7 @@ export class ManifoldServer extends EventEmitter {
     this.emit('mesh:sync', msg.hub)
 
     // ACK the version if present (delta sync)
-    if ('version' in msg && msg.version) {
+    if (msg.version) {
       this.meshSync.handleDeltaAck({ type: 'mesh_delta_ack', hub: msg.hub, version: msg.version })
     }
   }
@@ -783,7 +715,7 @@ export class ManifoldServer extends EventEmitter {
       }
 
       if (msgType === 'mesh_sync') {
-        this._handleMeshSync(msg as MeshSyncMessageV2 | MeshSyncMessage)
+        this._handleMeshSync(msg as MeshSyncMessage)
       }
     })
 
@@ -795,8 +727,6 @@ export class ManifoldServer extends EventEmitter {
       this.emit('peer:connect', peer)
       // Send our state immediately
       this.meshSync.sync()
-      // Sync detection claims with new peer
-      this.detectionSync.registerPeer(peer.hub)
     })
 
     this.peerRegistry.on('peer:disconnect', (peer: { hub: string; address: string }) => {

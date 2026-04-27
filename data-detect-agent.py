@@ -17,8 +17,6 @@ import json
 import os
 import hashlib
 import sys
-import time
-import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,62 +49,31 @@ SOURCES = {
 
 
 def _file_claim(summary: str, confidence: float, issue_type: str, source: str, evidence: dict | None = None) -> str | None:
-    """File a detection claim to the federation coordination layer.
-
-    Retries up to 3 times with exponential backoff (2s → 4s → 8s) on HTTP 429
-    (Too Many Requests).  All other errors are logged and do not crash the caller.
-    """
-    payload = {
-        "source": "data-detect@hog",
-        "domain": "data_pipeline",
-        "summary": summary,
-        "confidence": confidence,
-        "evidence": {
-            "issue_type": issue_type,
-            "source_name": source,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            **(evidence or {}),
-        },
-        "ttl_seconds": 3600,  # 1h TTL for data pipeline issues
-    }
-    req = urllib.request.Request(
-        f"{FEDERATION_REST}/detection/claim",
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-
-    max_retries = 3
-    # Backoff delays per retry attempt (seconds): 2s, 4s, 8s
-    backoff_schedule = [2, 4, 8]
-
-    for attempt in range(max_retries + 1):  # attempt 0 = first try; 1,2,3 = retries
-        try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                result = json.loads(r.read())
-                return result.get("claim_id")
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < max_retries:
-                wait = backoff_schedule[attempt]  # 2, 4, 8
-                print(
-                    f"[data-detect] _file_claim: 429 rate-limited "
-                    f"(attempt {attempt + 1}/{max_retries + 1}), retrying in {wait}s…",
-                    file=sys.stderr,
-                )
-                time.sleep(wait)
-                continue  # retry
-            # Non-429, or exhausted retries on 429 — log and give up
-            print(
-                f"[data-detect] _file_claim: HTTP {exc.code} filing claim for '{source}' "
-                f"(attempt {attempt + 1}/{max_retries + 1}): {exc}",
-                file=sys.stderr,
-            )
-            return None
-        except Exception as exc:
-            print(f"[data-detect] _file_claim: error filing claim for '{source}': {exc}", file=sys.stderr)
-            return None
-
-    # Should not reach here; but if we do, retries were exhausted
-    return None
+    """File a detection claim to the federation coordination layer."""
+    try:
+        data = {
+            "source": "data-detect@hog",
+            "domain": "data_pipeline",
+            "summary": summary,
+            "confidence": confidence,
+            "evidence": {
+                "issue_type": issue_type,
+                "source_name": source,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **(evidence or {}),
+            },
+            "ttl_seconds": 3600,  # 1h TTL for data pipeline issues
+        }
+        req = urllib.request.Request(
+            f"{FEDERATION_REST}/detection/claim",
+            data=json.dumps(data).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            result = json.loads(r.read())
+            return result.get("claim_id")
+    except Exception:
+        return None
 
 
 def _file_hash(path: Path) -> str | None:

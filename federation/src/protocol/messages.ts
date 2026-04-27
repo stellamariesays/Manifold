@@ -22,29 +22,11 @@ export type MessageType =
   | 'detection_verify'
   | 'detection_challenge'
   | 'detection_outcome'
-  // Phase 1: MeshPass Identity
-  | 'mesh_identity_announce'
-  | 'mesh_identity_verify'
-  | 'mesh_auth'
-  // Phase 2: Attestation
-  | 'attestation_challenge'
-  | 'attestation_proof'
-  | 'attestation_peer'
-  // Phase 3: Detection-Coordination sync
-  | 'detection_gossip'
 
 export interface BaseMessage {
   type: MessageType
   requestId?: string
   timestamp?: string
-  /** Sender MeshID (name@hub#fingerprint) if authenticated */
-  sender?: string
-  /** Sender public key for signature verification */
-  senderPublicKey?: string
-  /** Gateway hub that relayed this message */
-  gatewayHub?: string
-  /** Message signature (hex) from sender's MeshPass */
-  signature?: string
 }
 
 // ── Peer Discovery ─────────────────────────────────────────────────────────────
@@ -82,7 +64,6 @@ export interface AgentInfo {
   pressure?: number
   seams?: string[]
   lastSeen?: string
-  isLocal?: boolean
 }
 
 export interface CapabilityResponseMessage extends BaseMessage {
@@ -205,16 +186,9 @@ export interface DarkCircle {
 export interface MeshSyncMessage extends BaseMessage {
   type: 'mesh_sync'
   hub: string
-  /** Monotonic version counter (set by delta sync) */
-  version?: number
   agents: AgentInfo[]
   darkCircles: DarkCircle[]
   timestamp: string
-}
-
-/** Extended mesh sync with delta versioning support */
-export interface MeshSyncMessageV2 extends MeshSyncMessage {
-  version: number
 }
 
 // ── Delta Sync ────────────────────────────────────────────────────────────────
@@ -228,6 +202,17 @@ export interface DarkCircleDelta {
   op: 'upsert' | 'remove'
   circle: DarkCircle
   hub: string
+}
+
+/** Full snapshot with version — replaces mesh_sync when delta sync is active */
+export interface MeshSyncMessageV2 extends BaseMessage {
+  type: 'mesh_sync'
+  hub: string
+  /** Monotonic version counter */
+  version: number
+  agents: AgentInfo[]
+  darkCircles: DarkCircle[]
+  timestamp: string
 }
 
 /** Delta-only sync — only changes since fromVersion */
@@ -358,152 +343,6 @@ export interface DetectionOutcomeMessage extends BaseMessage {
   outcome: DetectionOutcome
 }
 
-export interface GossipTrustScore {
-  source: string
-  score: number
-  totalClaims: number
-  verified: number
-}
-
-export interface DetectionGossipMessage extends BaseMessage {
-  type: 'detection_gossip'
-  scores: GossipTrustScore[]
-  hub: string
-}
-
-// ── MeshPass Identity (Phase 1) ──────────────────────────────────────────────
-//
-// Cryptographic identity and mesh authentication using Ed25519 signatures.
-
-export interface MeshIdentityAnnounce {
-  /** MeshID in name@hub#fingerprint format */
-  meshId: string
-  /** Ed25519 public key (hex) */
-  publicKey: string
-  /** Hub where this identity is registered */
-  hub: string
-  /** Capabilities this identity claims */
-  capabilities?: string[]
-  /** Registration timestamp */
-  registeredAt: string
-  /** Optional identity metadata */
-  metadata?: Record<string, unknown>
-}
-
-export interface MeshIdentityVerify {
-  /** MeshID being verified */
-  meshId: string
-  /** Challenge nonce to sign */
-  nonce: string
-  /** Verifier identity */
-  verifier: string
-  /** Timestamp */
-  verifyAt: string
-}
-
-export interface MeshAuthRequest {
-  /** MeshID requesting authentication */
-  meshId: string
-  /** Random nonce for this auth request */
-  nonce: string
-  /** Timestamp */
-  timestamp: string
-  /** Signature of "AUTH:{meshId}:{nonce}:{timestamp}" */
-  signature: string
-}
-
-export interface MeshIdentityAnnounceMessage extends BaseMessage {
-  type: 'mesh_identity_announce'
-  identity: MeshIdentityAnnounce
-}
-
-export interface MeshIdentityVerifyMessage extends BaseMessage {
-  type: 'mesh_identity_verify'
-  verification: MeshIdentityVerify
-}
-
-export interface MeshAuthMessage extends BaseMessage {
-  type: 'mesh_auth'
-  auth: MeshAuthRequest
-}
-
-// ── Attestation (Phase 2) ─────────────────────────────────────────────────────
-//
-// Cross-hub attestation: challenges, proofs, and peer attestations relayed
-// across the federation mesh.
-
-export interface AttestationChallengePayload {
-  /** Challenge ID */
-  id: string
-  /** Challenge type */
-  type: 'generic' | 'code' | 'analysis'
-  /** Capability being challenged */
-  capability: string
-  /** Agent being challenged (name@hub) */
-  agentId: string
-  /** Difficulty 0.0–1.0 */
-  difficulty: number
-  /** Expiry timestamp */
-  expiresAt: string
-  /** Challenge test data */
-  testData: Record<string, unknown>
-  /** Integrity hash */
-  integrityHash: string
-  /** Creation timestamp */
-  createdAt: string
-  /** Hub that issued the challenge */
-  issuedBy: string
-}
-
-export interface AttestationProofPayload {
-  /** Challenge ID */
-  challengeId: string
-  /** Agent submitting proof */
-  agentId: string
-  /** Proof response data */
-  response: Record<string, unknown>
-  /** SHA-256 hash of response */
-  responseHash: string
-  /** Submission timestamp */
-  submittedAt: string
-  /** Hub where proof was submitted */
-  submittedVia: string
-}
-
-export interface AttestationPeerPayload {
-  /** Challenge ID */
-  challengeId: string
-  /** Peer making the attestation */
-  peerId: string
-  /** Agent whose proof is attested */
-  agentId: string
-  /** Capability being attested */
-  capability: string
-  /** Score 0.0–1.0 */
-  score: number
-  /** Optional notes */
-  notes?: string
-  /** Timestamp */
-  attestedAt: string
-  /** Hub where attestation was made */
-  attestedVia: string
-}
-
-export interface AttestationChallengeMessage extends BaseMessage {
-  type: 'attestation_challenge'
-  payload: AttestationChallengePayload
-}
-
-export interface AttestationProofMessage extends BaseMessage {
-  type: 'attestation_proof'
-  payload: AttestationProofPayload
-}
-
-export interface AttestationPeerMessage extends BaseMessage {
-  type: 'attestation_peer'
-  payload: AttestationPeerPayload
-}
-
 export type FederationMessage =
   | PeerAnnounceMessage
   | PeerByeMessage
@@ -515,7 +354,6 @@ export type FederationMessage =
   | TaskResultMessage
   | TaskAckMessage
   | MeshSyncMessage
-  | MeshSyncMessageV2
   | MeshDeltaMessage
   | MeshDeltaAckMessage
   | PingMessage
@@ -526,13 +364,3 @@ export type FederationMessage =
   | DetectionVerifyMessage
   | DetectionChallengeMessage
   | DetectionOutcomeMessage
-  // Phase 3: Detection sync
-  | DetectionGossipMessage
-  // Phase 1: MeshPass
-  | MeshIdentityAnnounceMessage
-  | MeshIdentityVerifyMessage
-  | MeshAuthMessage
-  // Phase 2: Attestation
-  | AttestationChallengeMessage
-  | AttestationProofMessage
-  | AttestationPeerMessage
