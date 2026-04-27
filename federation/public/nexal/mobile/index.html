@@ -44,8 +44,18 @@
       position: fixed; inset: 0;
       width: 100%; height: 100%;
       display: block;
-      touch-action: none;
       z-index: 1;
+      pointer-events: none;  /* UI elements handle their own events */
+    }
+
+    /* Transparent layer that captures orbit/pan gestures in the middle zone */
+    #touch-capture {
+      position: fixed; inset: 0;
+      z-index: 2;
+      touch-action: none;
+      /* exclude top 52px (topbar) and bottom 60px (actionbar) from capture */
+      top: 52px;
+      bottom: 60px;
     }
 
     /* ── Top Status Bar ────────────────────────────────────────────── */
@@ -55,7 +65,7 @@
       background: linear-gradient(180deg, rgba(0,5,16,0.9) 0%, transparent 100%);
       display: flex; align-items: center;
       padding: 0 16px;
-      z-index: 30;
+      z-index: 100;
       gap: 10px;
     }
 
@@ -91,7 +101,7 @@
       padding-bottom: var(--safe-b);
       background: linear-gradient(0deg, rgba(0,5,16,0.95) 0%, transparent 100%);
       display: flex; align-items: center; justify-content: space-around;
-      z-index: 30;
+      z-index: 100;
     }
 
     .m-action-btn {
@@ -369,6 +379,9 @@
 
 <!-- 3D Scene -->
 <canvas id="scene"></canvas>
+
+<!-- Touch capture zone for orbit gestures (middle of screen only) -->
+<div id="touch-capture"></div>
 
 <!-- Top bar -->
 <div id="m-topbar">

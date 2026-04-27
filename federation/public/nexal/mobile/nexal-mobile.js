@@ -39,16 +39,35 @@ init();
 // Tune orbit controls for touch
 const controls = window.cameraControls;
 if (controls) {
-  controls.enablePan        = false;  // disable two-finger pan (confusing on mobile)
+  controls.enablePan        = false;
   controls.dampingFactor    = 0.08;
   controls.minDistance      = 8;
   controls.maxDistance      = 35;
-  controls.autoRotate       = true;   // gentle auto-spin so scene looks alive
+  controls.autoRotate       = true;
   controls.autoRotateSpeed  = 0.4;
   controls.touches = {
     ONE: THREE.TOUCH.ROTATE,
     TWO: THREE.TOUCH.DOLLY_ROTATE,
   };
+}
+
+// Forward touch events from the touch-capture div to the canvas so
+// OrbitControls (attached to canvas) gets them, without the canvas
+// itself sitting on top of and blocking the UI buttons.
+const touchCapture = document.getElementById('touch-capture');
+const canvas = document.getElementById('scene');
+if (touchCapture && canvas) {
+  ['touchstart', 'touchmove', 'touchend', 'touchcancel',
+   'pointerdown', 'pointermove', 'pointerup',
+   'wheel', 'contextmenu'].forEach(type => {
+    touchCapture.addEventListener(type, e => {
+      // Don't forward if a sheet/drawer is open (let backdrop handle it)
+      if (document.getElementById('m-drawer')?.classList.contains('open')) return;
+      if (document.getElementById('m-query-sheet')?.classList.contains('open')) return;
+      const clone = new e.constructor(e.type, e);
+      canvas.dispatchEvent(clone);
+    }, { passive: false });
+  });
 }
 
 // Camera closer for portrait screens
@@ -85,10 +104,11 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ── Touch tap → agent/hub selection ───────────────────────────────────────
+// ── Touch tap → agent/hub selection (on touch-capture zone only) ──────────
 let _tapStart = null;
-window.addEventListener('touchstart', e => { _tapStart = e.touches[0]; }, { passive: true });
-window.addEventListener('touchend', e => {
+const _tapTarget = document.getElementById('touch-capture') ?? window;
+_tapTarget.addEventListener('touchstart', e => { _tapStart = e.touches[0]; }, { passive: true });
+_tapTarget.addEventListener('touchend', e => {
   if (!_tapStart) return;
   const t = e.changedTouches[0];
   const dx = t.clientX - _tapStart.clientX;
