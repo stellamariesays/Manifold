@@ -308,6 +308,14 @@
         filter: brightness(1.6) contrast(1.3);
         -webkit-filter: brightness(1.6) contrast(1.3);
       }
+
+      #query-panel {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: 12px !important;
+        width: auto !important;
+        max-width: 100% !important;
+      }
     }
   </style>
   <script type="importmap">
@@ -399,8 +407,9 @@
 
 <!-- ── QUERY PANEL ──────────────────────────────────────────────────── -->
 <div id="query-panel" class="panel" style="
-  bottom: 20px; right: 20px; width: 420px;
+  position: fixed; bottom: 20px; right: 20px; width: 420px;
   display: flex; flex-direction: column; gap: 10px;
+  max-width: calc(100vw - 24px);
 ">
   <div style="font-size:11px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; display:flex; align-items:center; gap:6px;">
     <span style="color:var(--green); animation: pulse 2s infinite;">●</span>
