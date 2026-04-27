@@ -211,6 +211,39 @@ export function animate() {
           const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
           particleMesh.position.copy(system.group.position);
 
+          // Streamer trail
+          const TRAIL_LENGTH = 24;
+          const trailPositions = new Float32Array(TRAIL_LENGTH * 3);
+          const trailOpacities = new Float32Array(TRAIL_LENGTH);
+          const trailGeo = new THREE.BufferGeometry();
+          trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+          // Per-vertex color for fade: encode alpha via vertex colors (r=1,g=1,b=1, a via material opacity hack)
+          // We use a simple LineBasicMaterial and update opacity per-segment by rebuilding as short segments
+          // Simpler: use a single Line with vertexColors to fade tip → tail
+          const trailColors = new Float32Array(TRAIL_LENGTH * 3);
+          trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
+          const trailMat = new THREE.LineBasicMaterial({
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          });
+          const trailLine = new THREE.Line(trailGeo, trailMat);
+          // Seed all trail points at start position
+          const sp = system.group.position;
+          for (let ti = 0; ti < TRAIL_LENGTH; ti++) {
+            trailPositions[ti * 3]     = sp.x;
+            trailPositions[ti * 3 + 1] = sp.y;
+            trailPositions[ti * 3 + 2] = sp.z;
+          }
+          trailGeo.attributes.position.needsUpdate = true;
+
+          // Decode color to RGB floats for trail
+          const tr = ((particleColor >> 16) & 0xff) / 255;
+          const tg = ((particleColor >>  8) & 0xff) / 255;
+          const tb = ( particleColor        & 0xff) / 255;
+
           const particle = {
             mesh: particleMesh,
             startPos: system.group.position.clone(),
@@ -219,10 +252,19 @@ export function animate() {
             speed: CONSTRAINT_CONFIG.particleSpeed,
             targetHubIndex,
             isThefog: targetHub.isThefog,
+            // Trail state
+            trailLine,
+            trailGeo,
+            trailPositions,
+            trailColors,
+            trailLength: TRAIL_LENGTH,
+            trailR: tr, trailG: tg, trailB: tb,
+            trailHead: 0,   // ring-buffer head index
           };
 
           system.particles.push(particle);
           system.particleGroup.add(particleMesh);
+          system.particleGroup.add(trailLine);
         }
 
         // Stretch effects
@@ -260,9 +302,45 @@ export function animate() {
         particle.progress += particle.speed;
         if (particle.progress >= 1.0) {
           system.particleGroup.remove(particle.mesh);
+          if (particle.trailLine) system.particleGroup.remove(particle.trailLine);
           return false;
         }
         particle.mesh.position.lerpVectors(particle.startPos, particle.targetPos, particle.progress);
+
+        // Update ring-buffer trail
+        if (particle.trailLine) {
+          const N   = particle.trailLength;
+          const pos = particle.trailPositions;
+          const col = particle.trailColors;
+          const cur = particle.mesh.position;
+          const head = particle.trailHead;
+
+          // Write current position at head
+          pos[head * 3]     = cur.x;
+          pos[head * 3 + 1] = cur.y;
+          pos[head * 3 + 2] = cur.z;
+          particle.trailHead = (head + 1) % N;
+
+          // Rebuild line in order: newest → oldest
+          const orderedPos = new Float32Array(N * 3);
+          const orderedCol = new Float32Array(N * 3);
+          for (let i = 0; i < N; i++) {
+            const src = ((particle.trailHead - 1 - i + N) % N);
+            orderedPos[i * 3]     = pos[src * 3];
+            orderedPos[i * 3 + 1] = pos[src * 3 + 1];
+            orderedPos[i * 3 + 2] = pos[src * 3 + 2];
+            // Fade: index 0 (head/brightest) → index N-1 (tail/gone)
+            const fade = Math.pow(1 - i / N, 1.8);
+            orderedCol[i * 3]     = particle.trailR * fade;
+            orderedCol[i * 3 + 1] = particle.trailG * fade;
+            orderedCol[i * 3 + 2] = particle.trailB * fade;
+          }
+          particle.trailGeo.attributes.position.array.set(orderedPos);
+          particle.trailGeo.attributes.color.array.set(orderedCol);
+          particle.trailGeo.attributes.position.needsUpdate = true;
+          particle.trailGeo.attributes.color.needsUpdate = true;
+        }
+
         return true;
       });
     }
