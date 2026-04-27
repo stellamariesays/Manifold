@@ -32,6 +32,7 @@ export interface RestApiOptions {
   port: number
   debug?: boolean
   apiKey?: string
+  hubMeta?: Record<string, { fogAttraction?: number; [key: string]: unknown }>
 }
 
 export class RestApi {
@@ -39,6 +40,7 @@ export class RestApi {
   private readonly port: number
   private readonly debug: boolean
   private readonly apiKey?: string
+  private readonly hubMeta: Record<string, { fogAttraction?: number; [key: string]: unknown }>
 
   private app = express()
   private server: ReturnType<typeof this.app.listen> | null = null
@@ -59,6 +61,7 @@ export class RestApi {
     this.port = options.port
     this.debug = options.debug ?? false
     this.apiKey = options.apiKey
+    this.hubMeta = options.hubMeta ?? {}
     this.attestationEngine = new AttestationEngine()
     this.antiSybilGuard = new AntiSybilGuard()
     this._setup()
@@ -129,6 +132,7 @@ export class RestApi {
     buildMeshRouter(router, {
       hub: self.hub,
       startTime: self.startTime,
+      hubMeta: self.hubMeta,
       get capIndex() { return self.capIndex },
       get peerRegistry() { return self.peerRegistry },
       get metrics() { return self.metrics },

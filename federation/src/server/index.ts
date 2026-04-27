@@ -63,6 +63,13 @@ export interface ManifoldServerConfig {
    */
   atlasPath?: string
 
+  /**
+   * Per-hub metadata surfaced through the /mesh API.
+   * Keys are hub names. Any hub not listed gets defaults.
+   * Example: { "thefog": { "fogAttraction": 100 } }
+   */
+  hubMeta?: Record<string, { fogAttraction?: number; [key: string]: unknown }>
+
   /** Mesh sync interval in ms. Default 15000. */
   syncIntervalMs?: number
 
@@ -136,6 +143,7 @@ export class ManifoldServer extends EventEmitter {
       gossipShuffleIntervalMs: 10_000,
       wireFormat: 'json' as const,
       debug: false,
+      hubMeta: {},
       ...config,
     }
     this.hub = config.name
@@ -178,6 +186,7 @@ export class ManifoldServer extends EventEmitter {
       port: this.config.restPort,
       debug: this.config.debug,
       apiKey: this.config.security?.apiKey ?? undefined,
+      hubMeta: this.config.hubMeta,
     })
 
     this.taskRouter = new TaskRouter({

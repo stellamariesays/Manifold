@@ -22,7 +22,11 @@ export async function loadAgentsAndBuild(callbacks) {
       agents = meshData.agents;
       // Store mesh data globally for data highways (animation.js reads it)
       // Guard: window is undefined in Node.js test environments
-      if (typeof window !== 'undefined') window._meshData = meshData;
+      if (typeof window !== 'undefined') {
+        window._meshData = meshData;
+        // hubMeta: keyed by hub name, contains fogAttraction (0–100) etc.
+        window._hubMeta = meshData.hubMeta ?? {};
+      }
       console.log('Mesh data loaded:', meshData.agents.length, 'agents,',
                   meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
     }

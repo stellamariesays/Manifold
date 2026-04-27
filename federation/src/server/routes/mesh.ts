@@ -12,6 +12,7 @@ export interface MeshRouterDeps {
   capIndex: CapabilityIndex
   peerRegistry: PeerRegistry
   metrics: MetricsCollector
+  hubMeta?: Record<string, { fogAttraction?: number; [key: string]: unknown }>
 }
 
 export function buildMeshRouter(router: Router, deps: MeshRouterDeps): void {
@@ -56,19 +57,26 @@ function _darkCircles(_req: Request, res: Response, { hub, capIndex }: MeshRoute
   res.json({ hub, darkCircles: circles.sort((a, b) => b.pressure - a.pressure) })
 }
 
-function _mesh(_req: Request, res: Response, { hub, capIndex, peerRegistry }: MeshRouterDeps): void {
+function _mesh(_req: Request, res: Response, { hub, capIndex, peerRegistry, hubMeta }: MeshRouterDeps): void {
   const stats = capIndex.stats()
+  // Build hubMeta for all known hubs, merging config with defaults
+  const allHubs = Array.from(stats.hubs)
+  const hubMetaOut: Record<string, { fogAttraction: number; [key: string]: unknown }> = {}
+  allHubs.forEach(h => {
+    hubMetaOut[h] = { fogAttraction: 0, ...(hubMeta?.[h] ?? {}) }
+  })
   res.json({
     hub,
     agents: capIndex.getAllAgents(),
     peers: peerRegistry.getPeers(),
     darkCircles: capIndex.getDarkCircles(),
     capabilities: capIndex.getAllCapabilities(),
+    hubMeta: hubMetaOut,
     stats: {
       agents: stats.agents,
       capabilities: stats.capabilities,
       darkCircles: stats.darkCircles,
-      hubs: Array.from(stats.hubs),
+      hubs: allHubs,
     },
     timestamp: new Date().toISOString(),
   })
