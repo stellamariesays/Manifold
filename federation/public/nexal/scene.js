@@ -368,6 +368,17 @@ export function buildAgentTopologies(agents) {
     clickableObjects.push(hubMarker);
     scene.add(hubMarker);
     agentGroups.push(hubMarker);
+
+    // Pulsing ring indicator around hub
+    const ringGeo = new THREE.RingGeometry(1.0, 1.1, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: hubColor, transparent: true, opacity: 0.4, side: THREE.DoubleSide,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.position.set(center.x, center.y, center.z);
+    ring.lookAt(camera.position);
+    ring.userData = { type: 'hub-ring', pulsePhase: idx * 1.2 };
+    scene.add(ring);
   });
 }
 

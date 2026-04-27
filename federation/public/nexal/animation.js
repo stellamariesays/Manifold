@@ -77,6 +77,17 @@ export function animate() {
     window._centralSphere.rotation.x += 0.001;
   }
 
+  // Animate pulsing hub rings
+  scene.traverse((child) => {
+    if (child.userData && child.userData.type === 'hub-ring') {
+      const phase = child.userData.pulsePhase || 0;
+      const pulseFactor = 0.8 + Math.sin(elapsed * 1.5 + phase) * 0.4;
+      child.scale.setScalar(pulseFactor);
+      child.material.opacity = 0.15 + Math.sin(elapsed * 1.5 + phase) * 0.25;
+      child.lookAt(camera.position);
+    }
+  });
+
   // Animate constraint network physics
   if (window._constraintSystem) {
     const system = window._constraintSystem;
