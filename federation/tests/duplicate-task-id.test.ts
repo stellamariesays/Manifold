@@ -148,4 +148,42 @@ describe('Issue #23 — Cross-hub duplicate task ID dedup', () => {
     expect(dupRejections).toHaveLength(1)
     expect(dupRejections[0]).toBe(sharedId)
   })
+
+  it('completed map uses scoped keys — cross-hub tasks with same ID do not collide after completion', () => {
+    const sharedId = 'completed-collision-001'
+
+    // Register a fake runner
+    const fakeWs = {
+      readyState: 1,
+      send: (_data: string) => {},
+      on: (_event: string, _fn: () => void) => {},
+    } as any
+    router.registerRunner(fakeWs, ['agent'])
+
+    // Route task from hub-a — enters pending
+    const taskA = makeTask(sharedId, 'hub-a', 'agent@test-hub')
+    router.routeTask(taskA, null, 'hub-a')
+
+    // Simulate completion of hub-a's task
+    const result: any = {
+      id: sharedId,
+      status: 'success',
+      execution_ms: 100,
+      completed_at: new Date().toISOString(),
+    }
+    router.handleResult(result)
+
+    // Now route task from hub-b with the same bare task ID
+    const taskB = makeTask(sharedId, 'hub-b', 'agent@test-hub')
+    const rejections: string[] = []
+    router.on('task:complete', ({ result }) => {
+      if (result.status === 'rejected' && result.error === 'Duplicate task ID') {
+        rejections.push(result.id)
+      }
+    })
+    router.routeTask(taskB, null, 'hub-b')
+
+    // hub-b's task should NOT be rejected as a duplicate
+    expect(rejections).toHaveLength(0)
+  })
 })
