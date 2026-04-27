@@ -1,0 +1,1038 @@
+<!--
+  Caddy route config for meshlet workshop:
+  
+  handle_path /nexal/meshlet* {
+    reverse_proxy localhost:8767
+  }
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meshlet Workshop — Manifold</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --cyan: #00e5ff;
+      --violet: #aa00ff;
+      --green: #00ff88;
+      --danger: #ff3366;
+      --gold: #ffd740;
+      --bg: #040810;
+      --panel: rgba(4,12,28,0.88);
+      --border: rgba(0,229,255,0.15);
+      --text: #c0dce8;
+      --text-dim: rgba(176,220,248,0.5);
+      --mono: 'Share Tech Mono', monospace;
+      --heading: 'Rajdhani', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ── Top Bar ──────────────────────────────────────────────────────────── */
+    .top-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 48px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      z-index: 100;
+      gap: 20px;
+    }
+
+    .top-bar .logo {
+      font-family: var(--heading);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: var(--cyan);
+      text-transform: uppercase;
+    }
+
+    .top-bar .logo span {
+      color: var(--violet);
+    }
+
+    .top-bar .status-pill {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+    }
+
+    .top-bar .status-pill.active {
+      border-color: var(--green);
+      color: var(--green);
+      box-shadow: 0 0 8px rgba(0,255,136,0.2);
+    }
+
+    .top-bar .spacer { flex: 1; }
+
+    .top-bar button {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: transparent;
+      color: var(--cyan);
+      border: 1px solid var(--cyan);
+      padding: 6px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .top-bar button:hover {
+      background: var(--cyan);
+      color: var(--bg);
+    }
+
+    .top-bar button.danger {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .top-bar button.danger:hover {
+      background: var(--danger);
+      color: var(--bg);
+    }
+
+    /* ── Main Grid ────────────────────────────────────────────────────────── */
+    .workshop {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 12px;
+      padding: 60px 16px 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+      min-height: 100vh;
+    }
+
+    /* ── Panel Base ───────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+
+    .panel-title {
+      font-family: var(--heading);
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title .icon {
+      font-size: 16px;
+    }
+
+    /* ── Void Panel ───────────────────────────────────────────────────────── */
+    .void-panel {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .void-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 12px;
+    }
+
+    .void-item {
+      background: rgba(0,229,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .void-item:hover {
+      border-color: var(--cyan);
+      background: rgba(0,229,255,0.08);
+    }
+
+    .void-item.named {
+      border-color: var(--green);
+      background: rgba(0,255,136,0.06);
+    }
+
+    .void-term {
+      font-weight: bold;
+      color: var(--cyan);
+      font-size: 13px;
+    }
+
+    .void-item.named .void-term {
+      color: var(--green);
+    }
+
+    .void-meta {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    .void-meta .pressure-bar {
+      display: inline-block;
+      width: 60px;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-left: 4px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .void-meta .pressure-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: var(--cyan);
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    .void-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .void-actions button {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 3px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+
+    .void-actions button:hover {
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    /* ── Open Void Form ───────────────────────────────────────────────────── */
+    .open-void-form {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .open-void-form input {
+      flex: 1;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 6px 10px;
+    }
+
+    .open-void-form input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .open-void-form input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .open-void-form button, .action-btn {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      padding: 6px 14px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .open-void-form button:hover, .action-btn:hover {
+      background: var(--cyan);
+      color: var(--bg);
+    }
+
+    .action-btn.green {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .action-btn.green:hover {
+      background: var(--green);
+      color: var(--bg);
+    }
+
+    .action-btn.violet {
+      border-color: var(--violet);
+      color: var(--violet);
+    }
+
+    .action-btn.violet:hover {
+      background: var(--violet);
+      color: var(--bg);
+    }
+
+    /* ── Agent Builder ────────────────────────────────────────────────────── */
+    .agent-panel {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .agent-form {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-group label {
+      font-size: 10px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .form-group input, .form-group textarea, .form-group select {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 8px 10px;
+    }
+
+    .form-group input:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .cap-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .cap-tag {
+      font-size: 9px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .cap-tag.selected {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: rgba(0,229,255,0.1);
+    }
+
+    .cap-tag:hover {
+      border-color: var(--cyan);
+    }
+
+    /* ── SSJ2 / BEAM Status Bar ───────────────────────────────────────────── */
+    .status-row {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+
+    .stat-card .stat-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: var(--cyan);
+      font-family: var(--heading);
+    }
+
+    .stat-card .stat-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    /* ── SSJ2 Signals ─────────────────────────────────────────────────────── */
+    .ssj2-panel {
+      grid-column: 1 / -1;
+      min-height: 120px;
+    }
+
+    .signal-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .signal-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(170,0,255,0.04);
+      border: 1px solid rgba(170,0,255,0.15);
+      border-radius: 4px;
+    }
+
+    .signal-seam {
+      color: var(--violet);
+      font-weight: bold;
+      min-width: 140px;
+    }
+
+    .signal-strength-bar {
+      flex: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .signal-strength-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--violet), var(--cyan));
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    .signal-value {
+      font-size: 10px;
+      color: var(--text-dim);
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-dim);
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+
+    /* ── Name Void Dialog ─────────────────────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--cyan);
+      border-radius: 8px;
+      padding: 24px;
+      width: 380px;
+      max-width: 90vw;
+    }
+
+    .modal h3 {
+      font-family: var(--heading);
+      color: var(--cyan);
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+    }
+
+    .modal input {
+      width: 100%;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+    }
+
+    .modal input:focus {
+      outline: none;
+      border-color: var(--cyan);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    /* ── Scrollbar ────────────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="logo">MESH<span>LET</span></div>
+  <a href="/nexal" style="font-size:10px;letter-spacing:2px;color:var(--text-dim);text-decoration:none" title="Back to nexal">← NEXAL</a>
+  <div class="status-pill" id="status-pill">No Active Meshlet</div>
+  <div class="spacer"></div>
+  <div id="meshlet-id-display" style="font-size:10px;color:var(--text-dim);letter-spacing:1px"></div>
+  <button id="btn-launch" onclick="launchMeshlet()">Launch Meshlet</button>
+  <button id="btn-destroy" class="danger" style="display:none" onclick="destroyMeshlet()">Destroy</button>
+</div>
+
+<!-- Workshop Grid -->
+<div class="workshop" id="workshop" style="display:none">
+
+  <!-- Status Bar -->
+  <div class="status-row">
+    <div class="stat-card">
+      <div class="stat-value" id="stat-processes">—</div>
+      <div class="stat-label">Processes</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-memory">—</div>
+      <div class="stat-label">Memory (MB)</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-voids">—</div>
+      <div class="stat-label">Active Voids</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-uptime">—</div>
+      <div class="stat-label">Uptime</div>
+    </div>
+  </div>
+
+  <!-- Void Panel -->
+  <div class="panel void-panel">
+    <div class="panel-title"><span class="icon">◈</span> Voids</div>
+    <div class="open-void-form">
+      <input type="text" id="void-term-input" placeholder="Void term (e.g. agent-identity)">
+      <button onclick="openVoid()">Open</button>
+    </div>
+    <div class="void-list" id="void-list">
+      <div class="empty-state">No voids opened yet. Enter a term above to begin.</div>
+    </div>
+  </div>
+
+  <!-- Agent Builder -->
+  <div class="panel agent-panel">
+    <div class="panel-title"><span class="icon">◉</span> Agent Builder</div>
+    <div class="agent-form">
+      <div class="form-group">
+        <label>Agent Name</label>
+        <input type="text" id="agent-name" placeholder="e.g. my-agent">
+      </div>
+      <div class="form-group">
+        <label>Capabilities</label>
+        <div class="cap-tags" id="cap-tags">
+          <!-- populated from federation -->
+        </div>
+        <input type="text" id="cap-custom" placeholder="Add custom capability…" style="margin-top:6px" onkeydown="if(event.key==='Enter')addCustomCap()">
+      </div>
+      <div class="form-group">
+        <label>Seams (domains)</label>
+        <input type="text" id="agent-seams" placeholder="e.g. deployment, identity, monitoring">
+      </div>
+      <div class="form-group">
+        <label>Configuration (JSON)</label>
+        <textarea id="agent-config" placeholder='{"description": "My new agent"}'>{}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="action-btn green" onclick="registerAgent()">Register Agent</button>
+        <button class="action-btn violet" onclick="promoteAgent()">Promote to Mesh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SSJ2 Panel -->
+  <div class="panel ssj2-panel">
+    <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span><span class="icon">⚡</span> SSJ2 — Signal Detection</span>
+      <button class="action-btn" onclick="runScan()" style="font-size:9px;padding:4px 10px">Run Reach Scan</button>
+    </div>
+    <div class="signal-list" id="signal-list">
+      <div class="empty-state">Run a reach scan to detect seams and weak signals in your meshlet.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Name Void Modal -->
+<div class="modal-overlay" id="name-modal">
+  <div class="modal">
+    <h3>⟐ Name This Void</h3>
+    <p style="font-size:11px;color:var(--text-dim);margin-bottom:12px">
+      Naming a void graduates it — it becomes a named agent in your meshlet.
+    </p>
+    <input type="text" id="name-agent-input" placeholder="Agent name to assign">
+    <div class="modal-actions">
+      <button class="action-btn" onclick="closeNameModal()">Cancel</button>
+      <button class="action-btn green" onclick="confirmNameVoid()">Name It</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let meshletId = null;
+let selectedCapabilities = new Set();
+let selectedVoidTerm = null;
+let pollTimer = null;
+let ws = null;
+
+const API = window.location.origin;
+
+// ── Meshlet Lifecycle ──────────────────────────────────────────────────────
+
+async function launchMeshlet() {
+  try {
+    const res = await fetch(`${API}/api/meshlet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Meshlet-Owner': 'workshop' },
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || 'Failed to create meshlet');
+      return;
+    }
+    const data = await res.json();
+    meshletId = data.id;
+
+    document.getElementById('workshop').style.display = 'grid';
+    document.getElementById('btn-launch').style.display = 'none';
+    document.getElementById('btn-destroy').style.display = 'inline-block';
+    document.getElementById('status-pill').textContent = `${data.mode.toUpperCase()} · Active`;
+    document.getElementById('status-pill').className = 'status-pill active';
+    document.getElementById('meshlet-id-display').textContent = meshletId.slice(0, 12);
+
+    connectWS();
+    startPolling();
+    loadCapabilities();
+  } catch (e) {
+    alert('Network error: ' + e.message);
+  }
+}
+
+async function destroyMeshlet() {
+  if (!meshletId) return;
+  if (!confirm('Destroy this meshlet? All voids and agents will be lost.')) return;
+
+  await fetch(`${API}/api/meshlet/${meshletId}`, { method: 'DELETE' });
+  cleanup();
+}
+
+function cleanup() {
+  if (pollTimer) clearInterval(pollTimer);
+  if (ws) ws.close();
+  meshletId = null;
+
+  document.getElementById('workshop').style.display = 'none';
+  document.getElementById('btn-launch').style.display = 'inline-block';
+  document.getElementById('btn-destroy').style.display = 'none';
+  document.getElementById('status-pill').textContent = 'No Active Meshlet';
+  document.getElementById('status-pill').className = 'status-pill';
+  document.getElementById('meshlet-id-display').textContent = '';
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+
+function connectWS() {
+  if (!meshletId) return;
+  const wsUrl = API.replace('http', 'ws') + `/ws/meshlet/${meshletId}`;
+  ws = new WebSocket(wsUrl);
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      handleWSEvent(msg);
+    } catch {}
+  };
+
+  ws.onclose = () => {
+    // Try reconnect after 3s if meshlet still active
+    if (meshletId) setTimeout(connectWS, 3000);
+  };
+}
+
+function handleWSEvent(msg) {
+  switch (msg.type) {
+    case 'void:opened':
+    case 'void:pressure':
+    case 'void:named':
+    case 'agent:registered':
+      refreshVoids();
+      refreshStats();
+      break;
+    case 'ssj2:signal':
+      refreshSignals();
+      break;
+  }
+}
+
+// ── Polling (fallback for WS) ──────────────────────────────────────────────
+
+function startPolling() {
+  pollTimer = setInterval(() => {
+    refreshVoids();
+    refreshStats();
+  }, 3000);
+  refreshVoids();
+  refreshStats();
+}
+
+async function refreshStats() {
+  if (!meshletId) return;
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/beam/status`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('stat-processes').textContent = data.processes;
+    document.getElementById('stat-memory').textContent = data.memoryMb.toFixed(1);
+    document.getElementById('stat-uptime').textContent = formatUptime(data.uptimeSec);
+  } catch {}
+
+  // Void count
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('stat-voids').textContent = data.voidCount;
+    if (data.status === 'expired' || data.status === 'destroyed') {
+      cleanup();
+      alert('Meshlet has expired or been destroyed.');
+    }
+  } catch {}
+}
+
+function formatUptime(sec) {
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ${sec % 60}s`;
+  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
+}
+
+// ── Void Operations ────────────────────────────────────────────────────────
+
+async function openVoid() {
+  const input = document.getElementById('void-term-input');
+  const term = input.value.trim();
+  if (!term || !meshletId) return;
+
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/void/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ term, implied_by: [], pressure: 0.0 }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error);
+      return;
+    }
+    input.value = '';
+    refreshVoids();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function refreshVoids() {
+  if (!meshletId) return;
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/void/query`);
+    if (!res.ok) return;
+    const voids = await res.json();
+    renderVoids(voids);
+  } catch {}
+}
+
+function renderVoids(voids) {
+  const container = document.getElementById('void-list');
+  if (voids.length === 0) {
+    container.innerHTML = '<div class="empty-state">No voids opened yet. Enter a term above to begin.</div>';
+    return;
+  }
+
+  container.innerHTML = voids.map(v => `
+    <div class="void-item ${v.named ? 'named' : ''}">
+      <div class="void-term">${v.named ? '✓ ' : '◈ '}${v.term}${v.named ? ' → ' + v.named : ''}</div>
+      <div class="void-meta">
+        pressure: ${(v.pressure * 100).toFixed(0)}%
+        <span class="pressure-bar"><span class="pressure-fill" style="width:${v.pressure * 100}%"></span></span>
+        · implied by: ${v.impliedBy.length > 0 ? v.impliedBy.join(', ') : '—'}
+      </div>
+      ${!v.named ? `
+      <div class="void-actions">
+        <button onclick="nudgePressure('${v.term}', 0.1)">+Pressure</button>
+        <button onclick="nudgePressure('${v.term}', -0.1)">−Pressure</button>
+        <button onclick="openNameModal('${v.term}')">Name → Agent</button>
+      </div>` : ''}
+    </div>
+  `).join('');
+}
+
+async function nudgePressure(term, delta) {
+  if (!meshletId) return;
+  try {
+    await fetch(`${API}/api/meshlet/${meshletId}/void/${encodeURIComponent(term)}/pressure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta }),
+    });
+    refreshVoids();
+  } catch {}
+}
+
+// ── Name Void Modal ────────────────────────────────────────────────────────
+
+function openNameModal(term) {
+  selectedVoidTerm = term;
+  document.getElementById('name-agent-input').value = '';
+  document.getElementById('name-modal').classList.add('open');
+  setTimeout(() => document.getElementById('name-agent-input').focus(), 100);
+}
+
+function closeNameModal() {
+  document.getElementById('name-modal').classList.remove('open');
+  selectedVoidTerm = null;
+}
+
+async function confirmNameVoid() {
+  const agentName = document.getElementById('name-agent-input').value.trim();
+  if (!agentName || !selectedVoidTerm || !meshletId) return;
+
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/void/${encodeURIComponent(selectedVoidTerm)}/name`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent: agentName }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error);
+      return;
+    }
+    closeNameModal();
+    refreshVoids();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+// ── Agent Builder ──────────────────────────────────────────────────────────
+
+async function loadCapabilities() {
+  try {
+    const res = await fetch(`${API}/api/capabilities`);
+    if (!res.ok) return;
+    const caps = await res.json();
+    const container = document.getElementById('cap-tags');
+    container.innerHTML = caps.map(c =>
+      `<div class="cap-tag" data-cap="${c}" onclick="toggleCap(this, '${c}')">${c}</div>`
+    ).join('');
+  } catch {}
+}
+
+function toggleCap(el, cap) {
+  if (selectedCapabilities.has(cap)) {
+    selectedCapabilities.delete(cap);
+    el.classList.remove('selected');
+  } else {
+    selectedCapabilities.add(cap);
+    el.classList.add('selected');
+  }
+}
+
+function addCustomCap() {
+  const input = document.getElementById('cap-custom');
+  const cap = input.value.trim();
+  if (!cap) return;
+
+  const container = document.getElementById('cap-tags');
+  if (!selectedCapabilities.has(cap)) {
+    const tag = document.createElement('div');
+    tag.className = 'cap-tag selected';
+    tag.dataset.cap = cap;
+    tag.textContent = cap;
+    tag.onclick = () => toggleCap(tag, cap);
+    container.appendChild(tag);
+    selectedCapabilities.add(cap);
+  }
+  input.value = '';
+}
+
+async function registerAgent() {
+  if (!meshletId) return alert('No active meshlet');
+
+  const name = document.getElementById('agent-name').value.trim();
+  if (!name) return alert('Agent name is required');
+
+  const seams = document.getElementById('agent-seams').value
+    .split(',').map(s => s.trim()).filter(Boolean);
+  let config = {};
+  try {
+    config = JSON.parse(document.getElementById('agent-config').value || '{}');
+  } catch {
+    return alert('Invalid JSON in configuration');
+  }
+
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/agent/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        capabilities: Array.from(selectedCapabilities),
+        seams,
+        config,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      return alert(err.error);
+    }
+    alert(`Agent "${name}" registered in meshlet`);
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function promoteAgent() {
+  // For now, just confirm intent. Full promotion to federation is Phase 3.
+  if (!meshletId) return alert('No active meshlet');
+  const name = document.getElementById('agent-name').value.trim();
+  if (!name) return alert('Enter an agent name first');
+
+  alert(`Promotion to full mesh is coming in Phase 3.\nAgent "${name}" is ready for promotion.`);
+}
+
+// ── SSJ2 ───────────────────────────────────────────────────────────────────
+
+async function runScan() {
+  if (!meshletId) return;
+
+  try {
+    const res = await fetch(`${API}/api/meshlet/${meshletId}/ssj2/scan`, {
+      method: 'POST',
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderSignals(data.signals);
+  } catch {}
+}
+
+function renderSignals(signals) {
+  const container = document.getElementById('signal-list');
+  if (signals.length === 0) {
+    container.innerHTML = '<div class="empty-state">No signals detected. Open some voids with overlapping implied-by terms to generate seams.</div>';
+    return;
+  }
+
+  container.innerHTML = signals.map(s => `
+    <div class="signal-item">
+      <span class="signal-seam">${s.seam}</span>
+      <div class="signal-strength-bar">
+        <div class="signal-strength-fill" style="width:${s.strength * 100}%"></div>
+      </div>
+      <span class="signal-value">${(s.strength * 100).toFixed(0)}%</span>
+    </div>
+  `).join('');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+// Allow Enter key on void term input
+document.getElementById('void-term-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') openVoid();
+});
+
+// Escape to close modal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeNameModal();
+});
+</script>
+
+</body>
+</html>
