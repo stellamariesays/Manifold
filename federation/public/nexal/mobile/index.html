@@ -455,10 +455,10 @@ function _rotateToggle() {
 }
 
 // Session guard
-const token = sessionStorage.getItem('nexal_token');
+const token = localStorage.getItem('nexal_token');
 if (!token) window.location.replace('/nexal/login.html');
 
-const user = sessionStorage.getItem('nexal_user');
+const user = localStorage.getItem('nexal_user');
 if (user) document.title = `Manifold · ${user}`;
 </script>
 

@@ -224,7 +224,7 @@ window._mSubmitQuery = async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionStorage.getItem('nexal_token') ?? ''}`,
+        'Authorization': `Bearer ${localStorage.getItem('nexal_token') ?? ''}`,
       },
       body: JSON.stringify({
         target: 'stella@trillian',
