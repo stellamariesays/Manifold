@@ -209,41 +209,27 @@ const followHubCentroid = {
   },
 };
 
-// Register on module load
-registerFogBehavior(followHubCentroid);
+// Register on module load (disabled — pulse-to-sophia handles group movement)
+registerFogBehavior({ ...followHubCentroid, enabled: false });
 
-// ── Built-in: stretch-to-sophia ───────────────────────────────────────────
+// ── Built-in: pulse-to-sophia ─────────────────────────────────────────────
 
 /**
- * Gently stretches fog nodes toward Sophia's hub (thefog) live orbital position.
- *
- * Each frame, the desired displacement for every participating node is
- * recomputed fresh from the hub's *current* position — no accumulated state,
- * so the cloud tracks the orbit smoothly and never gets stuck.
- *
- * Only nodes facing toward Sophia (positive dot product) are stretched;
- * the opposite side of the cloud is unaffected, giving a one-sided tendril.
+ * Every ~0.5s, lerps the entire fog GROUP toward Sophia's current orbital
+ * position, then lerps back to base. No per-node math — just moves the group.
  *
  * Config:
- *   stretchStrength   number   Displacement magnitude at full dot alignment. Default 1.4
- *   falloff           number   Exponential distance falloff rate. Default 0.06
- *   lerpSpeed         number   0–1 smoothing toward desired each frame. Default 0.05
- *   maxNodeDisplace   number   Hard cap per node (scene units). Default 2.5
- *   nodeParticipation number   Fraction of nodes that respond (0–1). Default 0.6
+ *   pullFraction  0–1   How far toward Sophia to move (0.3 = 30% of the way)
+ *   cyclePeriod   secs  Full out-and-back period
+ *   stretchRatio  0–1   Fraction of cycle spent moving out (rest = returning)
  */
-const stretchToSophia = {
-  id: 'stretch-to-sophia',
-  stretchStrength: 4.0,
-  falloff: 0.004,
-  stretchSpeed: 0.12,   // how fast we lerp IN toward Sophia
-  retractSpeed: 0.18,   // how fast we lerp OUT back to zero
-  cyclePeriod: 0.5,     // seconds per full stretch→retract cycle
-  stretchFraction: 0.6, // fraction of cycle spent stretching (rest = retracting)
-  maxNodeDisplace: 5.0,
-  nodeParticipation: 0.6,
+const pulseToSophia = {
+  id: 'pulse-to-sophia',
+  pullFraction: 0.35,
+  cyclePeriod: 0.5,
+  stretchRatio: 0.55,
 
-  _smooth: null,
-  _cycleStart: null,
+  _base: null,
 
   update(ctx) {
     const { system, hubGroups, elapsed } = ctx;
@@ -252,75 +238,30 @@ const stretchToSophia = {
     const sophia = hubGroups.find(h => h.userData.hubName === 'thefog');
     if (!sophia) return;
 
-    const nodes = system.nodes;
-    const groupPos = system.group.position;
+    // Capture base position once (the follow-hub-centroid behavior moves it,
+    // so snapshot it at the start of each cycle instead)
+    if (!this._base) this._base = system.group.position.clone();
 
-    // Lazy-init
-    if (!this._smooth || this._smooth.length !== nodes.length * 3) {
-      this._smooth = new Float32Array(nodes.length * 3);
-      nodes.forEach((n, i) => { n._sophiaParticipates = (i % 10) < Math.round(this.nodeParticipation * 10); });
-      this._cycleStart = elapsed;
+    const cyclePos = (elapsed % this.cyclePeriod) / this.cyclePeriod;
+    const t = cyclePos < this.stretchRatio
+      ? cyclePos / this.stretchRatio                        // 0→1 stretching out
+      : 1 - (cyclePos - this.stretchRatio) / (1 - this.stretchRatio); // 1→0 retracting
+
+    // Smooth with ease
+    const eased = t * t * (3 - 2 * t);
+
+    // At the start of each cycle, re-snapshot base from current group position
+    if (cyclePos < 0.02) {
+      this._base.copy(system.group.position);
     }
 
-    // Where are we in the current cycle?
-    const cyclePos = ((elapsed - this._cycleStart) % this.cyclePeriod) / this.cyclePeriod;
-    const stretching = cyclePos < this.stretchFraction;
-    const lerpSpeed = stretching ? this.stretchSpeed : this.retractSpeed;
-
-    // Hub direction from fog group origin (dot-product gating)
-    const hx = sophia.position.x - groupPos.x;
-    const hy = sophia.position.y - groupPos.y;
-    const hz = sophia.position.z - groupPos.z;
-    const hLen = Math.sqrt(hx * hx + hy * hy + hz * hz) + 0.001;
-
-    nodes.forEach((node, i) => {
-      const si = i * 3;
-
-      let tx = 0, ty = 0, tz = 0;
-
-      if (stretching && node._sophiaParticipates) {
-        const nLen = Math.sqrt(node.x * node.x + node.y * node.y + node.z * node.z) + 0.001;
-        const dot = (node.x * hx + node.y * hy + node.z * hz) / (nLen * hLen);
-
-        if (dot > 0) {
-          const nwx = groupPos.x + node.x;
-          const nwy = groupPos.y + node.y;
-          const nwz = groupPos.z + node.z;
-          const dx = sophia.position.x - nwx;
-          const dy = sophia.position.y - nwy;
-          const dz = sophia.position.z - nwz;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.001;
-
-          const pull = this.stretchStrength * dot * Math.exp(-this.falloff * dist * dist);
-          tx = (dx / dist) * pull;
-          ty = (dy / dist) * pull;
-          tz = (dz / dist) * pull;
-
-          const len = Math.sqrt(tx * tx + ty * ty + tz * tz);
-          if (len > this.maxNodeDisplace) {
-            const s = this.maxNodeDisplace / len;
-            tx *= s; ty *= s; tz *= s;
-          }
-        }
-      }
-      // target is (tx, ty, tz) — zero when retracting, Sophia-pull when stretching
-
-      this._smooth[si]     += (tx - this._smooth[si])     * lerpSpeed;
-      this._smooth[si + 1] += (ty - this._smooth[si + 1]) * lerpSpeed;
-      this._smooth[si + 2] += (tz - this._smooth[si + 2]) * lerpSpeed;
-
-      const mesh = system.nodeInstances[i];
-      if (mesh) {
-        mesh.position.x += this._smooth[si];
-        mesh.position.y += this._smooth[si + 1];
-        mesh.position.z += this._smooth[si + 2];
-      }
-
-      node.stretchX = (node.stretchX || 0) + this._smooth[si];
-      node.stretchY = (node.stretchY || 0) + this._smooth[si + 1];
-      node.stretchZ = (node.stretchZ || 0) + this._smooth[si + 2];
-    });
+    // Target = lerp from base toward Sophia by pullFraction
+    system.group.position.lerpVectors(
+      this._base,
+      sophia.position,
+      eased * this.pullFraction,
+    );
   },
 };
 
-registerFogBehavior(stretchToSophia);
+registerFogBehavior(pulseToSophia);
