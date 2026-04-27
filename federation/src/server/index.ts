@@ -66,6 +66,9 @@ export interface ManifoldServerConfig {
   /** Security configuration */
   security?: SecurityConfig
 
+  /** Meshlet manager for ephemeral meshlet workshop. If provided, meshlet routes are enabled. */
+  meshletManager?: any
+
   /** Enable GossipSub peer sampling. Default true. */
   gossipEnabled?: boolean
 
@@ -84,7 +87,7 @@ export interface ManifoldServerConfig {
 type EventName = keyof ServerEvents
 
 export class ManifoldServer extends EventEmitter {
-  private readonly config: Required<ManifoldServerConfig>
+  private readonly config: Omit<Required<ManifoldServerConfig>, 'meshletManager'> & { meshletManager?: any }
   readonly hub: string
 
   private federationWss: WebSocketServer | null = null
@@ -130,6 +133,7 @@ export class ManifoldServer extends EventEmitter {
       gossipViewSize: 8,
       gossipShuffleIntervalMs: 10_000,
       wireFormat: 'json' as const,
+      meshletManager: undefined,
       debug: false,
       ...config,
     }
@@ -173,6 +177,7 @@ export class ManifoldServer extends EventEmitter {
       port: this.config.restPort,
       debug: this.config.debug,
       apiKey: this.config.security?.apiKey ?? undefined,
+      meshletManager: this.config.meshletManager,
     })
 
     this.taskRouter = new TaskRouter({
