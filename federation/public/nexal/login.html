@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexal Network — Access Required</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.128.0/build/three.module.js" } }
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:   #00e5ff;
+      --violet: #aa00ff;
+      --green:  #00ff88;
+      --bg:     #000510;
+      --panel:  rgba(0, 8, 24, 0.88);
+      --border: rgba(0,229,255,0.3);
+      --text:   #b0e0f8;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Rajdhani', monospace;
+      color: var(--text);
+      user-select: none;
+    }
+
+    /* 3D canvas behind everything */
+    #scene {
+      position: fixed; inset: 0;
+      display: block;
+      width: 100%; height: 100%;
+      filter: brightness(0.45) blur(1px);
+    }
+
+    /* Full-screen overlay that fades out on login */
+    #gate {
+      position: fixed; inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 5, 16, 0.55);
+      backdrop-filter: blur(2px);
+      transition: opacity 0.8s ease;
+    }
+
+    #gate.dissolving {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Login card */
+    .login-card {
+      width: 380px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 40px 36px 36px;
+      box-shadow:
+        0 0 60px rgba(0,229,255,0.08),
+        0 0 120px rgba(170,0,255,0.05),
+        inset 0 0 40px rgba(0,5,20,0.6);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Scanline texture */
+    .login-card::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,229,255,0.015) 2px, rgba(0,229,255,0.015) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* Corner accent lines */
+    .login-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 40px; height: 40px;
+      border-top: 2px solid var(--cyan);
+      border-left: 2px solid var(--cyan);
+      border-radius: 6px 0 0 0;
+    }
+
+    .corner-br {
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 40px; height: 40px;
+      border-bottom: 2px solid var(--violet);
+      border-right: 2px solid var(--violet);
+      border-radius: 0 0 6px 0;
+    }
+
+    .logo {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 8px;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 50px rgba(0,229,255,0.3);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: rgba(0,229,255,0.45);
+      text-align: center;
+      margin-bottom: 36px;
+      text-transform: uppercase;
+    }
+
+    .field-group {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: rgba(0,229,255,0.6);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      background: rgba(0,229,255,0.04);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 3px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      letter-spacing: 1px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0,229,255,0.15);
+    }
+
+    input::placeholder {
+      color: rgba(176,224,248,0.25);
+      letter-spacing: 0;
+    }
+
+    /* Code input — monospace, uppercase */
+    #code-input {
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .btn-enter {
+      width: 100%;
+      margin-top: 28px;
+      padding: 12px;
+      background: rgba(0,229,255,0.08);
+      border: 1px solid var(--cyan);
+      border-radius: 3px;
+      color: var(--cyan);
+      font-family: 'Rajdhani', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-enter:hover:not(:disabled) {
+      background: rgba(0,229,255,0.15);
+      box-shadow: 0 0 20px rgba(0,229,255,0.2);
+    }
+
+    .btn-enter:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .btn-enter.loading::after {
+      content: ' ···';
+      animation: blink 0.8s infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .error-msg {
+      margin-top: 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      color: #ff3366;
+      text-align: center;
+      letter-spacing: 1px;
+      min-height: 16px;
+    }
+
+    .footer-note {
+      margin-top: 28px;
+      text-align: center;
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: rgba(176,224,248,0.2);
+      text-transform: uppercase;
+    }
+
+    /* Success flash */
+    @keyframes greenPulse {
+      0%   { box-shadow: 0 0 20px rgba(0,255,136,0.0); }
+      50%  { box-shadow: 0 0 40px rgba(0,255,136,0.4); }
+      100% { box-shadow: 0 0 20px rgba(0,255,136,0.0); }
+    }
+    .login-card.success {
+      border-color: var(--green);
+      animation: greenPulse 0.6s ease;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 3D scene preview (blurred/dimmed) -->
+<canvas id="scene"></canvas>
+
+<!-- Gate overlay -->
+<div id="gate">
+  <div class="login-card" id="login-card">
+    <div class="corner-br"></div>
+    <div class="logo">MANIFOLD</div>
+    <div class="sub">Intelligence Coordination Protocol — Access Required</div>
+
+    <div class="field-group">
+      <label for="username-input">Handle</label>
+      <input id="username-input" type="text" placeholder="your handle" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field-group">
+      <label for="code-input">Access Code</label>
+      <input id="code-input" type="text" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" maxlength="14">
+    </div>
+
+    <button class="btn-enter" id="enter-btn">Enter</button>
+    <div class="error-msg" id="error-msg"></div>
+
+    <div class="footer-note">Nexal Network · Private Beta</div>
+  </div>
+</div>
+
+<!-- Minimal 3D scene for background preview -->
+<script type="module">
+import * as THREE from 'three';
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 8, 22);
+camera.lookAt(0, 0, 0);
+
+// Fog
+scene.fog = new THREE.FogExp2(0x000510, 0.035);
+
+// Ambient + directional light
+scene.add(new THREE.AmbientLight(0x001133, 1));
+const dir = new THREE.DirectionalLight(0x00e5ff, 0.6);
+dir.position.set(5, 10, 5);
+scene.add(dir);
+
+// Particle field
+const N = 600;
+const positions = new Float32Array(N * 3);
+for (let i = 0; i < N; i++) {
+  positions[i * 3]     = (Math.random() - 0.5) * 60;
+  positions[i * 3 + 1] = (Math.random() - 0.5) * 40;
+  positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+}
+const pgeo = new THREE.BufferGeometry();
+pgeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+const pmat = new THREE.PointsMaterial({ color: 0x00e5ff, size: 0.12, transparent: true, opacity: 0.5 });
+scene.add(new THREE.Points(pgeo, pmat));
+
+// A few hub spheres
+const hubs = [
+  { pos: [-8, 2, -6], color: 0x00ff88 },
+  { pos: [8, 3, 2],   color: 0xaa00ff },
+  { pos: [-2, 5, 8],  color: 0x8800ff },
+];
+const hubMeshes = hubs.map(h => {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 16, 16),
+    new THREE.MeshPhongMaterial({ color: h.color, emissive: h.color, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 })
+  );
+  mesh.position.set(...h.pos);
+  scene.add(mesh);
+  return { mesh, base: [...h.pos], color: h.color, speed: 0.03 + Math.random() * 0.02, phase: Math.random() * Math.PI * 2 };
+});
+
+// Central fog blob
+const fgeo = new THREE.IcosahedronGeometry(2.5, 3);
+const fmat = new THREE.MeshPhongMaterial({
+  color: 0x0044aa, emissive: 0x001133, emissiveIntensity: 0.5,
+  wireframe: true, transparent: true, opacity: 0.18,
+});
+const fog = new THREE.Mesh(fgeo, fmat);
+scene.add(fog);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+let t = 0;
+(function loop() {
+  requestAnimationFrame(loop);
+  t += 0.008;
+  hubMeshes.forEach((h, i) => {
+    const r = 9 + i * 3;
+    h.mesh.position.x = Math.cos(t * (0.5 + i * 0.1) + h.phase) * r;
+    h.mesh.position.z = Math.sin(t * (0.5 + i * 0.1) + h.phase) * r * 0.6;
+    h.mesh.position.y = h.base[1] + Math.sin(t * 0.4 + h.phase) * 1.5;
+    const s = 1 + Math.sin(t * 2 + i) * 0.15;
+    h.mesh.scale.setScalar(s);
+  });
+  fog.rotation.y += 0.003;
+  fog.rotation.x += 0.001;
+  camera.position.x = Math.sin(t * 0.08) * 3;
+  camera.position.y = 8 + Math.sin(t * 0.05) * 1.5;
+  camera.lookAt(0, 0, 0);
+  renderer.render(scene, camera);
+})();
+</script>
+
+<!-- Auth logic -->
+<script type="module">
+const usernameEl = document.getElementById('username-input');
+const codeEl     = document.getElementById('code-input');
+const btnEl      = document.getElementById('enter-btn');
+const errEl      = document.getElementById('error-msg');
+const gateEl     = document.getElementById('gate');
+const cardEl     = document.getElementById('login-card');
+
+// Auto-format code input as XXXX-XXXX-XXXX
+codeEl.addEventListener('input', () => {
+  let v = codeEl.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
+  const parts = [v.slice(0,4), v.slice(4,8), v.slice(8,12)].filter(Boolean);
+  codeEl.value = parts.join('-');
+});
+
+// Allow Enter key
+[usernameEl, codeEl].forEach(el => el.addEventListener('keydown', e => {
+  if (e.key === 'Enter') btnEl.click();
+}));
+
+btnEl.addEventListener('click', async () => {
+  errEl.textContent = '';
+  const username = usernameEl.value.trim();
+  const code     = codeEl.value.trim();
+
+  if (!username || code.replace(/-/g, '').length < 12) {
+    errEl.textContent = 'Enter your handle and full access code.';
+    return;
+  }
+
+  btnEl.disabled = true;
+  btnEl.classList.add('loading');
+  btnEl.textContent = 'Verifying';
+
+  try {
+    const res = await fetch('/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, code }),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      // Store session
+      sessionStorage.setItem('nexal_token', data.token);
+      sessionStorage.setItem('nexal_user',  data.username);
+
+      cardEl.classList.add('success');
+      btnEl.textContent = 'Granted';
+
+      setTimeout(() => {
+        gateEl.classList.add('dissolving');
+        setTimeout(() => window.location.href = '/nexal/', 900);
+      }, 600);
+    } else {
+      const messages = {
+        invalid_code: 'Access code not recognised.',
+        code_taken:   'This code is already bound to another handle.',
+        missing_fields: 'Please complete all fields.',
+      };
+      errEl.textContent = messages[data.error] ?? 'Access denied.';
+      btnEl.disabled = false;
+      btnEl.classList.remove('loading');
+      btnEl.textContent = 'Enter';
+    }
+  } catch {
+    errEl.textContent = 'Connection error — try again.';
+    btnEl.disabled = false;
+    btnEl.classList.remove('loading');
+    btnEl.textContent = 'Enter';
+  }
+});
+</script>
+</body>
+</html>

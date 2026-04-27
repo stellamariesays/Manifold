@@ -19,6 +19,7 @@ import { AttestationEngine } from '../attestation/engine.js'
 import { AntiSybilGuard } from '../attestation/anti-sybil.js'
 
 import { registerNexalRoutes } from './routes/nexal.js'
+import { buildAuthRouter } from './routes/auth.js'
 import { buildAgentRouter } from './routes/agents.js'
 import { buildTaskRouter } from './routes/tasks.js'
 import { buildAttestationRouter } from './routes/attestation.js'
@@ -121,6 +122,9 @@ export class RestApi {
 
     // Nexal / topology UI routes (public, no auth required)
     registerNexalRoutes(this.app)
+
+    // Access code auth (public — no API key guard)
+    buildAuthRouter(this.app as unknown as Router)
 
     // Authenticated API router
     const router: Router = express.Router()
