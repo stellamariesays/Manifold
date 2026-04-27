@@ -28,12 +28,15 @@ import { buildTeacupsRouter } from './routes/teacups.js'
 import { buildDashboardRouter } from './routes/dashboard.js'
 import { buildAuthRouter } from './routes/auth.js'
 import { buildAdminRouter } from './routes/admin.js'
+import { buildMeshletRouter } from './routes/meshlet.js'
+import type { MeshletManager } from './meshlet-manager.js'
 
 export interface RestApiOptions {
   hub: string
   port: number
   debug?: boolean
   apiKey?: string
+  meshletManager?: MeshletManager
 }
 
 export class RestApi {
@@ -52,6 +55,7 @@ export class RestApi {
   private taskHistory!: TaskHistory
   private metrics!: MetricsCollector
   private detectionCoord!: DetectionCoord
+  private readonly meshletMgr?: MeshletManager
   readonly attestationEngine: AttestationEngine
   readonly antiSybilGuard: AntiSybilGuard
   private startTime = Date.now()
@@ -61,6 +65,7 @@ export class RestApi {
     this.port = options.port
     this.debug = options.debug ?? false
     this.apiKey = options.apiKey
+    this.meshletMgr = options.meshletManager
     this.attestationEngine = new AttestationEngine()
     this.antiSybilGuard = new AntiSybilGuard()
     this._setup()
@@ -177,6 +182,11 @@ export class RestApi {
       get peerRegistry() { return self.peerRegistry },
       get taskRouter() { return self.taskRouterInst },
     })
+
+    // Meshlet routes (if meshlet manager is provided)
+    if (self.meshletMgr) {
+      buildMeshletRouter(router, { meshletManager: self.meshletMgr })
+    }
 
     this.app.use('/', router)
   }
