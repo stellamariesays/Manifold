@@ -609,6 +609,36 @@ export function animateDataHighways(elapsed) {
           }
         }
 
+        // Update streamer trail
+        if (connection.trailLine) {
+          const N    = connection.trailN;
+          const pos  = connection.trailPos;
+          const col  = connection.trailCol;
+          const head = connection.trailHead;
+
+          pos[head * 3]     = currentPos.x;
+          pos[head * 3 + 1] = currentPos.y;
+          pos[head * 3 + 2] = currentPos.z;
+          connection.trailHead = (head + 1) % N;
+
+          const ordered = new Float32Array(N * 3);
+          const ordCol  = new Float32Array(N * 3);
+          for (let i = 0; i < N; i++) {
+            const src = ((connection.trailHead - 1 - i + N) % N);
+            ordered[i * 3]     = pos[src * 3];
+            ordered[i * 3 + 1] = pos[src * 3 + 1];
+            ordered[i * 3 + 2] = pos[src * 3 + 2];
+            const fade = Math.pow(1 - i / N, 1.8);
+            ordCol[i * 3]     = connection.trailR * fade;
+            ordCol[i * 3 + 1] = connection.trailG * fade;
+            ordCol[i * 3 + 2] = connection.trailB * fade;
+          }
+          connection.trailGeo.attributes.position.array.set(ordered);
+          connection.trailGeo.attributes.color.array.set(ordCol);
+          connection.trailGeo.attributes.position.needsUpdate = true;
+          connection.trailGeo.attributes.color.needsUpdate    = true;
+        }
+
         if (Math.abs(currentPos.y + 2.5) < 1.0) {
           _lightUpWebSegments(currentPos, connection.color, connection.intensity);
         }
@@ -618,12 +648,18 @@ export function animateDataHighways(elapsed) {
         if (connection.pulseSphere && connection.pulseSphere.parent) {
           connection.pulseSphere.parent.remove(connection.pulseSphere);
         }
+        if (connection.trailLine && connection.trailLine.parent) {
+          connection.trailLine.parent.remove(connection.trailLine);
+        }
         return false;
       }
       return true;
     } else {
       if (connection.pulseSphere && connection.pulseSphere.parent) {
         connection.pulseSphere.parent.remove(connection.pulseSphere);
+      }
+      if (connection.trailLine && connection.trailLine.parent) {
+        connection.trailLine.parent.remove(connection.trailLine);
       }
       return false;
     }
@@ -721,9 +757,29 @@ export function createDataPulse(sourceHub, destHub, color, pressure, capabilityN
   const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
   getScene().add(pulseSphere);
 
+  // Streamer trail for this pulse
+  const TRAIL_N = 30;
+  const trailPos = new Float32Array(TRAIL_N * 3);
+  const trailCol = new Float32Array(TRAIL_N * 3);
+  const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+  trailGeo.setAttribute('color',    new THREE.BufferAttribute(trailCol, 3));
+  const trailMat = new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.6,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  });
+  const trailLine = new THREE.Line(trailGeo, trailMat);
+  getScene().add(trailLine);
+
+  // Decode color to floats
+  const tc = new THREE.Color(color);
+
   highways.connections.push({
     line: null,
     pulseSphere,
+    trailLine, trailGeo, trailPos, trailCol,
+    trailN: TRAIL_N, trailHead: 0,
+    trailR: tc.r, trailG: tc.g, trailB: tc.b,
     webPath,
     pathPoints,
     progress: 0.0,
