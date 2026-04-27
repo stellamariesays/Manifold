@@ -16,7 +16,7 @@ export async function loadAgentsAndBuild(callbacks) {
   let meshData = null;
 
   try {
-    const response = await fetch('/api/mesh');
+    const response = await fetch('/mesh');
     meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
@@ -75,7 +75,7 @@ export function startMeshPolling(callbacks) {
   _pollTimer = setInterval(async () => {
     try {
       const t0 = performance.now();
-      const response = await fetch('/api/mesh');
+      const response = await fetch('/mesh');
       const rtt = Math.round(performance.now() - t0);
       const meshData = await response.json();
       _lastPollTime = Date.now();
