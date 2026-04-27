@@ -392,8 +392,8 @@ btnEl.addEventListener('click', async () => {
 
     if (data.ok) {
       // Store session
-      sessionStorage.setItem('nexal_token', data.token);
-      sessionStorage.setItem('nexal_user',  data.username);
+      localStorage.setItem('nexal_token', data.token);
+      localStorage.setItem('nexal_user',  data.username);
 
       cardEl.classList.add('success');
       btnEl.textContent = 'Granted';

@@ -442,8 +442,8 @@
 
 <script type="module">
 // ── Session guard ─────────────────────────────────────────────────────────
-const token = sessionStorage.getItem('nexal_token');
-const user  = sessionStorage.getItem('nexal_user');
+const token = localStorage.getItem('nexal_token');
+const user  = localStorage.getItem('nexal_user');
 if (!token) {
   window.location.replace('/nexal/login.html');
 }
@@ -489,7 +489,7 @@ submitBtn.addEventListener('click', async () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionStorage.getItem('nexal_token') ?? ''}`,
+        'Authorization': `Bearer ${localStorage.getItem('nexal_token') ?? ''}`,
       },
       body: JSON.stringify({
         target: 'stella@trillian',
