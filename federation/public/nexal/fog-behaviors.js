@@ -268,4 +268,4 @@ const pulseToHub = {
   },
 };
 
-registerFogBehavior(pulseToHub);
+registerFogBehavior({ ...pulseToHub, enabled: false });
