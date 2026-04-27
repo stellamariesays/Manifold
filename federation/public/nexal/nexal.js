@@ -71,9 +71,26 @@ window.addEventListener('resize', () => {
   const camera = getCamera();
   const renderer = getRenderer();
   if (!camera || !renderer) return;
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // Reposition camera so the orbital system stays in frame at any aspect ratio.
+  // Only do this if OrbitControls haven't been used (user hasn't manually panned/zoomed).
+  const controls = window.cameraControls;
+  if (!controls || !controls.enabled) return;
+  // If the user has moved from default: skip. Check via target distance heuristic.
+  const dist = camera.position.length();
+  const baseDist = 40;
+  const idealZ = aspect < 1 ? baseDist / aspect : baseDist;
+  const idealDist = Math.sqrt(idealZ * idealZ + (idealZ * 0.25) * (idealZ * 0.25));
+  // Only auto-adjust if we're still near the default distance (±30%)
+  if (Math.abs(dist - idealDist) / idealDist < 0.3) {
+    camera.position.set(0, idealZ * 0.25, idealZ);
+    camera.lookAt(0, 0, 0);
+    if (controls) controls.update();
+  }
 });
 
 window.addEventListener('click', (event) => {

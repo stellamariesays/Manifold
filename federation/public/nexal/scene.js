@@ -93,7 +93,14 @@ export function init() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  camera.position.set(0, 8, 20);
+  // On portrait/mobile the vertical FOV is narrow, so pull back further
+  // to keep the full orbital system (max radius ~22 units) in frame.
+  // Target: fit a ~25-unit radius sphere. On landscape z=40 is enough;
+  // on portrait we need more because the constraining FOV axis is vertical.
+  const aspect = window.innerWidth / window.innerHeight;
+  const baseDist = 40;
+  const camZ = aspect < 1 ? baseDist / aspect : baseDist;
+  camera.position.set(0, camZ * 0.25, camZ);
   camera.lookAt(0, 0, 0);
 
   // Keep window.camera for animation.js mouse interaction (nexal.js also uses it)
