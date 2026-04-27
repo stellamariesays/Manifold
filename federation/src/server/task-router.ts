@@ -451,9 +451,10 @@ export class TaskRouter extends EventEmitter {
     const sc = this.pendingPerSource.get(sourceKey) ?? 0
     if (sc > 0) this.pendingPerSource.set(sourceKey, sc - 1)
 
-    // Store completed
-    this.completed.set(result.id, { result, completedAt: Date.now() })
-    setTimeout(() => this.completed.delete(result.id), this.completedTtlMs)
+    // Store completed — use scoped key to avoid cross-hub collisions
+    const completedKey = pKey  // same scoped key as pending map
+    this.completed.set(completedKey, { result, completedAt: Date.now() })
+    setTimeout(() => this.completed.delete(completedKey), this.completedTtlMs)
 
     // Send result back to origin
     this.sendResult(result, pending.replyTo, pending.originHub)
@@ -588,10 +589,16 @@ export class TaskRouter extends EventEmitter {
     }
   }
 
-  /** Get status of a task by ID */
+  /** Get status of a task by ID (uses scoped key for completed lookup) */
   getTaskStatus(taskId: string): 'pending' | 'completed' | 'unknown' {
     if (this.taskIdToKey.has(taskId)) return 'pending'
-    if (this.completed.has(taskId)) return 'completed'
+    // Completed map uses scoped (origin:taskId) keys — check via taskIdToKey first
+    const pKey = this.taskIdToKey.get(taskId)
+    if (pKey && this.completed.has(pKey)) return 'completed'
+    // Fallback: scan completed entries for matching result.id
+    for (const [, entry] of this.completed) {
+      if (entry.result.id === taskId) return 'completed'
+    }
     return 'unknown'
   }
 
