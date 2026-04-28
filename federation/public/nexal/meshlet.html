@@ -720,6 +720,19 @@ let pollTimer = null;
 let ws = null;
 
 const API = window.location.origin;
+const API_BASE = API;   // meshlet routes are at /api/meshlet/* but other routes (capabilities) are at root
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:6px;font-family:var(--mono);font-size:11px;z-index:9999;max-width:360px;white-space:pre-wrap;transition:opacity 0.3s;`;
+  if (type === 'error') { el.style.background = '#3d1111'; el.style.color = '#ff6b6b'; el.style.border = '1px solid #ff3d3d'; }
+  else if (type === 'ok') { el.style.background = '#0d2d1a'; el.style.color = '#00e676'; el.style.border = '1px solid #00e676'; }
+  else { el.style.background = '#0d1a2d'; el.style.color = '#00e5ff'; el.style.border = '1px solid #00e5ff'; }
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+}
 
 // ── Meshlet Lifecycle ──────────────────────────────────────────────────────
 
@@ -731,7 +744,7 @@ async function launchMeshlet() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error || 'Failed to create meshlet');
+      toast(err.error || 'Failed to create meshlet', 'error');
       return;
     }
     const data = await res.json();
@@ -745,11 +758,12 @@ async function launchMeshlet() {
     document.getElementById('status-pill').className = 'status-pill active';
     document.getElementById('meshlet-id-display').textContent = meshletId.slice(0, 12);
 
+    toast(`Meshlet launched (${data.mode})`, 'ok');
     connectWS();
     startPolling();
     loadCapabilities();
   } catch (e) {
-    alert('Network error: ' + e.message);
+    toast('Network error: ' + e.message, 'error');
   }
 }
 
@@ -758,6 +772,7 @@ async function destroyMeshlet() {
   if (!confirm('Destroy this meshlet? All voids and agents will be lost.')) return;
 
   await fetch(`${API}/api/meshlet/${meshletId}`, { method: 'DELETE' });
+  toast('Meshlet destroyed', 'ok');
   cleanup();
 }
 
@@ -840,7 +855,7 @@ async function refreshStats() {
     document.getElementById('stat-voids').textContent = data.voidCount;
     if (data.status === 'expired' || data.status === 'destroyed') {
       cleanup();
-      alert('Meshlet has expired or been destroyed.');
+      toast('Meshlet has expired or been destroyed', 'error');
     }
   } catch {}
 }
@@ -866,13 +881,14 @@ async function openVoid() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error);
+      toast(err.error || 'Failed to open void', 'error');
       return;
     }
     input.value = '';
+    toast(`Void opened: ${term}`, 'ok');
     refreshVoids();
   } catch (e) {
-    alert('Error: ' + e.message);
+    toast('Error: ' + e.message, 'error');
   }
 }
 
@@ -949,13 +965,13 @@ async function confirmNameVoid() {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.error);
+      toast(err.error || 'Error', 'error');
       return;
     }
     closeNameModal();
     refreshVoids();
   } catch (e) {
-    alert('Error: ' + e.message);
+    toast('Error: ' + e.message, 'error');
   }
 }
 
@@ -963,9 +979,10 @@ async function confirmNameVoid() {
 
 async function loadCapabilities() {
   try {
-    const res = await fetch(`${API}/api/capabilities`);
+    const res = await fetch(`${API_BASE}/capabilities`);
     if (!res.ok) return;
-    const caps = await res.json();
+    const data = await res.json();
+    const caps = (data.capabilities || data || []).map(c => typeof c === 'string' ? c : c.capability || c.name || String(c));
     const container = document.getElementById('cap-tags');
     container.innerHTML = caps.map(c =>
       `<div class="cap-tag" data-cap="${c}" onclick="toggleCap(this, '${c}')">${c}</div>`
@@ -1002,10 +1019,10 @@ function addCustomCap() {
 }
 
 async function registerAgent() {
-  if (!meshletId) return alert('No active meshlet');
+  if (!meshletId) { toast('No active meshlet', 'error'); return; } void 0; /*was alert*/('No active meshlet');
 
   const name = document.getElementById('agent-name').value.trim();
-  if (!name) return alert('Agent name is required');
+  if (!name) { toast('Agent name is required', 'error'); return; }
 
   const seams = document.getElementById('agent-seams').value
     .split(',').map(s => s.trim()).filter(Boolean);
@@ -1013,7 +1030,7 @@ async function registerAgent() {
   try {
     config = JSON.parse(document.getElementById('agent-config').value || '{}');
   } catch {
-    return alert('Invalid JSON in configuration');
+    toast('Invalid JSON in configuration', 'error'); return;
   }
 
   try {
@@ -1029,21 +1046,21 @@ async function registerAgent() {
     });
     if (!res.ok) {
       const err = await res.json();
-      return alert(err.error);
+      return toast(err.error || 'Error', 'error');
     }
-    alert(`Agent "${name}" registered in meshlet`);
+    toast(`Agent "${name}" registered in meshlet`, 'ok');
   } catch (e) {
-    alert('Error: ' + e.message);
+    toast('Error: ' + e.message, 'error');
   }
 }
 
 async function promoteAgent() {
   // For now, just confirm intent. Full promotion to federation is Phase 3.
-  if (!meshletId) return alert('No active meshlet');
+  if (!meshletId) { toast('No active meshlet', 'error'); return; } void 0; /*was alert*/('No active meshlet');
   const name = document.getElementById('agent-name').value.trim();
-  if (!name) return alert('Enter an agent name first');
+  if (!name) { toast('Enter an agent name first', 'error'); return; }
 
-  alert(`Promotion to full mesh is coming in Phase 3.\nAgent "${name}" is ready for promotion.`);
+  toast(`Promotion to full mesh is coming in Phase 3.\nAgent "${name}" is ready for promotion.`, 'info');
 }
 
 // ── SSJ2 ───────────────────────────────────────────────────────────────────
