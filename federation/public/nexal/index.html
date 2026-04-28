@@ -538,8 +538,9 @@ async function submitTask() {
     }
 
     const id = data.task_id || data.id || taskId;
-    toast(`Task ${id.slice(0,8)} ${data.status}`, data.status === 'completed' ? 'ok' : data.status === 'timeout' ? 'err' : 'info');
-    addEvent(data.status, `${data.status === 'completed' ? '✓' : '✗'} ${command} → ${data.executed_by || target}${data.execution_ms ? ' (' + data.execution_ms + 'ms)' : ''}${data.output ? ': ' + JSON.stringify(data.output).slice(0,60) : ''}${data.error ? ' ERR: ' + data.error : ''}`, data.status === 'completed' ? 'var(--green)' : 'var(--red)');
+    const ok = data.status === 'completed' || data.status === 'success';
+    toast(`Task ${id.slice(0,8)} ${data.status}`, ok ? 'ok' : data.status === 'timeout' ? 'err' : 'info');
+    addEvent(data.status, `${ok ? '✓' : '✗'} ${command} → ${data.executed_by || target}${data.execution_ms ? ' (' + data.execution_ms + 'ms)' : ''}${data.output ? ': ' + JSON.stringify(data.output).slice(0,60) : ''}${data.error ? ' ERR: ' + data.error : ''}`, ok ? 'var(--green)' : 'var(--red)');
     document.getElementById('task-command').value = '';
 
     // Switch to history tab
@@ -592,7 +593,7 @@ async function loadTaskHistory() {
 }
 
 function taskRowHtml(t) {
-  const statusColor = t.status === 'completed' ? 'var(--green)' : t.status === 'failed' || t.status === 'error' ? 'var(--red)' : 'var(--orange)';
+  const statusColor = (t.status === 'completed' || t.status === 'success') ? 'var(--green)' : (t.status === 'failed' || t.status === 'error') ? 'var(--red)' : 'var(--orange)';
   const time = t.created_at ? new Date(t.created_at).toLocaleTimeString() : t.completedAt ? new Date(t.completedAt).toLocaleTimeString() : '—';
   return `<div class="task-row">
     <span style="color:var(--text-dim)">${time}</span>
