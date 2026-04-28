@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manifold — Federation Dashboard</title>
+  <title>Manifold — Federation Control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
@@ -11,7 +11,9 @@
       --bg: #060a10;
       --surface: #0c1118;
       --surface2: #111820;
+      --surface3: #161e2a;
       --border: #1a2535;
+      --border-hi: #2a3a50;
       --text: #c8d6e5;
       --text-dim: #5a7089;
       --cyan: #00d4ff;
@@ -20,517 +22,626 @@
       --orange: #ff9100;
       --pink: #ff4081;
       --red: #ff3d3d;
-      --font-mono: 'JetBrains Mono', monospace;
-      --font-sans: 'Inter', -apple-system, sans-serif;
+      --gold: #ffd740;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Inter', -apple-system, sans-serif;
     }
-
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font-sans);
-      font-size: 14px;
-      line-height: 1.5;
-      overflow-x: hidden;
-    }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; overflow-x: hidden; }
 
     /* ── Header ── */
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface);
+      position: sticky; top: 0; z-index: 100;
     }
-
-    .logo-group {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .logo {
-      font-family: var(--font-mono);
-      font-weight: 600;
-      font-size: 18px;
-      letter-spacing: 3px;
-      color: var(--cyan);
-    }
-
-    .logo-sub {
-      font-size: 11px;
-      color: var(--text-dim);
-      letter-spacing: 1px;
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .workshop-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 16px;
-      background: transparent;
-      border: 1px solid var(--violet);
-      color: var(--violet);
-      border-radius: 6px;
-      font-family: var(--font-mono);
-      font-size: 12px;
-      letter-spacing: 1px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.2s;
-    }
-    .workshop-btn:hover {
-      background: rgba(179, 136, 255, 0.1);
-    }
-
-    .status-badge {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--green);
-    }
-    .status-dot {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--green);
-      animation: pulse-dot 2s ease-in-out infinite;
-    }
+    .logo { font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: 3px; color: var(--cyan); }
+    .logo-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-top: 1px; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .status-badge { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--green); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
     .status-dot.offline { background: var(--red); animation: none; }
-
-    @keyframes pulse-dot {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    /* ── Stats Bar ── */
-    .stats-bar {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 1px;
-      background: var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .stat {
-      background: var(--surface);
-      padding: 16px 20px;
-      text-align: center;
-    }
-    .stat-value {
-      font-family: var(--font-mono);
-      font-size: 28px;
-      font-weight: 600;
-      color: var(--cyan);
-      line-height: 1.2;
-    }
-    .stat-label {
-      font-size: 11px;
-      color: var(--text-dim);
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      margin-top: 4px;
-    }
-
-    /* ── Main Grid ── */
-    .dashboard {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border);
-      min-height: calc(100vh - 130px);
-    }
-
-    @media (max-width: 768px) {
-      .dashboard { grid-template-columns: 1fr; }
-    }
-
-    .panel {
-      background: var(--bg);
-      padding: 20px;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-
-    .panel-title {
-      font-family: var(--font-mono);
-      font-size: 12px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: var(--text-dim);
-    }
-
-    .panel-count {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--cyan);
-      background: rgba(0, 212, 255, 0.08);
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    /* ── Hub Cards ── */
-    .hub-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 10px;
-      transition: border-color 0.2s;
-    }
-    .hub-card:hover { border-color: var(--cyan); }
-
-    .hub-name {
-      font-family: var(--font-mono);
-      font-weight: 600;
-      font-size: 14px;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .hub-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-
-    .hub-agents {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .agent-tag {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      background: var(--surface2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      cursor: default;
+    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
+    .header-btn {
+      padding: 6px 14px; background: transparent; border: 1px solid var(--border-hi); color: var(--text-dim);
+      border-radius: 5px; font-family: var(--mono); font-size: 11px; cursor: pointer; text-decoration: none;
       transition: all 0.15s;
     }
-    .agent-tag.local {
-      border-color: rgba(0, 230, 118, 0.3);
-      color: var(--green);
+    .header-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .header-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+    /* ── Stats ── */
+    .stats-bar {
+      display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
+      background: var(--border); border-bottom: 1px solid var(--border);
     }
-    .agent-tag:hover {
-      border-color: var(--cyan);
-      transform: translateY(-1px);
+    .stat { background: var(--surface); padding: 10px 16px; text-align: center; }
+    .stat-val { font-family: var(--mono); font-size: 22px; font-weight: 600; line-height: 1.2; }
+    .stat-lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
+
+    /* ── Layout ── */
+    .main { display: grid; grid-template-columns: 280px 1fr 300px; min-height: calc(100vh - 90px); }
+    @media (max-width: 1100px) { .main { grid-template-columns: 1fr; } }
+
+    /* ── Sidebar ── */
+    .sidebar { border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; max-height: calc(100vh - 90px); }
+    .sidebar-title { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--text-dim); padding: 12px 14px 6px; text-transform: uppercase; }
+
+    .hub-group { margin-bottom: 4px; }
+    .hub-header {
+      display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .hub-header:hover { background: var(--surface2); }
+    .hub-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .hub-name { font-family: var(--mono); font-weight: 600; font-size: 12px; }
+    .hub-count { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+
+    .agent-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 30px;
+      cursor: pointer; transition: all 0.15s; font-size: 12px;
+    }
+    .agent-item:hover { background: var(--surface2); }
+    .agent-item.selected { background: var(--surface3); border-left: 2px solid var(--cyan); }
+    .agent-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .agent-dot.remote { background: var(--text-dim); }
+    .agent-name { font-family: var(--mono); }
+    .agent-caps-count { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+
+    /* ── Center Panel ── */
+    .center { overflow-y: auto; max-height: calc(100vh - 90px); }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border); background: var(--surface);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .tab {
+      padding: 10px 20px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px;
+      color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+    .tab-content { display: none; padding: 20px; }
+    .tab-content.active { display: block; }
+
+    /* ── Agent Detail ── */
+    .agent-detail-header { margin-bottom: 20px; }
+    .agent-detail-name { font-family: var(--mono); font-size: 24px; font-weight: 600; }
+    .agent-detail-hub { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+    .cap-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .cap-chip {
+      font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 4px;
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
     }
 
-    /* ── Peer List ── */
-    .peer-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 10px 14px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      margin-bottom: 6px;
-      font-family: var(--font-mono);
-      font-size: 12px;
+    /* ── Task Form ── */
+    .task-form { max-width: 560px; }
+    .form-group { margin-bottom: 14px; }
+    .form-label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px; display: block; margin-bottom: 4px; }
+    .form-input, .form-textarea, .form-select {
+      width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 12px;
+      outline: none; transition: border-color 0.15s;
     }
+    .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--cyan); }
+    .form-textarea { min-height: 80px; resize: vertical; }
+    .form-select option { background: var(--surface); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    .peer-name { font-weight: 600; }
-
-    .peer-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: var(--text-dim);
-      font-size: 11px;
+    .btn {
+      padding: 8px 20px; border-radius: 5px; font-family: var(--mono); font-size: 12px;
+      cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
     }
+    .btn-primary { background: rgba(0,212,255,0.12); border-color: var(--cyan); color: var(--cyan); }
+    .btn-primary:hover { background: rgba(0,212,255,0.22); }
+    .btn-green { background: rgba(0,230,118,0.12); border-color: var(--green); color: var(--green); }
+    .btn-green:hover { background: rgba(0,230,118,0.22); }
+    .btn-danger { background: rgba(255,61,61,0.12); border-color: var(--red); color: var(--red); }
+    .btn-danger:hover { background: rgba(255,61,61,0.22); }
 
-    .peer-status {
-      width: 6px; height: 6px;
-      border-radius: 50%;
-      background: var(--green);
+    /* ── Task History ── */
+    .task-row {
+      display: grid; grid-template-columns: 100px 100px 1fr 80px 80px;
+      gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border);
+      font-family: var(--mono); font-size: 11px; align-items: center;
     }
-    .peer-status.stale { background: var(--orange); }
+    .task-row:hover { background: var(--surface); }
+    .task-row.header { color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-hi); }
+
+    /* ── Right Panel ── */
+    .right-panel { border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; max-height: calc(100vh - 90px); }
+    .feed-item {
+      padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px;
+    }
+    .feed-time { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+    .feed-text { margin-top: 3px; }
+    .feed-tag { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
 
     /* ── Dark Circles ── */
-    .pressure-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-      font-family: var(--font-mono);
-      font-size: 12px;
-    }
-    .pressure-bar:last-child { border-bottom: none; }
+    .dc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .dc-row:last-child { border-bottom: none; }
+    .dc-name { width: 180px; font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dc-track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+    .dc-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+    .dc-val { width: 36px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+    .dc-hubs { width: 120px; font-size: 10px; color: var(--text-dim); }
 
-    .pressure-name {
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; border-radius: 6px;
+      font-family: var(--mono); font-size: 11px; z-index: 9999; max-width: 400px;
+      transition: opacity 0.3s;
     }
+    .toast.ok { background: #0d2d1a; color: #00e676; border: 1px solid #00e676; }
+    .toast.err { background: #2d0d0d; color: #ff6b6b; border: 1px solid #ff3d3d; }
+    .toast.info { background: #0d1a2d; color: #00d4ff; border: 1px solid #00d4ff; }
 
-    .pressure-track {
-      width: 80px;
-      height: 4px;
-      background: var(--surface2);
-      border-radius: 2px;
-      overflow: hidden;
-    }
+    /* ── Empty state ── */
+    .empty { padding: 40px; text-align: center; color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
 
-    .pressure-fill {
-      height: 100%;
-      border-radius: 2px;
-      transition: width 0.5s ease;
-    }
-
-    .pressure-val {
-      width: 32px;
-      text-align: right;
-      font-size: 11px;
-      color: var(--text-dim);
-    }
-
-    /* ── Events Feed ── */
-    .event-item {
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 12px;
-      font-family: var(--font-mono);
-    }
-    .event-item:last-child { border-bottom: none; }
-    .event-time { color: var(--text-dim); font-size: 11px; }
-    .event-text { color: var(--text); margin-top: 2px; }
-
-    /* ── Loading ── */
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 200px;
-      color: var(--text-dim);
-      font-family: var(--font-mono);
-      font-size: 12px;
-    }
-
-    /* ── Full width panels ── */
-    .panel.full { grid-column: 1 / -1; }
+    /* ── Metrics ── */
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .metric-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
+    .metric-card .label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; font-family: var(--mono); }
+    .metric-card .value { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--cyan); margin-top: 4px; }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="logo-group">
-    <div>
-      <div class="logo">MANIFOLD</div>
-      <div class="logo-sub">Federation Dashboard</div>
-    </div>
+  <div>
+    <div class="logo">MANIFOLD</div>
+    <div class="logo-sub">Federation Control</div>
   </div>
-  <div class="header-actions">
+  <div class="header-right">
     <div class="status-badge">
       <span class="status-dot" id="status-dot"></span>
       <span id="status-text">connecting...</span>
     </div>
-    <a href="/nexal/meshlet" class="workshop-btn">⚡ WORKSHOP</a>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)" id="uptime"></span>
   </div>
 </header>
 
-<div class="stats-bar" id="stats-bar">
-  <div class="stat">
-    <div class="stat-value" id="stat-agents">—</div>
-    <div class="stat-label">Agents</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="stat-hubs">—</div>
-    <div class="stat-label">Hubs</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="stat-caps">—</div>
-    <div class="stat-label">Capabilities</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="stat-peers">—</div>
-    <div class="stat-label">Peers</div>
-  </div>
-  <div class="stat">
-    <div class="stat-value" id="stat-circles">—</div>
-    <div class="stat-label">Dark Circles</div>
-  </div>
-</div>
+<div class="stats-bar" id="stats-bar"></div>
 
-<div class="dashboard">
-  <!-- Hubs & Agents -->
-  <div class="panel" id="hubs-panel">
-    <div class="panel-header">
-      <div class="panel-title">Hubs & Agents</div>
-      <div class="panel-count" id="agent-count"></div>
+<div class="main">
+  <!-- Sidebar: Agents -->
+  <div class="sidebar" id="sidebar"></div>
+
+  <!-- Center -->
+  <div class="center">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="overview">Overview</div>
+      <div class="tab" data-tab="task">Submit Task</div>
+      <div class="tab" data-tab="history">Task History</div>
+      <div class="tab" data-tab="metrics">Metrics</div>
+      <div class="tab" data-tab="peers">Peers</div>
     </div>
-    <div id="hubs-list"><div class="loading">Loading...</div></div>
+
+    <!-- Overview -->
+    <div class="tab-content active" id="tab-overview">
+      <div id="overview-content"><div class="empty">Select an agent or view federation data</div></div>
+    </div>
+
+    <!-- Task Submit -->
+    <div class="tab-content" id="tab-task">
+      <div class="task-form">
+        <h3 style="font-family:var(--mono);font-size:14px;margin-bottom:16px;color:var(--cyan)">Submit Task to Mesh</h3>
+        <div class="form-group">
+          <label class="form-label">Target Agent</label>
+          <select class="form-select" id="task-target">
+            <option value="any">Any Available</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Capability (optional)</label>
+          <select class="form-select" id="task-capability">
+            <option value="">Any</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Command</label>
+          <input class="form-input" id="task-command" placeholder="e.g. health-check, run-scan, analyze">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Arguments (JSON)</label>
+          <textarea class="form-textarea" id="task-args" placeholder='{"key": "value"}'>{}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Timeout (ms)</label>
+          <input class="form-input" id="task-timeout" type="number" value="30000">
+        </div>
+        <button class="btn btn-primary" onclick="submitTask()">▶ Submit Task</button>
+      </div>
+    </div>
+
+    <!-- Task History -->
+    <div class="tab-content" id="tab-history">
+      <div id="task-history"><div class="empty">No tasks yet</div></div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="tab-content" id="tab-metrics">
+      <div id="metrics-content"><div class="empty">Loading...</div></div>
+    </div>
+
+    <!-- Peers -->
+    <div class="tab-content" id="tab-peers">
+      <div id="peers-content"><div class="empty">Loading...</div></div>
+    </div>
   </div>
 
-  <!-- Peer Connections -->
-  <div class="panel" id="peers-panel">
-    <div class="panel-header">
-      <div class="panel-title">Peer Connections</div>
-      <div class="panel-count" id="peer-count"></div>
+  <!-- Right Panel: Live Feed + Dark Circles -->
+  <div class="right-panel">
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase">Live Feed</div>
     </div>
-    <div id="peers-list"><div class="loading">Loading...</div></div>
-  </div>
+    <div id="live-feed"><div class="empty">Waiting for events...</div></div>
 
-  <!-- Dark Circles (full width) -->
-  <div class="panel full" id="circles-panel">
-    <div class="panel-header">
-      <div class="panel-title">Dark Circles — Capability Pressure</div>
-      <div class="panel-count" id="circle-count"></div>
+    <div style="padding:12px 14px;border-bottom:1px solid var(--border);border-top:1px solid var(--border)">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase">Dark Circles</div>
     </div>
-    <div id="circles-list"><div class="loading">Loading...</div></div>
+    <div id="dark-circles" style="padding:8px 14px"><div class="empty">Loading...</div></div>
   </div>
 </div>
 
 <script>
-const HUB_COLORS = {
-  trillian: '#b388ff',
-  hog: '#00e676',
-  thefog: '#7c4dff',
-  bobiverse: '#ff9100',
-  relay: '#00d4ff',
-};
+const HUB_COLORS = { trillian:'#b388ff', hog:'#00e676', thefog:'#7c4dff', bobiverse:'#ff9100', relay:'#00d4ff' };
 
 let meshData = null;
+let selectedAgent = null;
+let eventLog = [];
 
-async function fetchMesh() {
+// ── Toast ──
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+}
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  };
+});
+
+// ── Data Fetch ──
+async function fetchAll() {
   try {
-    const res = await fetch('/mesh');
-    meshData = await res.json();
-    render(meshData);
-    const dot = document.getElementById('status-dot');
-    dot.classList.remove('offline');
-    document.getElementById('status-text').textContent = 'mesh live';
+    const [meshRes, metricsRes, taskRes] = await Promise.all([
+      fetch('/mesh'), fetch('/metrics'), fetch('/tasks')
+    ]);
+    const mesh = await meshRes.json();
+    const metrics = await metricsRes.json();
+    const tasks = await taskRes.json();
+
+    meshData = mesh;
+    renderAll(mesh, metrics, tasks);
+    document.getElementById('status-dot').classList.remove('offline');
+    document.getElementById('status-text').textContent = mesh.hub + ' · mesh live';
   } catch (e) {
     document.getElementById('status-dot').classList.add('offline');
     document.getElementById('status-text').textContent = 'offline';
   }
 }
 
-function render(data) {
-  if (!data) return;
+function renderAll(mesh, metrics, tasks) {
+  const { agents=[], peers=[], darkCircles=[], stats={}, capabilities=[] } = mesh;
 
-  const { agents = [], peers = [], darkCircles = [], stats = {}, capabilities = [] } = data;
+  // Stats bar
+  document.getElementById('stats-bar').innerHTML = [
+    { v: agents.length, l: 'Agents', c: 'var(--cyan)' },
+    { v: stats.hubs?.length || 0, l: 'Hubs', c: 'var(--violet)' },
+    { v: capabilities.length, l: 'Capabilities', c: 'var(--green)' },
+    { v: peers.length, l: 'Peer Links', c: 'var(--orange)' },
+    { v: darkCircles.length, l: 'Dark Circles', c: 'var(--pink)' },
+    { v: metrics.tasksTotal || 0, l: 'Tasks Run', c: 'var(--gold)' },
+  ].map(s => `<div class="stat"><div class="stat-val" style="color:${s.c}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
 
-  // Stats
-  document.getElementById('stat-agents').textContent = agents.length;
-  document.getElementById('stat-hubs').textContent = (stats.hubs || []).length;
-  document.getElementById('stat-caps').textContent = capabilities.length;
-  document.getElementById('stat-peers').textContent = peers.length;
-  document.getElementById('stat-circles').textContent = darkCircles.length;
+  // Uptime
+  if (metrics.uptime) {
+    const h = Math.floor(metrics.uptime / 3600);
+    const m = Math.floor((metrics.uptime % 3600) / 60);
+    document.getElementById('uptime').textContent = `up ${h}h ${m}m`;
+  }
 
-  // Group agents by hub
+  // Sidebar: agents grouped by hub
   const byHub = {};
-  agents.forEach(a => {
-    if (!byHub[a.hub]) byHub[a.hub] = [];
-    byHub[a.hub].push(a);
-  });
+  agents.forEach(a => { if (!byHub[a.hub]) byHub[a.hub] = []; byHub[a.hub].push(a); });
 
-  // Hubs & Agents
-  const hubsHtml = Object.entries(byHub).map(([hub, hubAgents]) => {
+  const sidebarHtml = Object.entries(byHub).map(([hub, hubAgents]) => {
     const color = HUB_COLORS[hub] || '#888';
-    const tags = hubAgents.map(a =>
-      `<span class="agent-tag ${a.isLocal ? 'local' : ''}" title="${(a.capabilities || []).join(', ')}">${a.name}</span>`
-    ).join('');
     return `
-      <div class="hub-card">
-        <div class="hub-name">
+      <div class="hub-group">
+        <div class="hub-header">
           <span class="hub-dot" style="background:${color}"></span>
-          <span style="color:${color}">${hub}</span>
-          <span style="color:var(--text-dim);font-weight:300;font-size:11px">${hubAgents.length} agent${hubAgents.length !== 1 ? 's' : ''}</span>
+          <span class="hub-name" style="color:${color}">${hub}</span>
+          <span class="hub-count">${hubAgents.length}</span>
         </div>
-        <div class="hub-agents">${tags}</div>
+        ${hubAgents.map(a => `
+          <div class="agent-item ${selectedAgent === a.name ? 'selected' : ''}" onclick="selectAgent('${a.name}')">
+            <span class="agent-dot ${a.isLocal ? '' : 'remote'}"></span>
+            <span class="agent-name">${a.name}</span>
+            <span class="agent-caps-count">${(a.capabilities||[]).length}</span>
+          </div>
+        `).join('')}
       </div>
     `;
   }).join('');
-  document.getElementById('hubs-list').innerHTML = hubsHtml || '<div class="loading">No agents</div>';
-  document.getElementById('agent-count').textContent = agents.length + ' agents';
+  document.getElementById('sidebar').innerHTML = sidebarHtml;
 
-  // Peers — deduplicate by hub
-  const seenHubs = new Set();
-  const uniquePeers = peers.filter(p => {
-    if (seenHubs.has(p.hub)) return false;
-    seenHubs.add(p.hub);
-    return true;
-  });
+  // Task form: populate agent dropdown
+  const targetEl = document.getElementById('task-target');
+  const currentTarget = targetEl.value;
+  targetEl.innerHTML = '<option value="any">Any Available</option>' +
+    agents.map(a => `<option value="${a.name}">${a.name}@${a.hub}${a.isLocal ? ' ★' : ''}</option>`).join('');
+  if (currentTarget) targetEl.value = currentTarget;
 
-  const peersHtml = uniquePeers.map(p => {
-    const lastSeen = new Date(p.lastSeen);
-    const ago = timeAgo(lastSeen);
-    const stale = (Date.now() - lastSeen.getTime()) > 300000;
-    const color = HUB_COLORS[p.hub] || '#888';
-    return `
-      <div class="peer-row">
-        <span class="peer-name" style="color:${color}">
-          <span class="peer-status ${stale ? 'stale' : ''}"></span>
-          ${p.hub}
-        </span>
-        <div class="peer-meta">
-          <span>${p.agentCount} agents</span>
-          <span>${ago}</span>
-        </div>
-      </div>
-    `;
-  }).join('');
-  document.getElementById('peers-list').innerHTML = peersHtml || '<div class="loading">No peers</div>';
-  document.getElementById('peer-count').textContent = uniquePeers.length + ' peers';
+  // Task form: populate capability dropdown
+  const capEl = document.getElementById('task-capability');
+  const currentCap = capEl.value;
+  capEl.innerHTML = '<option value="">Any</option>' +
+    capabilities.map(c => `<option value="${typeof c === 'string' ? c : c.capability}">${typeof c === 'string' ? c : c.capability}</option>`).join('');
+  if (currentCap) capEl.value = currentCap;
 
-  // Dark Circles — sort by pressure descending, show top 15
-  const sorted = [...darkCircles].sort((a, b) => b.pressure - a.pressure).slice(0, 15);
-  const circlesHtml = sorted.map(dc => {
+  // Dark Circles
+  const sorted = [...darkCircles].sort((a,b) => b.pressure - a.pressure);
+  document.getElementById('dark-circles').innerHTML = sorted.slice(0, 20).map(dc => {
     const pct = Math.min(100, Math.round(dc.pressure * 100));
-    const color = dc.pressure > 0.7 ? '#ff3d3d' : dc.pressure > 0.3 ? '#ff9100' : '#00d4ff';
-    const hubs = Object.entries(dc.byHub || {}).map(([h, v]) => `${h}: ${v.toFixed(2)}`).join('  ');
-    return `
-      <div class="pressure-bar" title="${hubs}">
-        <span class="pressure-name">${dc.name}</span>
-        <div class="pressure-track">
-          <div class="pressure-fill" style="width:${pct}%;background:${color}"></div>
-        </div>
-        <span class="pressure-val">${pct}%</span>
-      </div>
-    `;
+    const color = dc.pressure > 0.7 ? 'var(--red)' : dc.pressure > 0.3 ? 'var(--orange)' : 'var(--cyan)';
+    const hubs = Object.keys(dc.byHub || {}).join(', ');
+    return `<div class="dc-row">
+      <span class="dc-name" title="${dc.name}">${dc.name}</span>
+      <div class="dc-track"><div class="dc-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="dc-val">${pct}%</span>
+      <span class="dc-hubs">${hubs}</span>
+    </div>`;
   }).join('');
-  document.getElementById('circles-list').innerHTML = circlesHtml || '<div class="loading">No data</div>';
-  document.getElementById('circle-count').textContent = darkCircles.length + ' circles';
+
+  // Peers tab
+  const seen = new Set();
+  const uniquePeers = peers.filter(p => { if (seen.has(p.hub)) return false; seen.add(p.hub); return true; });
+  document.getElementById('peers-content').innerHTML = uniquePeers.map(p => {
+    const color = HUB_COLORS[p.hub] || '#888';
+    const ago = timeAgo(new Date(p.lastSeen));
+    const stale = (Date.now() - new Date(p.lastSeen).getTime()) > 300000;
+    return `<div class="peer-row">
+      <span class="peer-name" style="color:${color}"><span class="peer-status ${stale?'stale':''}" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${stale?'var(--orange)':'var(--green)'};margin-right:8px"></span>${p.hub}</span>
+      <div class="peer-meta"><span>${p.agentCount} agents</span><span>${ago}</span></div>
+    </div>`;
+  }).join('') || '<div class="empty">No peers</div>';
+
+  // Metrics tab
+  document.getElementById('metrics-content').innerHTML = `
+    <div class="metric-grid">
+      <div class="metric-card"><div class="label">Uptime</div><div class="value">${Math.floor((metrics.uptime||0)/3600)}h ${Math.floor(((metrics.uptime||0)%3600)/60)}m</div></div>
+      <div class="metric-card"><div class="label">Runners Connected</div><div class="value">${metrics.runnersConnected || 0}</div></div>
+      <div class="metric-card"><div class="label">Tasks Total</div><div class="value">${metrics.tasksTotal || 0}</div></div>
+      <div class="metric-card"><div class="label">Tasks Success</div><div class="value" style="color:var(--green)">${metrics.tasksSuccess || 0}</div></div>
+      <div class="metric-card"><div class="label">Tasks Error</div><div class="value" style="color:var(--red)">${metrics.tasksError || 0}</div></div>
+      <div class="metric-card"><div class="label">Success Rate</div><div class="value">${metrics.successRate || 'N/A'}</div></div>
+      <div class="metric-card"><div class="label">Avg Execution</div><div class="value">${metrics.avgExecutionMs ? metrics.avgExecutionMs + 'ms' : 'N/A'}</div></div>
+      <div class="metric-card"><div class="label">Throughput/min</div><div class="value">${metrics.throughputPerMin || 0}</div></div>
+      <div class="metric-card"><div class="label">Pending Tasks</div><div class="value">${metrics.tasksPending || 0}</div></div>
+      <div class="metric-card"><div class="label">Queued Tasks</div><div class="value">${metrics.tasksQueued || 0}</div></div>
+    </div>
+  `;
+
+  // Task history (from /tasks pending + we'd need /task-history for completed)
+  renderTaskHistory(tasks);
 }
 
+// ── Agent Detail ──
+function selectAgent(name) {
+  selectedAgent = name;
+  // Re-render sidebar to show selection
+  if (meshData) {
+    // Quick re-render of sidebar selection
+    document.querySelectorAll('.agent-item').forEach(el => {
+      el.classList.toggle('selected', el.textContent.trim().startsWith(name));
+    });
+  }
+
+  // Show overview tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('.tab[data-tab="overview"]').classList.add('active');
+  document.getElementById('tab-overview').classList.add('active');
+
+  // Fetch agent detail
+  fetch(`/agents/${name}`).then(r => r.json()).then(agent => {
+    const color = HUB_COLORS[agent.hub] || '#888';
+    const ago = timeAgo(new Date(agent.lastSeen));
+    document.getElementById('overview-content').innerHTML = `
+      <div class="agent-detail-header">
+        <div class="agent-detail-name" style="color:${color}">${agent.name}</div>
+        <div class="agent-detail-hub">${agent.hub} · ${agent.isLocal ? 'local' : 'remote'} · last seen ${ago}</div>
+      </div>
+      <div style="margin-bottom:20px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-bottom:8px">CAPABILITIES (${(agent.capabilities||[]).length})</div>
+        <div class="cap-grid">${(agent.capabilities||[]).map(c => `<div class="cap-chip">${c}</div>`).join('')}</div>
+      </div>
+      ${agent.seams && agent.seams.length ? `
+        <div style="margin-bottom:20px">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-bottom:8px">SEAMS</div>
+          <div class="cap-grid">${agent.seams.map(s => `<div class="cap-chip" style="border-color:var(--orange)">${s}</div>`).join('')}</div>
+        </div>
+      ` : ''}
+      <div style="margin-top:24px;display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="sendQuickTask('${agent.name}')">⚡ Send Task</button>
+        <button class="btn btn-danger" onclick="deregisterAgent('${agent.name}')">✕ Deregister</button>
+      </div>
+    `;
+  }).catch(() => {
+    document.getElementById('overview-content').innerHTML = '<div class="empty">Agent not found</div>';
+  });
+}
+
+function sendQuickTask(agentName) {
+  document.getElementById('task-target').value = agentName;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('.tab[data-tab="task"]').classList.add('active');
+  document.getElementById('tab-task').classList.add('active');
+  document.getElementById('task-command').focus();
+}
+
+// ── Task Submit ──
+async function submitTask() {
+  const target = document.getElementById('task-target').value;
+  const capability = document.getElementById('task-capability').value;
+  const command = document.getElementById('task-command').value.trim();
+  const argsRaw = document.getElementById('task-args').value.trim();
+  const timeout = parseInt(document.getElementById('task-timeout').value) || 30000;
+
+  if (!command) { toast('Command is required', 'err'); return; }
+
+  let args;
+  try { args = JSON.parse(argsRaw || '{}'); } catch { toast('Invalid JSON in arguments', 'err'); return; }
+
+  const body = { target, command, args, timeout_ms: timeout };
+  if (capability) body.capability = capability;
+
+  try {
+    const res = await fetch('/task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || 'Task failed', 'err'); return; }
+
+    toast(`Task submitted: ${data.id?.slice(0,8) || 'queued'}`, 'ok');
+    addEvent('task', `Task "${command}" → ${target}`, 'var(--cyan)');
+    document.getElementById('task-command').value = '';
+
+    // Switch to history tab
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('.tab[data-tab="history"]').classList.add('active');
+    document.getElementById('tab-history').classList.add('active');
+
+    // Poll task status
+    if (data.id) pollTask(data.id);
+  } catch (e) {
+    toast('Network error: ' + e.message, 'err');
+  }
+}
+
+async function pollTask(id) {
+  let attempts = 0;
+  const maxAttempts = 30;
+  const interval = setInterval(async () => {
+    attempts++;
+    if (attempts > maxAttempts) { clearInterval(interval); return; }
+    try {
+      const res = await fetch(`/task/${id}`);
+      const task = await res.json();
+      if (task.status === 'completed' || task.status === 'failed' || task.status === 'error') {
+        clearInterval(interval);
+        const color = task.status === 'completed' ? 'var(--green)' : 'var(--red)';
+        addEvent(task.status, `Task ${id.slice(0,8)} ${task.status}${task.result ? ': ' + JSON.stringify(task.result).slice(0,80) : ''}`, color);
+        fetchAll(); // refresh metrics
+      }
+    } catch { clearInterval(interval); }
+  }, 2000);
+}
+
+async function deregisterAgent(name) {
+  if (!confirm(`Deregister ${name} from the mesh?`)) return;
+  try {
+    await fetch(`/agents/${name}`, { method: 'DELETE' });
+    toast(`Deregistered ${name}`, 'ok');
+    addEvent('deregister', `Agent ${name} deregistered`, 'var(--orange)');
+    selectedAgent = null;
+    fetchAll();
+  } catch (e) { toast('Error: ' + e.message, 'err'); }
+}
+
+// ── Task History ──
+async function loadTaskHistory() {
+  try {
+    const [pending, history] = await Promise.all([
+      fetch('/tasks').then(r => r.json()),
+      fetch('/task-history').then(r => r.json()),
+    ]);
+
+    const pendingTasks = pending.pending || [];
+    const historyEntries = history.entries || [];
+
+    let html = '';
+
+    if (pendingTasks.length) {
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--orange);letter-spacing:1px;padding:8px 0">PENDING</div>';
+      html += pendingTasks.map(t => taskRowHtml(t)).join('');
+    }
+
+    if (historyEntries.length) {
+      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;padding:8px 0;margin-top:12px">HISTORY</div>';
+      html += historyEntries.slice(0, 50).map(t => taskRowHtml(t)).join('');
+    }
+
+    document.getElementById('task-history').innerHTML = html || '<div class="empty">No tasks yet. Submit one from the Task tab.</div>';
+  } catch {
+    document.getElementById('task-history').innerHTML = '<div class="empty">Failed to load history</div>';
+  }
+}
+
+function taskRowHtml(t) {
+  const statusColor = t.status === 'completed' ? 'var(--green)' : t.status === 'failed' || t.status === 'error' ? 'var(--red)' : 'var(--orange)';
+  const time = t.created_at ? new Date(t.created_at).toLocaleTimeString() : t.completedAt ? new Date(t.completedAt).toLocaleTimeString() : '—';
+  return `<div class="task-row">
+    <span style="color:var(--text-dim)">${time}</span>
+    <span style="color:${statusColor}">${t.status}</span>
+    <span>${t.command || t.task?.command || '—'}</span>
+    <span style="color:var(--text-dim)">${t.target || t.task?.target || '—'}</span>
+    <span style="font-size:10px;color:var(--text-dim)">${t.id ? t.id.slice(0,8) : '—'}</span>
+  </div>`;
+}
+
+function renderTaskHistory(tasks) {
+  loadTaskHistory();
+}
+
+// ── Live Feed ──
+function addEvent(type, text, color) {
+  const time = new Date().toLocaleTimeString();
+  eventLog.unshift({ time, type, text, color });
+  if (eventLog.length > 50) eventLog.pop();
+  renderFeed();
+}
+
+function renderFeed() {
+  document.getElementById('live-feed').innerHTML = eventLog.map(e =>
+    `<div class="feed-item">
+      <span class="feed-time">${e.time}</span>
+      <span class="feed-tag" style="background:${e.color}22;color:${e.color}">${e.type}</span>
+      <div class="feed-text">${e.text}</div>
+    </div>`
+  ).join('') || '<div class="empty">Waiting for events...</div>';
+}
+
+// ── Helpers ──
 function timeAgo(date) {
   const s = Math.floor((Date.now() - date.getTime()) / 1000);
   if (s < 60) return s + 's ago';
-  if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-  return Math.floor(s / 86400) + 'd ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
 }
 
-// Initial load + polling
-fetchMesh();
-setInterval(fetchMesh, 5000);
+// ── Init ──
+addEvent('system', 'Dashboard connected', 'var(--green)');
+fetchAll();
+setInterval(fetchAll, 5000);
 </script>
-
 </body>
 </html>
