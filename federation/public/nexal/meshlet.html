@@ -563,6 +563,61 @@
   <button id="btn-destroy" class="danger" style="display:none" onclick="destroyMeshlet()">Destroy</button>
 </div>
 
+<!-- Intro / Guide (shown before meshlet launch) -->
+<div class="workshop" id="intro">
+  <div class="panel" style="grid-column:1/-1">
+    <div class="panel-title"><span class="icon">?</span> What is a Meshlet?</div>
+    <div style="max-width:720px;line-height:1.7;font-size:12px">
+      <p style="margin-bottom:12px">A <strong style="color:var(--cyan)">meshlet</strong> is an isolated workspace for prototyping new agents before they join the live mesh. Think of it as a sandbox — you can experiment without affecting anything real.</p>
+
+      <div style="background:rgba(0,229,255,0.04);border:1px solid var(--border);border-radius:6px;padding:16px;margin-bottom:16px">
+        <div style="font-family:var(--heading);font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:10px">HOW IT WORKS</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">
+          <div>
+            <div style="color:var(--violet);font-weight:bold;margin-bottom:4px">1. Launch</div>
+            <div style="color:var(--text-dim)">Creates a fresh meshlet instance with its own memory, void space, and agent registry. Runs for 2 hours.</div>
+          </div>
+          <div>
+            <div style="color:var(--violet);font-weight:bold;margin-bottom:4px">2. Open Voids</div>
+            <div style="color:var(--text-dim)">Voids are exploration spaces for concepts. Enter a term like <code style="color:var(--cyan)">agent-identity</code> or <code style="color:var(--cyan)">deployment-strategy</code>. Related concepts create pressure — when pressure is high enough, the void can be "graduated" into a named agent.</div>
+          </div>
+          <div>
+            <div style="color:var(--violet);font-weight:bold;margin-bottom:4px">3. Register Agents</div>
+            <div style="color:var(--text-dim)">Use the Agent Builder to define an agent with specific capabilities and seams. Or name a void to graduate it automatically.</div>
+          </div>
+          <div>
+            <div style="color:var(--violet);font-weight:bold;margin-bottom:4px">4. Scan Signals</div>
+            <div style="color:var(--text-dim)">SSJ2 reach scan detects seams — overlapping capability gaps between agents. These show where new agents could add value to the mesh.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:rgba(0,255,136,0.04);border:1px solid rgba(0,255,136,0.15);border-radius:6px;padding:16px;margin-bottom:16px">
+        <div style="font-family:var(--heading);font-size:13px;color:var(--green);letter-spacing:2px;margin-bottom:10px">EXAMPLE WORKFLOWS</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="padding-left:12px;border-left:2px solid var(--green)">
+            <div style="color:var(--text);margin-bottom:2px"><strong>Explore a concept:</strong></div>
+            <div style="color:var(--text-dim)">Launch → Open void <code style="color:var(--cyan)">solar-prediction</code> → Add implied-by terms <code style="color:var(--cyan)">flare-detection, cme-tracking</code> → Nudge pressure up → Name it → <code style="color:var(--green)">solar-predictor</code> agent is born</div>
+          </div>
+          <div style="padding-left:12px;border-left:2px solid var(--cyan)">
+            <div style="color:var(--text);margin-bottom:2px"><strong>Build an agent directly:</strong></div>
+            <div style="color:var(--text-dim)">Launch → Skip voids → Go to Agent Builder → Name it, pick capabilities, define seams → Register → Run SSJ2 scan to see where it fits in the mesh</div>
+          </div>
+          <div style="padding-left:12px;border-left:2px solid var(--violet)">
+            <div style="color:var(--text);margin-bottom:2px"><strong>Find mesh gaps:</strong></div>
+            <div style="color:var(--text-dim)">Launch → Run SSJ2 reach scan → See which seams have high signal strength → Open voids for those areas → Graduate into agents that fill the gaps</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:12px 0">
+        <div style="color:var(--text-dim);font-size:11px;margin-bottom:8px">Ready to try it?</div>
+        <button class="action-btn green" onclick="launchMeshlet()" style="font-size:12px;padding:10px 28px">Launch Your First Meshlet →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Workshop Grid -->
 <div class="workshop" id="workshop" style="display:none">
 
@@ -683,6 +738,7 @@ async function launchMeshlet() {
     meshletId = data.id;
 
     document.getElementById('workshop').style.display = 'grid';
+    document.getElementById('intro').style.display = 'none';
     document.getElementById('btn-launch').style.display = 'none';
     document.getElementById('btn-destroy').style.display = 'inline-block';
     document.getElementById('status-pill').textContent = `${data.mode.toUpperCase()} · Active`;
@@ -711,6 +767,7 @@ function cleanup() {
   meshletId = null;
 
   document.getElementById('workshop').style.display = 'none';
+  document.getElementById('intro').style.display = 'grid';
   document.getElementById('btn-launch').style.display = 'inline-block';
   document.getElementById('btn-destroy').style.display = 'none';
   document.getElementById('status-pill').textContent = 'No Active Meshlet';
