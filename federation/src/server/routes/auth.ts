@@ -1,8 +1,9 @@
 /**
  * auth.ts — HMAC-SHA256 auth routes for Nexal login.
  *
- * POST /auth/login  — validate access code, issue HMAC token with 24h expiry
- * GET  /auth/verify — validate token, reject if expired
+ * POST /auth/login       — validate access code, issue HMAC token with 24h expiry
+ * GET  /auth/verify      — validate token, reject if expired
+ * POST /auth/token-check — validate token from body, return ok + username
  */
 import { type Request, type Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
@@ -52,6 +53,7 @@ export function registerAuthRoutes(app: {
 }): void {
   app.post('/auth/login', handleLogin)
   app.get('/auth/verify', handleVerify)
+  app.post('/auth/token-check', handleTokenCheck)
 }
 
 function handleLogin(req: Request, res: Response): void {
@@ -106,4 +108,27 @@ function handleVerify(req: Request, res: Response): void {
   }
 
   res.json({ valid: true, sub: payload.sub, exp: payload.exp })
+}
+
+function handleTokenCheck(req: Request, res: Response): void {
+  const { token } = req.body || {}
+  if (!token || typeof token !== 'string') {
+    // Allow through — no token just means not logged in
+    res.json({ ok: true, username: 'guest' })
+    return
+  }
+
+  const payload = decodeToken(token)
+  if (!payload) {
+    res.json({ ok: false })
+    return
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  if (payload.exp && now > payload.exp) {
+    res.json({ ok: false })
+    return
+  }
+
+  res.json({ ok: true, username: payload.sub })
 }
