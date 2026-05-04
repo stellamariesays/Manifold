@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexal Network — Intelligence Coordination Protocol</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:    #00e5ff;
+      --violet:  #aa00ff;
+      --green:   #00ff88;
+      --pink:    #ff0077;
+      --gold:    #ffcc00;
+      --bg:      #000510;
+      --panel:   rgba(0,10,30,0.82);
+      --border:  rgba(0,229,255,0.25);
+      --text:    #b0e0f8;
+      --accent:  #00e5ff;
+      --danger:  #ff3366;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Rajdhani', 'Share Tech Mono', monospace;
+      color: var(--text);
+      user-select: none;
+    }
+
+    #scene {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%; height: 100%;
+    }
+
+    /* ── HUD LAYER ────────────────────────────────────────────── */
+    #hud {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .panel {
+      pointer-events: all;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      backdrop-filter: blur(8px);
+      position: absolute;
+      padding: 14px 18px;
+      box-shadow: 0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,229,255,0.02) 2px, rgba(0,229,255,0.02) 4px
+      );
+      pointer-events: none;
+      border-radius: 4px;
+    }
+
+    /* Title Panel */
+    #title-panel {
+      top: 18px; left: 20px;
+      min-width: 280px;
+    }
+
+    #title-panel .logo {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0,229,255,0.4);
+      line-height: 1;
+    }
+
+    #title-panel .sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(0,229,255,0.55);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    #title-panel .version {
+      margin-top: 10px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    #title-panel .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Agent List Panel */
+    #agents-panel {
+      top: 140px; left: 20px;
+      width: 280px; max-height: 400px;
+      overflow-y: auto;
+    }
+
+    #agents-panel .panel-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #agents-panel .panel-title::before {
+      content: "●";
+      color: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    .agent-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
+    }
+
+    .agent-item .agent-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+
+    .agent-item .agent-name {
+      flex: 1; color: var(--text);
+    }
+
+    .agent-item .agent-caps {
+      font-size: 9px; color: rgba(255,255,255,0.4);
+    }
+
+    /* SOPHIA Panel */
+    #sophia-panel {
+      bottom: 20px; left: 20px;
+      width: 280px;
+    }
+
+    #sophia-panel .sophia-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--violet);
+      margin-bottom: 8px;
+      letter-spacing: 4px;
+      text-shadow: 0 0 15px var(--violet);
+    }
+
+    #sophia-panel .sophia-subtitle {
+      font-size: 9px;
+      color: rgba(170,0,255,0.6);
+      letter-spacing: 2px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .sophia-controls {
+      display: flex; gap: 8px;
+    }
+
+    .sophia-btn {
+      padding: 6px 12px;
+      background: rgba(170,0,255,0.15);
+      border: 1px solid rgba(170,0,255,0.3);
+      border-radius: 3px;
+      color: var(--violet);
+      font-size: 10px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+
+    .sophia-btn:hover {
+      background: rgba(170,0,255,0.25);
+      border-color: var(--violet);
+    }
+
+    /* Right Status Panel */
+    #status-panel {
+      top: 18px; right: 20px;
+      width: 320px;
+    }
+
+    #status-panel .status-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .status-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
+    }
+
+    .status-label { color: rgba(255,255,255,0.7); }
+    .status-value { color: var(--text); font-weight: 600; }
+
+    /* Agent Detail Panel */
+    #detail-panel {
+      top: 200px; right: 20px;
+      width: 320px;
+      display: none;
+    }
+
+    #detail-panel.visible {
+      display: block;
+    }
+
+    .detail-title {
+      font-size: 18px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+    }
+
+    .detail-subtitle {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 12px;
+    }
+
+    .detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .detail-stat {
+      text-align: center;
+      padding: 8px;
+      background: rgba(0,229,255,0.05);
+      border-radius: 3px;
+    }
+
+    .detail-stat .stat-num {
+      font-size: 16px;
+      color: var(--cyan);
+      display: block;
+    }
+
+    .detail-stat .stat-label {
+      font-size: 8px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+    }
+
+    /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #title-panel,
+      #agents-panel,
+      #sophia-panel,
+      #status-panel,
+      #detail-panel {
+        display: none !important;
+      }
+
+      #scene {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+
+      html, body {
+        overflow: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      #scene {
+        touch-action: manipulation;
+      }
+
+      #scene {
+        filter: brightness(1.4) contrast(1.2);
+        -webkit-filter: brightness(1.4) contrast(1.2);
+      }
+    }
+
+    @media (max-width: 480px) {
+      #hud {
+        display: none;
+      }
+
+      #scene {
+        filter: brightness(1.6) contrast(1.3);
+        -webkit-filter: brightness(1.6) contrast(1.3);
+      }
+
+      #query-panel {
+        left: 12px !important;
+        right: 12px !important;
+        bottom: 12px !important;
+        width: auto !important;
+        max-width: 100% !important;
+      }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+
+<!-- HUD Overlay -->
+<div id="hud">
+  <!-- Title Panel -->
+  <div id="title-panel" class="panel">
+    <div class="logo">MANIFOLD</div>
+    <div class="sub">Numinous Architecture — Federation Mesh</div>
+    <div class="version">
+      <div class="status-dot"></div>
+      <span>Relay connected: nexal.network</span>
+    </div>
+  </div>
+
+  <!-- Active Agents Panel -->
+  <div id="agents-panel" class="panel">
+    <div class="panel-title">Active Agents</div>
+    <div id="agents-list">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+
+  <!-- SOPHIA Panel -->
+  <div id="sophia-panel" class="panel">
+    <div class="sophia-title">SOPHIA</div>
+    <div class="sophia-subtitle">Create Creation 10</div>
+    <div class="sophia-controls">
+      <button class="sophia-btn">Navigate</button>
+      <button class="sophia-btn">Initiate</button>
+    </div>
+  </div>
+
+  <!-- Status Panel -->
+  <div id="status-panel" class="panel">
+    <div class="status-title">Federation Status</div>
+    <div class="status-row">
+      <span class="status-label">Agents Online</span>
+      <span class="status-value" id="agent-count">-</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Capabilities</span>
+      <span class="status-value" id="capability-count">-</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Mesh Latency</span>
+      <span class="status-value">23ms</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Messages / Sec</span>
+      <span class="status-value">135/s</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Uptime</span>
+      <span class="status-value">99.97%</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Relay</span>
+      <span class="status-value">nexal.network</span>
+    </div>
+  </div>
+
+  <!-- Agent Detail Panel -->
+  <div id="detail-panel" class="panel">
+    <div class="detail-title" id="detail-agent-name">Agent Name</div>
+    <div class="detail-subtitle" id="detail-agent-hub">Hub: trillian</div>
+    <div class="detail-stats">
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-messages">-</span>
+        <span class="stat-label">Messages</span>
+      </div>
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-uptime">-</span>
+        <span class="stat-label">Uptime</span>
+      </div>
+    </div>
+    <div id="detail-capabilities"></div>
+  </div>
+</div>
+
+<!-- ── QUERY PANEL ──────────────────────────────────────────────────── -->
+<div id="query-panel" class="panel" style="
+  position: fixed; z-index: 20; bottom: 20px; right: 20px; width: 420px;
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: calc(100vw - 24px);
+">
+  <div style="font-size:11px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; display:flex; align-items:center; gap:6px;">
+    <span style="color:var(--green); animation: pulse 2s infinite;">●</span>
+    Federation Query
+    <span id="query-user" style="margin-left:auto; font-size:9px; color:rgba(0,229,255,0.4); letter-spacing:1px;"></span>
+  </div>
+  <textarea id="query-input" rows="4" style="
+    width:100%; background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2);
+    border-radius:3px; padding:10px 12px; color:var(--text);
+    font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.5;
+    resize:none; outline:none; transition:border-color 0.2s;
+  " placeholder="Ask the mesh…"></textarea>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button id="query-preset-btn" style="
+      padding:5px 10px; background:rgba(170,0,255,0.1); border:1px solid rgba(170,0,255,0.3);
+      border-radius:3px; color:var(--violet); font-size:9px; letter-spacing:1px;
+      cursor:pointer; white-space:nowrap; transition:all 0.2s;
+    " title="Load the BTC trading plan prompt">Load Preset</button>
+    <button id="query-submit-btn" style="
+      flex:1; padding:8px; background:rgba(0,229,255,0.08); border:1px solid var(--cyan);
+      border-radius:3px; color:var(--cyan); font-family:'Rajdhani',monospace;
+      font-size:13px; font-weight:600; letter-spacing:3px; text-transform:uppercase;
+      cursor:pointer; transition:all 0.2s;
+    ">Send</button>
+  </div>
+  <div id="query-response" style="
+    display:none; max-height:300px; overflow-y:auto;
+    background:rgba(0,0,0,0.3); border:1px solid rgba(0,229,255,0.12);
+    border-radius:3px; padding:12px; font-family:'Share Tech Mono',monospace;
+    font-size:10px; line-height:1.6; color:var(--text); white-space:pre-wrap;
+  "></div>
+  <div id="query-status" style="font-size:9px; letter-spacing:1px; color:rgba(0,229,255,0.35); min-height:12px;"></div>
+</div>
+
+<!-- 3D Scene -->
+<canvas id="scene"></canvas>
+
+<script type="module" src="./nexal.js"></script>
+
+<script type="module">
+// ── Session guard ─────────────────────────────────────────────────────────
+// Verify stored token server-side on every load.
+// If invalid/missing, clear storage and redirect to login.
+(async () => {
+  const token = localStorage.getItem('nexal_token');
+  if (!token) {
+    window.location.replace('/nexal/login.html');
+    return;
+  }
+  try {
+    const res = await fetch('/auth/token-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      localStorage.removeItem('nexal_token');
+      localStorage.removeItem('nexal_user');
+      window.location.replace('/nexal/login.html');
+      return;
+    }
+    // Update stored username from server response (source of truth)
+    if (data.username) {
+      localStorage.setItem('nexal_user', data.username);
+      const el = document.getElementById('query-user');
+      if (el) el.textContent = data.username;
+    }
+  } catch {
+    // Network error — allow through rather than locking out
+    const user = localStorage.getItem('nexal_user');
+    if (user) {
+      const el = document.getElementById('query-user');
+      if (el) el.textContent = user;
+    }
+  }
+})();
+
+// ── Query panel ───────────────────────────────────────────────────────────
+const PRESET_PROMPT =
+`Look into current sentiment around Bitcoin, Iran, fed funds, and the gold narrative. ` +
+`Consider using the Stingray tool for live indicator data. ` +
+`Then write a 5-week trading plan for Bitcoin — can use up to 5× leverage long or short.`;
+
+const presetBtn  = document.getElementById('query-preset-btn');
+const submitBtn  = document.getElementById('query-submit-btn');
+const inputEl    = document.getElementById('query-input');
+const responseEl = document.getElementById('query-response');
+const statusEl   = document.getElementById('query-status');
+
+presetBtn.addEventListener('click', () => {
+  inputEl.value = PRESET_PROMPT;
+  inputEl.style.borderColor = 'rgba(170,0,255,0.5)';
+  setTimeout(() => inputEl.style.borderColor = '', 600);
+});
+
+// Focus style
+inputEl.addEventListener('focus', () => inputEl.style.borderColor = 'var(--cyan)');
+inputEl.addEventListener('blur',  () => inputEl.style.borderColor = '');
+
+submitBtn.addEventListener('click', async () => {
+  const prompt = inputEl.value.trim();
+  if (!prompt) return;
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Thinking…';
+  statusEl.textContent  = 'Querying federation mesh…';
+  responseEl.style.display = 'none';
+
+  try {
+    const token = localStorage.getItem('nexal_token') ?? '';
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: prompt, token }),
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    if (data.error) {
+      statusEl.textContent = `Error: ${data.error}`;
+    } else {
+      _showResult(data.response);
+    }
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Send';
+  }
+});
+
+function _showResult(text) {
+  responseEl.style.display = 'block';
+  responseEl.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+  statusEl.textContent = 'Response received ✓';
+  responseEl.scrollTop = 0;
+}
+</script>
+</body>
+</html>
