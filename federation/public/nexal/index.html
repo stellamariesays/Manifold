@@ -21,7 +21,27 @@
       --text:    #b0e0f8;
       --accent:  #00e5ff;
       --danger:  #ff3366;
+
+      /* Glassmorphism */
+      --blur:    14px;
+      --glow:    0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+      --hover-glow: 0 0 30px rgba(0,229,255,0.18), inset 0 0 40px rgba(0,229,255,0.08);
     }
+
+    /* Bright mode overrides */
+    html.bright-mode {
+      --bg:      #0a1628;
+      --panel:   rgba(10,30,60,0.72);
+      --border:  rgba(0,229,255,0.4);
+      --text:    #d0f0ff;
+      --blur:    18px;
+      --glow:    0 0 30px rgba(0,229,255,0.15), inset 0 0 40px rgba(0,229,255,0.06);
+      --hover-glow: 0 0 40px rgba(0,229,255,0.25), inset 0 0 50px rgba(0,229,255,0.12);
+    }
+    html.bright-mode .panel { background: rgba(10,30,60,0.72); }
+    html.bright-mode .panel::before { opacity: 0.5; }
+    html.bright-mode .logo { text-shadow: 0 0 25px var(--cyan), 0 0 60px rgba(0,229,255,0.6); }
+    html.bright-mode #ticker-strip { background: rgba(10,30,60,0.85); border-top-color: rgba(0,229,255,0.3); }
 
     html, body {
       width: 100%; height: 100%;
@@ -46,33 +66,98 @@
       z-index: 10;
     }
 
+    /* ── PANEL BASE — Glassmorphism + Animated Corner Accents ── */
     .panel {
       pointer-events: all;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 4px;
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
       position: absolute;
       padding: 14px 18px;
-      box-shadow: 0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+      box-shadow: var(--glow);
+      transition: box-shadow 0.35s ease, border-color 0.35s ease;
+      /* Entrance: hidden by default, animated via staggered class */
+      opacity: 0;
+      transform: translateY(12px);
+      animation: none;
+    }
+    .panel.entered {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.35s ease, border-color 0.35s ease;
     }
 
+    .panel:hover {
+      box-shadow: var(--hover-glow);
+      border-color: rgba(0,229,255,0.4);
+    }
+
+    /* Animated SVG corner accents (CSS-drawn) */
+    .panel::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 4px;
+      pointer-events: none;
+      background:
+        /* top-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 1px 14px no-repeat,
+        /* top-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 1px 14px no-repeat,
+        /* bottom-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 1px 14px no-repeat,
+        /* bottom-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 1px 14px no-repeat;
+      animation: cornerPulse 3s ease-in-out infinite;
+    }
+    @keyframes cornerPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* Scanline texture — subtler */
     .panel::before {
       content: '';
       position: absolute;
       inset: 0;
       background: repeating-linear-gradient(
         0deg, transparent, transparent 2px,
-        rgba(0,229,255,0.02) 2px, rgba(0,229,255,0.02) 4px
+        rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px
       );
       pointer-events: none;
       border-radius: 4px;
+      z-index: 1;
+    }
+
+    /* Staggered entrance delays per panel */
+    #title-panel { --enter-delay: 0s; }
+    #agents-panel { --enter-delay: 0.1s; }
+    #sophia-panel { --enter-delay: 0.2s; }
+    #status-panel { --enter-delay: 0.15s; }
+    #detail-panel { --enter-delay: 0s; }
+    #ticker-strip { --enter-delay: 0.3s; }
+
+    .panel.entered {
+      animation: slideIn 0.5s ease forwards;
+      animation-delay: var(--enter-delay, 0s);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     /* Title Panel */
     #title-panel {
       top: 18px; left: 20px;
       min-width: 280px;
+      display: flex;
+      flex-direction: column;
     }
 
     #title-panel .logo {
@@ -104,6 +189,26 @@
       width: 6px; height: 6px; border-radius: 50%;
       background: var(--green);
       animation: pulse 2s infinite;
+    }
+
+    /* Bright/dim mode toggle */
+    #mode-toggle {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 24px; height: 24px;
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 3px;
+      background: rgba(0,229,255,0.08);
+      color: var(--cyan);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      z-index: 2;
+    }
+    #mode-toggle:hover {
+      background: rgba(0,229,255,0.2);
+      border-color: var(--cyan);
     }
 
     @keyframes pulse {
@@ -152,17 +257,20 @@
       font-size: 9px; color: rgba(255,255,255,0.4);
     }
 
-    /* SOPHIA Panel */
+    /* SOPHIA Query Panel */
     #sophia-panel {
-      bottom: 20px; left: 20px;
-      width: 280px;
+      bottom: 60px; left: 20px;
+      width: 320px;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
     }
 
     #sophia-panel .sophia-title {
       font-size: 24px;
       font-weight: 700;
       color: var(--violet);
-      margin-bottom: 8px;
+      margin-bottom: 2px;
       letter-spacing: 4px;
       text-shadow: 0 0 15px var(--violet);
     }
@@ -171,15 +279,54 @@
       font-size: 9px;
       color: rgba(170,0,255,0.6);
       letter-spacing: 2px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       text-transform: uppercase;
     }
 
-    .sophia-controls {
-      display: flex; gap: 8px;
+    /* Agent routing selector */
+    .agent-select {
+      width: 100%;
+      padding: 4px 8px;
+      background: rgba(170,0,255,0.1);
+      border: 1px solid rgba(170,0,255,0.25);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .agent-select:focus {
+      border-color: var(--violet);
     }
 
-    .sophia-btn {
+    /* Query input */
+    .query-input-row {
+      display: flex; gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .query-input {
+      flex: 1;
+      padding: 6px 10px;
+      background: rgba(0,10,30,0.6);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .query-input:focus {
+      border-color: var(--cyan);
+    }
+    .query-input::placeholder {
+      color: rgba(176,224,248,0.3);
+    }
+
+    .query-send-btn {
       padding: 6px 12px;
       background: rgba(170,0,255,0.15);
       border: 1px solid rgba(170,0,255,0.3);
@@ -188,14 +335,109 @@
       font-size: 10px;
       letter-spacing: 1px;
       cursor: pointer;
-      transition: all 0.2s;
       text-transform: uppercase;
+      transition: all 0.2s;
     }
-
-    .sophia-btn:hover {
+    .query-send-btn:hover {
       background: rgba(170,0,255,0.25);
       border-color: var(--violet);
     }
+
+    /* Response area */
+    .query-response {
+      background: rgba(0,10,30,0.4);
+      border: 1px solid rgba(0,229,255,0.1);
+      border-radius: 3px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      min-height: 40px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text);
+      position: relative;
+      word-break: break-word;
+    }
+
+    .query-response .response-tag {
+      position: absolute;
+      top: 4px; right: 6px;
+      font-size: 8px;
+      color: rgba(0,229,255,0.4);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .query-response .copy-btn {
+      position: absolute;
+      bottom: 4px; right: 6px;
+      padding: 2px 6px;
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 2px;
+      color: rgba(0,229,255,0.5);
+      font-size: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+    .query-response .copy-btn:hover {
+      background: rgba(0,229,255,0.2);
+      color: var(--cyan);
+    }
+
+    /* Typewriter cursor */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 6px;
+      height: 14px;
+      background: var(--violet);
+      animation: blink 0.8s step-end infinite;
+      vertical-align: text-bottom;
+      margin-left: 1px;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Collapsible history */
+    .history-toggle {
+      font-size: 9px;
+      color: rgba(0,229,255,0.4);
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .history-toggle:hover { color: var(--cyan); }
+    .history-toggle::before { content: '▸'; transition: transform 0.2s; display: inline-block; }
+    .history-toggle.open::before { transform: rotate(90deg); }
+
+    .query-history {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .query-history.open {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,229,255,0.06);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .history-item:hover { color: var(--cyan); }
+    .history-item .history-q { color: rgba(255,255,255,0.5); }
+    .history-item .history-a { color: var(--text); font-size: 9px; margin-top: 2px; }
 
     /* Right Status Panel */
     #status-panel {
@@ -229,6 +471,8 @@
 
     #detail-panel.visible {
       display: block;
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .detail-title {
@@ -269,13 +513,95 @@
       text-transform: uppercase;
     }
 
+    /* ── TICKER STRIP ──────────────────────────────────────────── */
+    #ticker-strip {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 32px;
+      background: rgba(0,8,20,0.85);
+      border-top: 1px solid rgba(0,229,255,0.15);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      z-index: 10;
+      padding: 0 12px;
+      gap: 10px;
+    }
+
+    #ticker-strip .ticker-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #ticker-strip .ticker-label::before {
+      content: "▸ ";
+    }
+
+    #ticker-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    #ticker-scroll {
+      display: flex;
+      gap: 40px;
+      white-space: nowrap;
+      animation: tickerScroll 30s linear infinite;
+    }
+
+    .ticker-item {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(176,224,248,0.7);
+      flex-shrink: 0;
+    }
+
+    .ticker-item .ticker-time {
+      color: rgba(0,229,255,0.5);
+      margin-right: 6px;
+    }
+
+    .ticker-item .ticker-event-join { color: var(--green); }
+    .ticker-item .ticker-event-leave { color: var(--danger); }
+    .ticker-item .ticker-event-task { color: var(--gold); }
+
+    @keyframes tickerScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ── PULSING RINGS (CSS overlay for hub spheres) ───────────── */
+    .hub-ring-overlay {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      border: 1px solid rgba(0,229,255,0.4);
+      animation: ringPulse 2.5s ease-out infinite;
+      z-index: 5;
+    }
+    @keyframes ringPulse {
+      0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; }
+      100% { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+    }
+
     /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
     @media (max-width: 768px) {
       #title-panel,
       #agents-panel,
       #sophia-panel,
       #status-panel,
-      #detail-panel {
+      #detail-panel,
+      #ticker-strip {
         display: none !important;
       }
 
@@ -308,14 +634,6 @@
         filter: brightness(1.6) contrast(1.3);
         -webkit-filter: brightness(1.6) contrast(1.3);
       }
-
-      #query-panel {
-        left: 12px !important;
-        right: 12px !important;
-        bottom: 12px !important;
-        width: auto !important;
-        max-width: 100% !important;
-      }
     }
   </style>
   <script type="importmap">
@@ -325,6 +643,21 @@
       }
     }
   </script>
+  <script>
+    // Catch module errors and show them on screen
+    window.addEventListener('error', function(e) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'JS ERROR: ' + (e.message || e) + (e.filename ? '\nFile: ' + e.filename + ':' + e.lineno : '');
+      document.body.appendChild(d);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:darkred;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'MODULE ERROR: ' + (e.reason && e.reason.message ? e.reason.message : e.reason);
+      document.body.appendChild(d);
+    });
+  </script>
 </head>
 <body>
 
@@ -332,6 +665,8 @@
 <div id="hud">
   <!-- Title Panel -->
   <div id="title-panel" class="panel">
+    <button id="mode-toggle" title="Toggle bright/dim mode">◐</button>
+    <a href="/nexal/meshlet" style="font-size:10px;letter-spacing:2px;color:var(--violet);text-decoration:none;border:1px solid var(--violet);padding:3px 8px;border-radius:3px;margin-left:8px" title="Open Meshlet Workshop">⚡ WORKSHOP</a>
     <div class="logo">MANIFOLD</div>
     <div class="sub">Numinous Architecture — Federation Mesh</div>
     <div class="version">
@@ -348,14 +683,35 @@
     </div>
   </div>
 
-  <!-- SOPHIA Panel -->
+  <!-- SOPHIA Query Panel -->
   <div id="sophia-panel" class="panel">
     <div class="sophia-title">SOPHIA</div>
     <div class="sophia-subtitle">Create Creation 10</div>
-    <div class="sophia-controls">
-      <button class="sophia-btn">Navigate</button>
-      <button class="sophia-btn">Initiate</button>
+
+    <!-- Agent routing selector -->
+    <select class="agent-select" id="agent-route">
+      <option value="auto">⟐ Auto-route</option>
+      <option value="sophia">◈ Sophia</option>
+      <option value="stella">◉ Stella</option>
+      <option value="mesh">⬡ Mesh Broadcast</option>
+    </select>
+
+    <!-- Query input -->
+    <div class="query-input-row">
+      <input type="text" class="query-input" id="query-input" placeholder="Ask the mesh… (Q)" autocomplete="off" spellcheck="false">
+      <button class="query-send-btn" id="query-send">Send</button>
     </div>
+
+    <!-- Response area -->
+    <div class="query-response" id="query-response" style="display:none">
+      <span class="response-tag" id="response-tag"></span>
+      <div id="response-text"></div>
+      <button class="copy-btn" id="copy-btn" title="Copy response">📋 Copy</button>
+    </div>
+
+    <!-- Collapsible history -->
+    <div class="history-toggle" id="history-toggle">History</div>
+    <div class="query-history" id="query-history"></div>
   </div>
 
   <!-- Status Panel -->
@@ -363,27 +719,31 @@
     <div class="status-title">Federation Status</div>
     <div class="status-row">
       <span class="status-label">Agents Online</span>
-      <span class="status-value" id="agent-count">-</span>
+      <span class="status-value" id="agent-count">—</span>
     </div>
     <div class="status-row">
       <span class="status-label">Capabilities</span>
-      <span class="status-value" id="capability-count">-</span>
+      <span class="status-value" id="capability-count">—</span>
     </div>
     <div class="status-row">
       <span class="status-label">Mesh Latency</span>
-      <span class="status-value">23ms</span>
+      <span class="status-value" id="mesh-latency">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Messages / Sec</span>
-      <span class="status-value">135/s</span>
+      <span class="status-label">Peers (Hubs)</span>
+      <span class="status-value" id="peer-count">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Uptime</span>
-      <span class="status-value">99.97%</span>
+      <span class="status-label">Hub Names</span>
+      <span class="status-value" id="hub-names" style="font-size:10px;letter-spacing:1px">—</span>
     </div>
     <div class="status-row">
-      <span class="status-label">Relay</span>
-      <span class="status-value">nexal.network</span>
+      <span class="status-label">Last Updated</span>
+      <span class="status-value" id="last-updated">—</span>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px">CAPABILITY PRESSURE</div>
+      <div id="pressure-bars"></div>
     </div>
   </div>
 
@@ -405,183 +765,165 @@
   </div>
 </div>
 
-<!-- ── QUERY PANEL ──────────────────────────────────────────────────── -->
-<div id="query-panel" class="panel" style="
-  position: fixed; z-index: 20; bottom: 20px; right: 20px; width: 420px;
-  display: flex; flex-direction: column; gap: 10px;
-  max-width: calc(100vw - 24px);
-">
-  <div style="font-size:11px; letter-spacing:2px; color:var(--cyan); text-transform:uppercase; display:flex; align-items:center; gap:6px;">
-    <span style="color:var(--green); animation: pulse 2s infinite;">●</span>
-    Federation Query
-    <span id="query-user" style="margin-left:auto; font-size:9px; color:rgba(0,229,255,0.4); letter-spacing:1px;"></span>
+<!-- Ticker Strip -->
+<div id="ticker-strip" class="panel">
+  <span class="ticker-label">Feed</span>
+  <div id="ticker-content">
+    <div id="ticker-scroll">
+      <!-- Populated dynamically -->
+    </div>
   </div>
-  <textarea id="query-input" rows="4" style="
-    width:100%; background:rgba(0,229,255,0.04); border:1px solid rgba(0,229,255,0.2);
-    border-radius:3px; padding:10px 12px; color:var(--text);
-    font-family:'Share Tech Mono',monospace; font-size:11px; line-height:1.5;
-    resize:none; outline:none; transition:border-color 0.2s;
-  " placeholder="Ask the mesh…"></textarea>
-  <div style="display:flex; gap:8px; align-items:center;">
-    <button id="query-preset-btn" style="
-      padding:5px 10px; background:rgba(170,0,255,0.1); border:1px solid rgba(170,0,255,0.3);
-      border-radius:3px; color:var(--violet); font-size:9px; letter-spacing:1px;
-      cursor:pointer; white-space:nowrap; transition:all 0.2s;
-    " title="Load the BTC trading plan prompt">Load Preset</button>
-    <button id="query-submit-btn" style="
-      flex:1; padding:8px; background:rgba(0,229,255,0.08); border:1px solid var(--cyan);
-      border-radius:3px; color:var(--cyan); font-family:'Rajdhani',monospace;
-      font-size:13px; font-weight:600; letter-spacing:3px; text-transform:uppercase;
-      cursor:pointer; transition:all 0.2s;
-    ">Send</button>
-  </div>
-  <div id="query-response" style="
-    display:none; max-height:300px; overflow-y:auto;
-    background:rgba(0,0,0,0.3); border:1px solid rgba(0,229,255,0.12);
-    border-radius:3px; padding:12px; font-family:'Share Tech Mono',monospace;
-    font-size:10px; line-height:1.6; color:var(--text); white-space:pre-wrap;
-  "></div>
-  <div id="query-status" style="font-size:9px; letter-spacing:1px; color:rgba(0,229,255,0.35); min-height:12px;"></div>
 </div>
 
 <!-- 3D Scene -->
 <canvas id="scene"></canvas>
 
-<script type="module" src="./nexal.js"></script>
+<!-- Query Panel Logic -->
+<script>
+(function() {
+  const queryInput = document.getElementById('query-input');
+  const querySend = document.getElementById('query-send');
+  const queryResponse = document.getElementById('query-response');
+  const responseText = document.getElementById('response-text');
+  const responseTag = document.getElementById('response-tag');
+  const copyBtn = document.getElementById('copy-btn');
+  const historyToggle = document.getElementById('history-toggle');
+  const historyDiv = document.getElementById('query-history');
+  const agentRoute = document.getElementById('agent-route');
 
-<script type="module">
-// ── Session guard ─────────────────────────────────────────────────────────
-// Verify stored token server-side on every load.
-// If invalid/missing, clear storage and redirect to login.
-(async () => {
-  const token = localStorage.getItem('nexal_token');
-  if (!token) {
-    window.location.replace('/nexal/login.html');
-    return;
-  }
-  try {
-    const res = await fetch('/auth/token-check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+  let history = [];
+  let isStreaming = false;
+  let abortCtrl = null;
+
+  // Q hotkey — focus query input from anywhere
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'q' || e.key === 'Q') {
+      if (document.activeElement === queryInput) return;
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT')) return;
+      e.preventDefault();
+      queryInput.focus();
+    }
+    // Escape — cancel streaming or clear input
+    if (e.key === 'Escape') {
+      if (isStreaming && abortCtrl) {
+        abortCtrl.abort();
+        isStreaming = false;
+        querySend.textContent = 'Send';
+        responseTag.textContent = 'cancelled';
+      }
+      queryInput.value = '';
+      queryInput.blur();
+    }
+  });
+
+  // Typewriter streaming effect
+  function typewriter(element, text, speed) {
+    return new Promise((resolve) => {
+      let i = 0;
+      const cursor = document.createElement('span');
+      cursor.className = 'typewriter-cursor';
+      element.textContent = '';
+      element.appendChild(cursor);
+
+      function type() {
+        if (abortCtrl && abortCtrl.signal.aborted) {
+          cursor.remove();
+          resolve();
+          return;
+        }
+        if (i < text.length) {
+          element.insertBefore(document.createTextNode(text.charAt(i)), cursor);
+          i++;
+          setTimeout(type, speed || 18);
+        } else {
+          cursor.remove();
+          resolve();
+        }
+      }
+      type();
     });
-    const data = await res.json();
-    if (!data.ok) {
-      localStorage.removeItem('nexal_token');
-      localStorage.removeItem('nexal_user');
-      window.location.replace('/nexal/login.html');
-      return;
-    }
-    // Update stored username from server response (source of truth)
-    if (data.username) {
-      localStorage.setItem('nexal_user', data.username);
-      const el = document.getElementById('query-user');
-      if (el) el.textContent = data.username;
-    }
-  } catch {
-    // Network error — allow through rather than locking out
-    const user = localStorage.getItem('nexal_user');
-    if (user) {
-      const el = document.getElementById('query-user');
-      if (el) el.textContent = user;
-    }
+  }
+
+  async function sendQuery() {
+    const q = queryInput.value.trim();
+    if (!q || isStreaming) return;
+
+    isStreaming = true;
+    abortCtrl = new AbortController();
+    querySend.textContent = '…';
+    queryResponse.style.display = 'block';
+    responseText.textContent = '';
+    const route = agentRoute.value;
+    responseTag.textContent = route === 'auto' ? 'sophia · auto' : route;
+
+    // Simulated streaming response (replace with real endpoint)
+    const fakeResponses = [
+      'Mesh analysis complete. 7 active nodes, 3 dormant sectors detected. Capability pressure nominal at 0.34. Recommend expanding thefog coverage in the southern quadrant.',
+      'Federation sync positive. All hubs reporting within tolerance. Dark circle resolution: 2 pending, 14 resolved. Cross-hub latency: 23ms average.',
+      'Scout sweep returned. New void detected at coordinates [0.42, -0.17, 0.89]. Pressure reading: 0.67 — elevated. Initiating reach scan.',
+      'Agent consensus reached. Task rerouting from stella → trillian via mesh broadcast. Estimated completion: 4.2 seconds. No bottlenecks detected.',
+    ];
+    const response = fakeResponses[Math.floor(Math.random() * fakeResponses.length)];
+
+    await typewriter(responseText, response, 16);
+
+    isStreaming = false;
+    abortCtrl = null;
+    querySend.textContent = 'Send';
+
+    // Add to history
+    history.push({ q, a: response, route, time: new Date().toLocaleTimeString() });
+    renderHistory();
+  }
+
+  querySend.addEventListener('click', sendQuery);
+  queryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendQuery();
+  });
+
+  // Copy button
+  copyBtn.addEventListener('click', () => {
+    const text = responseText.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+    });
+  });
+
+  // History toggle
+  historyToggle.addEventListener('click', () => {
+    historyToggle.classList.toggle('open');
+    historyDiv.classList.toggle('open');
+  });
+
+  function renderHistory() {
+    historyDiv.innerHTML = '';
+    history.slice().reverse().forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `<div class="history-q">${item.time} — ${item.route}: ${item.q}</div><div class="history-a">${item.a.substring(0, 80)}…</div>`;
+      div.addEventListener('click', () => {
+        queryResponse.style.display = 'block';
+        responseText.textContent = item.a;
+        responseTag.textContent = item.route;
+      });
+      historyDiv.appendChild(div);
+    });
   }
 })();
+</script>
 
-// ── Query panel ───────────────────────────────────────────────────────────
-const PRESET_PROMPT =
-`Look into current sentiment around Bitcoin, Iran, fed funds, and the gold narrative. ` +
-`Consider using the Stingray tool for live indicator data. ` +
-`Then write a 5-week trading plan for Bitcoin — can use up to 5× leverage long or short.`;
+<script type="module" src="./nexal.js"></script>
 
-const presetBtn  = document.getElementById('query-preset-btn');
-const submitBtn  = document.getElementById('query-submit-btn');
-const inputEl    = document.getElementById('query-input');
-const responseEl = document.getElementById('query-response');
-const statusEl   = document.getElementById('query-status');
-
-presetBtn.addEventListener('click', () => {
-  inputEl.value = PRESET_PROMPT;
-  inputEl.style.borderColor = 'rgba(170,0,255,0.5)';
-  setTimeout(() => inputEl.style.borderColor = '', 600);
+<script>
+// Trigger panel entrance animations
+document.addEventListener('DOMContentLoaded', () => {
+  const panels = document.querySelectorAll('.panel');
+  panels.forEach((panel) => {
+    const delay = parseFloat(getComputedStyle(panel).getPropertyValue('--enter-delay') || '0') * 1000;
+    setTimeout(() => panel.classList.add('entered'), delay + 100);
+  });
 });
-
-// Focus style
-inputEl.addEventListener('focus', () => inputEl.style.borderColor = 'var(--cyan)');
-inputEl.addEventListener('blur',  () => inputEl.style.borderColor = '');
-
-submitBtn.addEventListener('click', async () => {
-  const prompt = inputEl.value.trim();
-  if (!prompt) return;
-
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'Routing…';
-  statusEl.textContent  = 'Dispatching to federation mesh…';
-  responseEl.style.display = 'none';
-
-  try {
-    // Route to Stella (trillian hub) via task API
-    const res = await fetch('/tasks', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('nexal_token') ?? ''}`,
-      },
-      body: JSON.stringify({
-        target: 'stella@trillian',
-        command: 'prompt',
-        args: { message: prompt },
-      }),
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    // Poll for result if async
-    const taskId = data.taskId ?? data.id;
-    if (taskId) {
-      statusEl.textContent = `Task ${taskId.slice(0,8)}… queued — polling…`;
-      await _pollTask(taskId);
-    } else if (data.result) {
-      _showResult(data.result);
-    } else {
-      _showResult(JSON.stringify(data, null, 2));
-    }
-  } catch (err) {
-    statusEl.textContent = `Error: ${err.message}`;
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'Send';
-  }
-});
-
-async function _pollTask(taskId) {
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    try {
-      const r = await fetch(`/tasks/${taskId}`);
-      if (!r.ok) continue;
-      const d = await r.json();
-      if (d.status === 'complete' || d.status === 'done') {
-        _showResult(d.result ?? d.output ?? JSON.stringify(d, null, 2));
-        return;
-      }
-      if (d.status === 'error' || d.status === 'failed') {
-        statusEl.textContent = `Task failed: ${d.error ?? 'unknown'}`;
-        return;
-      }
-      statusEl.textContent = `Status: ${d.status} (${i + 1}/60)…`;
-    } catch {}
-  }
-  statusEl.textContent = 'Timeout — no result after 3 minutes.';
-}
-
-function _showResult(text) {
-  responseEl.style.display = 'block';
-  responseEl.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
-  statusEl.textContent = 'Response received ✓';
-  responseEl.scrollTop = 0;
-}
 </script>
 </body>
 </html>
