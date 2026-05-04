@@ -2,650 +2,928 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manifold — Federation Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexal Network — Intelligence Coordination Protocol</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --bg: #060a10;
-      --surface: #0c1118;
-      --surface2: #111820;
-      --surface3: #161e2a;
-      --border: #1a2535;
-      --border-hi: #2a3a50;
-      --text: #c8d6e5;
-      --text-dim: #5a7089;
-      --cyan: #00d4ff;
-      --green: #00e676;
-      --violet: #b388ff;
-      --orange: #ff9100;
-      --pink: #ff4081;
-      --red: #ff3d3d;
-      --gold: #ffd740;
-      --mono: 'JetBrains Mono', monospace;
-      --sans: 'Inter', -apple-system, sans-serif;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
-    body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; overflow-x: hidden; }
+      --cyan:    #00e5ff;
+      --violet:  #aa00ff;
+      --green:   #00ff88;
+      --pink:    #ff0077;
+      --gold:    #ffcc00;
+      --bg:      #000510;
+      --panel:   rgba(0,10,30,0.82);
+      --border:  rgba(0,229,255,0.25);
+      --text:    #b0e0f8;
+      --accent:  #00e5ff;
+      --danger:  #ff3366;
 
-    /* ── Header ── */
-    header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--surface);
-      position: sticky; top: 0; z-index: 100;
+      /* Glassmorphism */
+      --blur:    14px;
+      --glow:    0 0 20px rgba(0,229,255,0.08), inset 0 0 30px rgba(0,5,20,0.5);
+      --hover-glow: 0 0 30px rgba(0,229,255,0.18), inset 0 0 40px rgba(0,229,255,0.08);
     }
-    .logo { font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: 3px; color: var(--cyan); }
-    .logo-sub { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-top: 1px; }
-    .header-right { display: flex; align-items: center; gap: 16px; }
-    .status-badge { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--green); }
-    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
-    .status-dot.offline { background: var(--red); animation: none; }
-    @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.3 } }
-    .header-btn {
-      padding: 6px 14px; background: transparent; border: 1px solid var(--border-hi); color: var(--text-dim);
-      border-radius: 5px; font-family: var(--mono); font-size: 11px; cursor: pointer; text-decoration: none;
-      transition: all 0.15s;
+
+    /* Bright mode overrides */
+    html.bright-mode {
+      --bg:      #0a1628;
+      --panel:   rgba(10,30,60,0.72);
+      --border:  rgba(0,229,255,0.4);
+      --text:    #d0f0ff;
+      --blur:    18px;
+      --glow:    0 0 30px rgba(0,229,255,0.15), inset 0 0 40px rgba(0,229,255,0.06);
+      --hover-glow: 0 0 40px rgba(0,229,255,0.25), inset 0 0 50px rgba(0,229,255,0.12);
     }
-    .header-btn:hover { border-color: var(--cyan); color: var(--cyan); }
-    .header-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.06); }
+    html.bright-mode .panel { background: rgba(10,30,60,0.72); }
+    html.bright-mode .panel::before { opacity: 0.5; }
+    html.bright-mode .logo { text-shadow: 0 0 25px var(--cyan), 0 0 60px rgba(0,229,255,0.6); }
+    html.bright-mode #ticker-strip { background: rgba(10,30,60,0.85); border-top-color: rgba(0,229,255,0.3); }
 
-    /* ── Stats ── */
-    .stats-bar {
-      display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
-      background: var(--border); border-bottom: 1px solid var(--border);
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: 'Rajdhani', 'Share Tech Mono', monospace;
+      color: var(--text);
+      user-select: none;
     }
-    .stat { background: var(--surface); padding: 10px 16px; text-align: center; }
-    .stat-val { font-family: var(--mono); font-size: 22px; font-weight: 600; line-height: 1.2; }
-    .stat-lbl { font-size: 9px; color: var(--text-dim); letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px; }
 
-    /* ── Layout ── */
-    .main { display: grid; grid-template-columns: 280px 1fr 300px; min-height: calc(100vh - 90px); }
-    @media (max-width: 1100px) { .main { grid-template-columns: 1fr; } }
-
-    /* ── Sidebar ── */
-    .sidebar { border-right: 1px solid var(--border); background: var(--surface); overflow-y: auto; max-height: calc(100vh - 90px); }
-    .sidebar-title { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; color: var(--text-dim); padding: 12px 14px 6px; text-transform: uppercase; }
-
-    .hub-group { margin-bottom: 4px; }
-    .hub-header {
-      display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-      cursor: pointer; transition: background 0.15s;
+    #scene {
+      position: fixed;
+      inset: 0;
+      display: block;
+      width: 100%; height: 100%;
     }
-    .hub-header:hover { background: var(--surface2); }
-    .hub-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-    .hub-name { font-family: var(--mono); font-weight: 600; font-size: 12px; }
-    .hub-count { font-size: 10px; color: var(--text-dim); margin-left: auto; }
+
+    /* ── HUD LAYER ────────────────────────────────────────────── */
+    #hud {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── PANEL BASE — Glassmorphism + Animated Corner Accents ── */
+    .panel {
+      pointer-events: all;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      position: absolute;
+      padding: 14px 18px;
+      box-shadow: var(--glow);
+      transition: box-shadow 0.35s ease, border-color 0.35s ease;
+      /* Entrance: hidden by default, animated via staggered class */
+      opacity: 0;
+      transform: translateY(12px);
+      animation: none;
+    }
+    .panel.entered {
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+    }
+
+    .panel:hover {
+      box-shadow: var(--hover-glow);
+      border-color: rgba(0,229,255,0.4);
+    }
+
+    /* Animated SVG corner accents (CSS-drawn) */
+    .panel::after {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 4px;
+      pointer-events: none;
+      background:
+        /* top-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 1px 14px no-repeat,
+        /* top-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 1px 14px no-repeat,
+        /* bottom-left corner */
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 1px 14px no-repeat,
+        /* bottom-right corner */
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 14px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 1px 14px no-repeat;
+      animation: cornerPulse 3s ease-in-out infinite;
+    }
+    @keyframes cornerPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* Scanline texture — subtler */
+    .panel::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 2px,
+        rgba(0,229,255,0.012) 2px, rgba(0,229,255,0.012) 4px
+      );
+      pointer-events: none;
+      border-radius: 4px;
+      z-index: 1;
+    }
+
+    /* Staggered entrance delays per panel */
+    #title-panel { --enter-delay: 0s; }
+    #agents-panel { --enter-delay: 0.1s; }
+    #sophia-panel { --enter-delay: 0.2s; }
+    #status-panel { --enter-delay: 0.15s; }
+    #detail-panel { --enter-delay: 0s; }
+    #ticker-strip { --enter-delay: 0.3s; }
+
+    .panel.entered {
+      animation: slideIn 0.5s ease forwards;
+      animation-delay: var(--enter-delay, 0s);
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Title Panel */
+    #title-panel {
+      top: 18px; left: 20px;
+      min-width: 280px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #title-panel .logo {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      color: var(--cyan);
+      text-shadow: 0 0 20px var(--cyan), 0 0 40px rgba(0,229,255,0.4);
+      line-height: 1;
+    }
+
+    #title-panel .sub {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(0,229,255,0.55);
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    #title-panel .version {
+      margin-top: 10px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.3);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    #title-panel .status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    /* Bright/dim mode toggle */
+    #mode-toggle {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 24px; height: 24px;
+      border: 1px solid rgba(0,229,255,0.3);
+      border-radius: 3px;
+      background: rgba(0,229,255,0.08);
+      color: var(--cyan);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      z-index: 2;
+    }
+    #mode-toggle:hover {
+      background: rgba(0,229,255,0.2);
+      border-color: var(--cyan);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Agent List Panel */
+    #agents-panel {
+      top: 140px; left: 20px;
+      width: 280px; max-height: 400px;
+      overflow-y: auto;
+    }
+
+    #agents-panel .panel-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+      letter-spacing: 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #agents-panel .panel-title::before {
+      content: "●";
+      color: var(--green);
+      animation: pulse 2s infinite;
+    }
 
     .agent-item {
-      display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 30px;
-      cursor: pointer; transition: all 0.15s; font-size: 12px;
-    }
-    .agent-item:hover { background: var(--surface2); }
-    .agent-item.selected { background: var(--surface3); border-left: 2px solid var(--cyan); }
-    .agent-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
-    .agent-dot.remote { background: var(--text-dim); }
-    .agent-name { font-family: var(--mono); }
-    .agent-caps-count { font-size: 10px; color: var(--text-dim); margin-left: auto; }
-
-    /* ── Center Panel ── */
-    .center { overflow-y: auto; max-height: calc(100vh - 90px); }
-    .tab-bar {
-      display: flex; border-bottom: 1px solid var(--border); background: var(--surface);
-      position: sticky; top: 0; z-index: 10;
-    }
-    .tab {
-      padding: 10px 20px; font-family: var(--mono); font-size: 11px; letter-spacing: 1px;
-      color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
-    }
-    .tab:hover { color: var(--text); }
-    .tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
-
-    .tab-content { display: none; padding: 20px; }
-    .tab-content.active { display: block; }
-
-    /* ── Agent Detail ── */
-    .agent-detail-header { margin-bottom: 20px; }
-    .agent-detail-name { font-family: var(--mono); font-size: 24px; font-weight: 600; }
-    .agent-detail-hub { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-
-    .cap-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-    .cap-chip {
-      font-family: var(--mono); font-size: 11px; padding: 4px 10px; border-radius: 4px;
-      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
     }
 
-    /* ── Task Form ── */
-    .task-form { max-width: 560px; }
-    .form-group { margin-bottom: 14px; }
-    .form-label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px; display: block; margin-bottom: 4px; }
-    .form-input, .form-textarea, .form-select {
-      width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 12px;
-      outline: none; transition: border-color 0.15s;
+    .agent-item .agent-dot {
+      width: 6px; height: 6px; border-radius: 50%;
     }
-    .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: var(--cyan); }
-    .form-textarea { min-height: 80px; resize: vertical; }
-    .form-select option { background: var(--surface); }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-    .btn {
-      padding: 8px 20px; border-radius: 5px; font-family: var(--mono); font-size: 12px;
-      cursor: pointer; border: 1px solid transparent; transition: all 0.15s;
+    .agent-item .agent-name {
+      flex: 1; color: var(--text);
     }
-    .btn-primary { background: rgba(0,212,255,0.12); border-color: var(--cyan); color: var(--cyan); }
-    .btn-primary:hover { background: rgba(0,212,255,0.22); }
-    .btn-green { background: rgba(0,230,118,0.12); border-color: var(--green); color: var(--green); }
-    .btn-green:hover { background: rgba(0,230,118,0.22); }
-    .btn-danger { background: rgba(255,61,61,0.12); border-color: var(--red); color: var(--red); }
-    .btn-danger:hover { background: rgba(255,61,61,0.22); }
 
-    /* ── Task History ── */
-    .task-row {
-      display: grid; grid-template-columns: 100px 100px 1fr 80px 80px;
-      gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border);
-      font-family: var(--mono); font-size: 11px; align-items: center;
+    .agent-item .agent-caps {
+      font-size: 9px; color: rgba(255,255,255,0.4);
     }
-    .task-row:hover { background: var(--surface); }
-    .task-row.header { color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border-hi); }
 
-    /* ── Right Panel ── */
-    .right-panel { border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; max-height: calc(100vh - 90px); }
-    .feed-item {
-      padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px;
+    /* SOPHIA Query Panel */
+    #sophia-panel {
+      bottom: 60px; left: 20px;
+      width: 320px;
+      max-height: 420px;
+      display: flex;
+      flex-direction: column;
     }
-    .feed-time { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
-    .feed-text { margin-top: 3px; }
-    .feed-tag { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; }
 
-    /* ── Dark Circles ── */
-    .dc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
-    .dc-row:last-child { border-bottom: none; }
-    .dc-name { width: 180px; font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dc-track { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
-    .dc-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
-    .dc-val { width: 36px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
-    .dc-hubs { width: 120px; font-size: 10px; color: var(--text-dim); }
-
-    /* ── Toast ── */
-    .toast {
-      position: fixed; bottom: 20px; right: 20px; padding: 10px 16px; border-radius: 6px;
-      font-family: var(--mono); font-size: 11px; z-index: 9999; max-width: 400px;
-      transition: opacity 0.3s;
+    #sophia-panel .sophia-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--violet);
+      margin-bottom: 2px;
+      letter-spacing: 4px;
+      text-shadow: 0 0 15px var(--violet);
     }
-    .toast.ok { background: #0d2d1a; color: #00e676; border: 1px solid #00e676; }
-    .toast.err { background: #2d0d0d; color: #ff6b6b; border: 1px solid #ff3d3d; }
-    .toast.info { background: #0d1a2d; color: #00d4ff; border: 1px solid #00d4ff; }
 
-    /* ── Empty state ── */
-    .empty { padding: 40px; text-align: center; color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+    #sophia-panel .sophia-subtitle {
+      font-size: 9px;
+      color: rgba(170,0,255,0.6);
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
 
-    /* ── Metrics ── */
-    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
-    .metric-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
-    .metric-card .label { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; font-family: var(--mono); }
-    .metric-card .value { font-family: var(--mono); font-size: 20px; font-weight: 600; color: var(--cyan); margin-top: 4px; }
+    /* Agent routing selector */
+    .agent-select {
+      width: 100%;
+      padding: 4px 8px;
+      background: rgba(170,0,255,0.1);
+      border: 1px solid rgba(170,0,255,0.25);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      outline: none;
+      margin-bottom: 8px;
+      cursor: pointer;
+    }
+    .agent-select:focus {
+      border-color: var(--violet);
+    }
+
+    /* Query input */
+    .query-input-row {
+      display: flex; gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .query-input {
+      flex: 1;
+      padding: 6px 10px;
+      background: rgba(0,10,30,0.6);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .query-input:focus {
+      border-color: var(--cyan);
+    }
+    .query-input::placeholder {
+      color: rgba(176,224,248,0.3);
+    }
+
+    .query-send-btn {
+      padding: 6px 12px;
+      background: rgba(170,0,255,0.15);
+      border: 1px solid rgba(170,0,255,0.3);
+      border-radius: 3px;
+      color: var(--violet);
+      font-size: 10px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.2s;
+    }
+    .query-send-btn:hover {
+      background: rgba(170,0,255,0.25);
+      border-color: var(--violet);
+    }
+
+    /* Response area */
+    .query-response {
+      background: rgba(0,10,30,0.4);
+      border: 1px solid rgba(0,229,255,0.1);
+      border-radius: 3px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      min-height: 40px;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text);
+      position: relative;
+      word-break: break-word;
+    }
+
+    .query-response .response-tag {
+      position: absolute;
+      top: 4px; right: 6px;
+      font-size: 8px;
+      color: rgba(0,229,255,0.4);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .query-response .copy-btn {
+      position: absolute;
+      bottom: 4px; right: 6px;
+      padding: 2px 6px;
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.2);
+      border-radius: 2px;
+      color: rgba(0,229,255,0.5);
+      font-size: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+    .query-response .copy-btn:hover {
+      background: rgba(0,229,255,0.2);
+      color: var(--cyan);
+    }
+
+    /* Typewriter cursor */
+    .typewriter-cursor {
+      display: inline-block;
+      width: 6px;
+      height: 14px;
+      background: var(--violet);
+      animation: blink 0.8s step-end infinite;
+      vertical-align: text-bottom;
+      margin-left: 1px;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Collapsible history */
+    .history-toggle {
+      font-size: 9px;
+      color: rgba(0,229,255,0.4);
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .history-toggle:hover { color: var(--cyan); }
+    .history-toggle::before { content: '▸'; transition: transform 0.2s; display: inline-block; }
+    .history-toggle.open::before { transform: rotate(90deg); }
+
+    .query-history {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+    .query-history.open {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(0,229,255,0.06);
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .history-item:hover { color: var(--cyan); }
+    .history-item .history-q { color: rgba(255,255,255,0.5); }
+    .history-item .history-a { color: var(--text); font-size: 9px; margin-top: 2px; }
+
+    /* Right Status Panel */
+    #status-panel {
+      top: 18px; right: 20px;
+      width: 320px;
+    }
+
+    #status-panel .status-title {
+      font-size: 12px;
+      color: var(--cyan);
+      margin-bottom: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .status-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0; font-size: 11px;
+      border-bottom: 1px solid rgba(0,229,255,0.08);
+    }
+
+    .status-label { color: rgba(255,255,255,0.7); }
+    .status-value { color: var(--text); font-weight: 600; }
+
+    /* Agent Detail Panel */
+    #detail-panel {
+      top: 200px; right: 20px;
+      width: 320px;
+      display: none;
+    }
+
+    #detail-panel.visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .detail-title {
+      font-size: 18px;
+      color: var(--cyan);
+      margin-bottom: 8px;
+    }
+
+    .detail-subtitle {
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      margin-bottom: 12px;
+    }
+
+    .detail-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .detail-stat {
+      text-align: center;
+      padding: 8px;
+      background: rgba(0,229,255,0.05);
+      border-radius: 3px;
+    }
+
+    .detail-stat .stat-num {
+      font-size: 16px;
+      color: var(--cyan);
+      display: block;
+    }
+
+    .detail-stat .stat-label {
+      font-size: 8px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+    }
+
+    /* ── TICKER STRIP ──────────────────────────────────────────── */
+    #ticker-strip {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 32px;
+      background: rgba(0,8,20,0.85);
+      border-top: 1px solid rgba(0,229,255,0.15);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      z-index: 10;
+      padding: 0 12px;
+      gap: 10px;
+    }
+
+    #ticker-strip .ticker-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #ticker-strip .ticker-label::before {
+      content: "▸ ";
+    }
+
+    #ticker-content {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    #ticker-scroll {
+      display: flex;
+      gap: 40px;
+      white-space: nowrap;
+      animation: tickerScroll 30s linear infinite;
+    }
+
+    .ticker-item {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      color: rgba(176,224,248,0.7);
+      flex-shrink: 0;
+    }
+
+    .ticker-item .ticker-time {
+      color: rgba(0,229,255,0.5);
+      margin-right: 6px;
+    }
+
+    .ticker-item .ticker-event-join { color: var(--green); }
+    .ticker-item .ticker-event-leave { color: var(--danger); }
+    .ticker-item .ticker-event-task { color: var(--gold); }
+
+    @keyframes tickerScroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+
+    /* ── PULSING RINGS (CSS overlay for hub spheres) ───────────── */
+    .hub-ring-overlay {
+      position: fixed;
+      pointer-events: none;
+      border-radius: 50%;
+      border: 1px solid rgba(0,229,255,0.4);
+      animation: ringPulse 2.5s ease-out infinite;
+      z-index: 5;
+    }
+    @keyframes ringPulse {
+      0%   { transform: translate(-50%,-50%) scale(0.5); opacity: 0.8; }
+      100% { transform: translate(-50%,-50%) scale(2.5); opacity: 0; }
+    }
+
+    /* ── MOBILE RESPONSIVE ──────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #title-panel,
+      #agents-panel,
+      #sophia-panel,
+      #status-panel,
+      #detail-panel,
+      #ticker-strip {
+        display: none !important;
+      }
+
+      #scene {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+
+      html, body {
+        overflow: hidden;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      #scene {
+        touch-action: manipulation;
+      }
+
+      #scene {
+        filter: brightness(1.4) contrast(1.2);
+        -webkit-filter: brightness(1.4) contrast(1.2);
+      }
+    }
+
+    @media (max-width: 480px) {
+      #hud {
+        display: none;
+      }
+
+      #scene {
+        filter: brightness(1.6) contrast(1.3);
+        -webkit-filter: brightness(1.6) contrast(1.3);
+      }
+    }
   </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+      }
+    }
+  </script>
+  <script>
+    // Catch module errors and show them on screen
+    window.addEventListener('error', function(e) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'JS ERROR: ' + (e.message || e) + (e.filename ? '\nFile: ' + e.filename + ':' + e.lineno : '');
+      document.body.appendChild(d);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:darkred;color:white;padding:12px;z-index:99999;font-family:monospace;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'MODULE ERROR: ' + (e.reason && e.reason.message ? e.reason.message : e.reason);
+      document.body.appendChild(d);
+    });
+  </script>
 </head>
 <body>
 
-<header>
-  <div>
+<!-- HUD Overlay -->
+<div id="hud">
+  <!-- Title Panel -->
+  <div id="title-panel" class="panel">
+    <button id="mode-toggle" title="Toggle bright/dim mode">◐</button>
+    <a href="/nexal/meshlet" style="font-size:10px;letter-spacing:2px;color:var(--violet);text-decoration:none;border:1px solid var(--violet);padding:3px 8px;border-radius:3px;margin-left:8px" title="Open Meshlet Workshop">⚡ WORKSHOP</a>
     <div class="logo">MANIFOLD</div>
-    <div class="logo-sub">Federation Control</div>
+    <div class="sub">Numinous Architecture — Federation Mesh</div>
+    <div class="version">
+      <div class="status-dot"></div>
+      <span>Relay connected: nexal.network</span>
+    </div>
   </div>
-  <div class="header-right">
-    <div class="status-badge">
-      <span class="status-dot" id="status-dot"></span>
-      <span id="status-text">connecting...</span>
+
+  <!-- Active Agents Panel -->
+  <div id="agents-panel" class="panel">
+    <div class="panel-title">Active Agents</div>
+    <div id="agents-list">
+      <!-- Populated dynamically -->
     </div>
-    <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)" id="uptime"></span>
   </div>
-</header>
 
-<div class="stats-bar" id="stats-bar"></div>
+  <!-- SOPHIA Query Panel -->
+  <div id="sophia-panel" class="panel">
+    <div class="sophia-title">SOPHIA</div>
+    <div class="sophia-subtitle">Create Creation 10</div>
 
-<div class="main">
-  <!-- Sidebar: Agents -->
-  <div class="sidebar" id="sidebar"></div>
+    <!-- Agent routing selector -->
+    <select class="agent-select" id="agent-route">
+      <option value="auto">⟐ Auto-route</option>
+      <option value="sophia">◈ Sophia</option>
+      <option value="stella">◉ Stella</option>
+      <option value="mesh">⬡ Mesh Broadcast</option>
+    </select>
 
-  <!-- Center -->
-  <div class="center">
-    <div class="tab-bar">
-      <div class="tab active" data-tab="overview">Overview</div>
-      <div class="tab" data-tab="task">Submit Task</div>
-      <div class="tab" data-tab="history">Task History</div>
-      <div class="tab" data-tab="metrics">Metrics</div>
-      <div class="tab" data-tab="peers">Peers</div>
+    <!-- Query input -->
+    <div class="query-input-row">
+      <input type="text" class="query-input" id="query-input" placeholder="Ask the mesh… (Q)" autocomplete="off" spellcheck="false">
+      <button class="query-send-btn" id="query-send">Send</button>
     </div>
 
-    <!-- Overview -->
-    <div class="tab-content active" id="tab-overview">
-      <div id="overview-content"><div class="empty">Select an agent or view federation data</div></div>
+    <!-- Response area -->
+    <div class="query-response" id="query-response" style="display:none">
+      <span class="response-tag" id="response-tag"></span>
+      <div id="response-text"></div>
+      <button class="copy-btn" id="copy-btn" title="Copy response">📋 Copy</button>
     </div>
 
-    <!-- Task Submit -->
-    <div class="tab-content" id="tab-task">
-      <div class="task-form">
-        <h3 style="font-family:var(--mono);font-size:14px;margin-bottom:16px;color:var(--cyan)">Submit Task to Mesh</h3>
-        <div class="form-group">
-          <label class="form-label">Target Agent</label>
-          <select class="form-select" id="task-target">
-            <option value="any">Any Available</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Capability (optional)</label>
-          <select class="form-select" id="task-capability">
-            <option value="">Any</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Command</label>
-          <input class="form-input" id="task-command" placeholder="e.g. health-check, run-scan, analyze">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Arguments (JSON)</label>
-          <textarea class="form-textarea" id="task-args" placeholder='{"key": "value"}'>{}</textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Timeout (ms)</label>
-          <input class="form-input" id="task-timeout" type="number" value="10000">
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-primary" onclick="submitTask()">▶ Submit Task</button>
-          <span style="font-size:11px;color:var(--text-dim);font-family:var(--mono)" id="task-status-text"></span>
-        </div>
-        <div style="margin-top:16px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px">
-          <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:1px;margin-bottom:8px">QUICK COMMANDS</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            <button class="btn btn-green" style="font-size:11px;padding:4px 10px" onclick="quickCmd('health-check')">♥ health</button>
-            <button class="btn btn-green" style="font-size:11px;padding:4px 10px" onclick="quickCmd('ping')">◉ ping</button>
-            <button class="btn btn-green" style="font-size:11px;padding:4px 10px" onclick="quickCmd('status')">⊞ status</button>
-          </div>
-        </div>
+    <!-- Collapsible history -->
+    <div class="history-toggle" id="history-toggle">History</div>
+    <div class="query-history" id="query-history"></div>
+  </div>
+
+  <!-- Status Panel -->
+  <div id="status-panel" class="panel">
+    <div class="status-title">Federation Status</div>
+    <div class="status-row">
+      <span class="status-label">Agents Online</span>
+      <span class="status-value" id="agent-count">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Capabilities</span>
+      <span class="status-value" id="capability-count">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Mesh Latency</span>
+      <span class="status-value" id="mesh-latency">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Peers (Hubs)</span>
+      <span class="status-value" id="peer-count">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Hub Names</span>
+      <span class="status-value" id="hub-names" style="font-size:10px;letter-spacing:1px">—</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">Last Updated</span>
+      <span class="status-value" id="last-updated">—</span>
+    </div>
+    <div style="margin-top:10px">
+      <div style="font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px">CAPABILITY PRESSURE</div>
+      <div id="pressure-bars"></div>
+    </div>
+  </div>
+
+  <!-- Agent Detail Panel -->
+  <div id="detail-panel" class="panel">
+    <div class="detail-title" id="detail-agent-name">Agent Name</div>
+    <div class="detail-subtitle" id="detail-agent-hub">Hub: trillian</div>
+    <div class="detail-stats">
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-messages">-</span>
+        <span class="stat-label">Messages</span>
+      </div>
+      <div class="detail-stat">
+        <span class="stat-num" id="detail-uptime">-</span>
+        <span class="stat-label">Uptime</span>
       </div>
     </div>
-
-    <!-- Task History -->
-    <div class="tab-content" id="tab-history">
-      <div id="task-history"><div class="empty">No tasks yet</div></div>
-    </div>
-
-    <!-- Metrics -->
-    <div class="tab-content" id="tab-metrics">
-      <div id="metrics-content"><div class="empty">Loading...</div></div>
-    </div>
-
-    <!-- Peers -->
-    <div class="tab-content" id="tab-peers">
-      <div id="peers-content"><div class="empty">Loading...</div></div>
-    </div>
-  </div>
-
-  <!-- Right Panel: Live Feed + Dark Circles -->
-  <div class="right-panel">
-    <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase">Live Feed</div>
-    </div>
-    <div id="live-feed"><div class="empty">Waiting for events...</div></div>
-
-    <div style="padding:12px 14px;border-bottom:1px solid var(--border);border-top:1px solid var(--border)">
-      <div style="font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase">Dark Circles</div>
-    </div>
-    <div id="dark-circles" style="padding:8px 14px"><div class="empty">Loading...</div></div>
+    <div id="detail-capabilities"></div>
   </div>
 </div>
 
-<script>
-const HUB_COLORS = { trillian:'#b388ff', hog:'#00e676', thefog:'#7c4dff', bobiverse:'#ff9100', relay:'#00d4ff' };
-
-let meshData = null;
-let selectedAgent = null;
-let eventLog = [];
-
-// ── Toast ──
-function toast(msg, type='info') {
-  const el = document.createElement('div');
-  el.className = 'toast ' + type;
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
-}
-
-// ── Tabs ──
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
-  document.getElementById('tab-' + name).classList.add('active');
-}
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.onclick = () => switchTab(tab.dataset.tab);
-});
-
-// ── Data Fetch ──
-async function fetchAll() {
-  try {
-    const [meshRes, metricsRes, taskRes] = await Promise.all([
-      fetch('/mesh'), fetch('/metrics'), fetch('/tasks')
-    ]);
-    const mesh = await meshRes.json();
-    const metrics = await metricsRes.json();
-    const tasks = await taskRes.json();
-
-    meshData = mesh;
-    renderAll(mesh, metrics, tasks);
-    document.getElementById('status-dot').classList.remove('offline');
-    document.getElementById('status-text').textContent = mesh.hub + ' · mesh live';
-  } catch (e) {
-    document.getElementById('status-dot').classList.add('offline');
-    document.getElementById('status-text').textContent = 'offline';
-  }
-}
-
-function renderAll(mesh, metrics, tasks) {
-  const { agents=[], peers=[], darkCircles=[], stats={}, capabilities=[] } = mesh;
-
-  // Stats bar
-  document.getElementById('stats-bar').innerHTML = [
-    { v: agents.length, l: 'Agents', c: 'var(--cyan)' },
-    { v: stats.hubs?.length || 0, l: 'Hubs', c: 'var(--violet)' },
-    { v: capabilities.length, l: 'Capabilities', c: 'var(--green)' },
-    { v: peers.length, l: 'Peer Links', c: 'var(--orange)' },
-    { v: darkCircles.length, l: 'Dark Circles', c: 'var(--pink)' },
-    { v: metrics.tasksTotal || 0, l: 'Tasks Run', c: 'var(--gold)' },
-  ].map(s => `<div class="stat"><div class="stat-val" style="color:${s.c}">${s.v}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
-
-  // Uptime
-  if (metrics.uptime) {
-    const h = Math.floor(metrics.uptime / 3600);
-    const m = Math.floor((metrics.uptime % 3600) / 60);
-    document.getElementById('uptime').textContent = `up ${h}h ${m}m`;
-  }
-
-  // Sidebar: agents grouped by hub
-  const byHub = {};
-  agents.forEach(a => { if (!byHub[a.hub]) byHub[a.hub] = []; byHub[a.hub].push(a); });
-
-  const sidebarHtml = Object.entries(byHub).map(([hub, hubAgents]) => {
-    const color = HUB_COLORS[hub] || '#888';
-    return `
-      <div class="hub-group">
-        <div class="hub-header">
-          <span class="hub-dot" style="background:${color}"></span>
-          <span class="hub-name" style="color:${color}">${hub}</span>
-          <span class="hub-count">${hubAgents.length}</span>
-        </div>
-        ${hubAgents.map(a => `
-          <div class="agent-item ${selectedAgent === a.name ? 'selected' : ''}" onclick="selectAgent('${a.name}')">
-            <span class="agent-dot ${a.isLocal ? '' : 'remote'}"></span>
-            <span class="agent-name">${a.name}</span>
-            <span class="agent-caps-count">${(a.capabilities||[]).length}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
-  }).join('');
-  document.getElementById('sidebar').innerHTML = sidebarHtml;
-
-  // Task form: populate agent dropdown
-  const targetEl = document.getElementById('task-target');
-  const currentTarget = targetEl.value;
-  targetEl.innerHTML = '<option value="any">Any Available</option>' +
-    agents.map(a => `<option value="${a.name}">${a.name}@${a.hub}${a.isLocal ? ' ★' : ''}</option>`).join('');
-  if (currentTarget) targetEl.value = currentTarget;
-
-  // Task form: populate capability dropdown
-  const capEl = document.getElementById('task-capability');
-  const currentCap = capEl.value;
-  capEl.innerHTML = '<option value="">Any</option>' +
-    capabilities.map(c => `<option value="${typeof c === 'string' ? c : c.capability}">${typeof c === 'string' ? c : c.capability}</option>`).join('');
-  if (currentCap) capEl.value = currentCap;
-
-  // Dark Circles
-  const sorted = [...darkCircles].sort((a,b) => b.pressure - a.pressure);
-  document.getElementById('dark-circles').innerHTML = sorted.slice(0, 20).map(dc => {
-    const pct = Math.min(100, Math.round(dc.pressure * 100));
-    const color = dc.pressure > 0.7 ? 'var(--red)' : dc.pressure > 0.3 ? 'var(--orange)' : 'var(--cyan)';
-    const hubs = Object.keys(dc.byHub || {}).join(', ');
-    return `<div class="dc-row">
-      <span class="dc-name" title="${dc.name}">${dc.name}</span>
-      <div class="dc-track"><div class="dc-fill" style="width:${pct}%;background:${color}"></div></div>
-      <span class="dc-val">${pct}%</span>
-      <span class="dc-hubs">${hubs}</span>
-    </div>`;
-  }).join('');
-
-  // Peers tab
-  const seen = new Set();
-  const uniquePeers = peers.filter(p => { if (seen.has(p.hub)) return false; seen.add(p.hub); return true; });
-  document.getElementById('peers-content').innerHTML = uniquePeers.map(p => {
-    const color = HUB_COLORS[p.hub] || '#888';
-    const ago = timeAgo(new Date(p.lastSeen));
-    const stale = (Date.now() - new Date(p.lastSeen).getTime()) > 300000;
-    return `<div class="peer-row">
-      <span class="peer-name" style="color:${color}"><span class="peer-status ${stale?'stale':''}" style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${stale?'var(--orange)':'var(--green)'};margin-right:8px"></span>${p.hub}</span>
-      <div class="peer-meta"><span>${p.agentCount} agents</span><span>${ago}</span></div>
-    </div>`;
-  }).join('') || '<div class="empty">No peers</div>';
-
-  // Metrics tab
-  document.getElementById('metrics-content').innerHTML = `
-    <div class="metric-grid">
-      <div class="metric-card"><div class="label">Uptime</div><div class="value">${Math.floor((metrics.uptime||0)/3600)}h ${Math.floor(((metrics.uptime||0)%3600)/60)}m</div></div>
-      <div class="metric-card"><div class="label">Runners Connected</div><div class="value">${metrics.runnersConnected || 0}</div></div>
-      <div class="metric-card"><div class="label">Tasks Total</div><div class="value">${metrics.tasksTotal || 0}</div></div>
-      <div class="metric-card"><div class="label">Tasks Success</div><div class="value" style="color:var(--green)">${metrics.tasksSuccess || 0}</div></div>
-      <div class="metric-card"><div class="label">Tasks Error</div><div class="value" style="color:var(--red)">${metrics.tasksError || 0}</div></div>
-      <div class="metric-card"><div class="label">Success Rate</div><div class="value">${metrics.successRate || 'N/A'}</div></div>
-      <div class="metric-card"><div class="label">Avg Execution</div><div class="value">${metrics.avgExecutionMs ? metrics.avgExecutionMs + 'ms' : 'N/A'}</div></div>
-      <div class="metric-card"><div class="label">Throughput/min</div><div class="value">${metrics.throughputPerMin || 0}</div></div>
-      <div class="metric-card"><div class="label">Pending Tasks</div><div class="value">${metrics.tasksPending || 0}</div></div>
-      <div class="metric-card"><div class="label">Queued Tasks</div><div class="value">${metrics.tasksQueued || 0}</div></div>
+<!-- Ticker Strip -->
+<div id="ticker-strip" class="panel">
+  <span class="ticker-label">Feed</span>
+  <div id="ticker-content">
+    <div id="ticker-scroll">
+      <!-- Populated dynamically -->
     </div>
-  `;
+  </div>
+</div>
 
-  // Task history (from /tasks pending + we'd need /task-history for completed)
-  renderTaskHistory(tasks);
-}
+<!-- 3D Scene -->
+<canvas id="scene"></canvas>
 
-// ── Agent Detail ──
-function selectAgent(name) {
-  selectedAgent = name;
-  // Re-render sidebar to show selection
-  if (meshData) {
-    // Quick re-render of sidebar selection
-    document.querySelectorAll('.agent-item').forEach(el => {
-      el.classList.toggle('selected', el.textContent.trim().startsWith(name));
-    });
-  }
+<!-- Query Panel Logic -->
+<script>
+(function() {
+  const queryInput = document.getElementById('query-input');
+  const querySend = document.getElementById('query-send');
+  const queryResponse = document.getElementById('query-response');
+  const responseText = document.getElementById('response-text');
+  const responseTag = document.getElementById('response-tag');
+  const copyBtn = document.getElementById('copy-btn');
+  const historyToggle = document.getElementById('history-toggle');
+  const historyDiv = document.getElementById('query-history');
+  const agentRoute = document.getElementById('agent-route');
 
-  // Show overview tab
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('.tab[data-tab="overview"]').classList.add('active');
-  document.getElementById('tab-overview').classList.add('active');
+  let history = [];
+  let isStreaming = false;
+  let abortCtrl = null;
 
-  // Fetch agent detail
-  fetch(`/agents/${name}`).then(r => r.json()).then(agent => {
-    const color = HUB_COLORS[agent.hub] || '#888';
-    const ago = timeAgo(new Date(agent.lastSeen));
-    document.getElementById('overview-content').innerHTML = `
-      <div class="agent-detail-header">
-        <div class="agent-detail-name" style="color:${color}">${agent.name}</div>
-        <div class="agent-detail-hub">${agent.hub} · ${agent.isLocal ? 'local' : 'remote'} · last seen ${ago}</div>
-      </div>
-      <div style="margin-bottom:20px">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-bottom:8px">CAPABILITIES (${(agent.capabilities||[]).length})</div>
-        <div class="cap-grid">${(agent.capabilities||[]).map(c => `<div class="cap-chip">${c}</div>`).join('')}</div>
-      </div>
-      ${agent.seams && agent.seams.length ? `
-        <div style="margin-bottom:20px">
-          <div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-bottom:8px">SEAMS</div>
-          <div class="cap-grid">${agent.seams.map(s => `<div class="cap-chip" style="border-color:var(--orange)">${s}</div>`).join('')}</div>
-        </div>
-      ` : ''}
-      <div style="margin-top:24px;display:flex;gap:8px">
-        <button class="btn btn-primary" onclick="sendQuickTask('${agent.name}')">⚡ Send Task</button>
-        <button class="btn btn-danger" onclick="deregisterAgent('${agent.name}')">✕ Deregister</button>
-      </div>
-    `;
-  }).catch(() => {
-    document.getElementById('overview-content').innerHTML = '<div class="empty">Agent not found</div>';
+  // Q hotkey — focus query input from anywhere
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'q' || e.key === 'Q') {
+      if (document.activeElement === queryInput) return;
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'SELECT')) return;
+      e.preventDefault();
+      queryInput.focus();
+    }
+    // Escape — cancel streaming or clear input
+    if (e.key === 'Escape') {
+      if (isStreaming && abortCtrl) {
+        abortCtrl.abort();
+        isStreaming = false;
+        querySend.textContent = 'Send';
+        responseTag.textContent = 'cancelled';
+      }
+      queryInput.value = '';
+      queryInput.blur();
+    }
   });
-}
 
-function sendQuickTask(agentName) {
-  document.getElementById('task-target').value = agentName;
-  switchTab('task');
-  document.getElementById('task-command').focus();
-}
+  // Typewriter streaming effect
+  function typewriter(element, text, speed) {
+    return new Promise((resolve) => {
+      let i = 0;
+      const cursor = document.createElement('span');
+      cursor.className = 'typewriter-cursor';
+      element.textContent = '';
+      element.appendChild(cursor);
 
-// ── Task Submit ──
-async function submitTask() {
-  const target = document.getElementById('task-target').value;
-  const capability = document.getElementById('task-capability').value;
-  const command = document.getElementById('task-command').value.trim();
-  const argsRaw = document.getElementById('task-args').value.trim();
-  const timeout = parseInt(document.getElementById('task-timeout').value) || 30000;
-
-  if (!command) { toast('Command is required', 'err'); return; }
-
-  let args;
-  try { args = JSON.parse(argsRaw || '{}'); } catch { toast('Invalid JSON in arguments', 'err'); return; }
-
-  const body = { target, command, args, timeout_ms: timeout };
-  if (capability) body.capability = capability;
-
-  // Show immediate feedback
-  const taskId = 'pending-' + Date.now();
-  toast(`Submitting "${command}" → ${target}...`, 'info');
-  addEvent('task', `Task "${command}" → ${target} (submitting...)`, 'var(--orange)');
-
-  try {
-    const res = await fetch('/task', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      function type() {
+        if (abortCtrl && abortCtrl.signal.aborted) {
+          cursor.remove();
+          resolve();
+          return;
+        }
+        if (i < text.length) {
+          element.insertBefore(document.createTextNode(text.charAt(i)), cursor);
+          i++;
+          setTimeout(type, speed || 18);
+        } else {
+          cursor.remove();
+          resolve();
+        }
+      }
+      type();
     });
-    const data = await res.json();
-    if (!res.ok) {
-      toast(data.error || 'Task failed', 'err');
-      addEvent('error', `Task failed: ${data.error || 'unknown'}`, 'var(--red)');
-      return;
-    }
-
-    const id = data.task_id || data.id || taskId;
-    const ok = data.status === 'completed' || data.status === 'success';
-    toast(`Task ${id.slice(0,8)} ${data.status}`, ok ? 'ok' : data.status === 'timeout' ? 'err' : 'info');
-    addEvent(data.status, `${ok ? '✓' : '✗'} ${command} → ${data.executed_by || target}${data.execution_ms ? ' (' + data.execution_ms + 'ms)' : ''}${data.output ? ': ' + JSON.stringify(data.output).slice(0,60) : ''}${data.error ? ' ERR: ' + data.error : ''}`, ok ? 'var(--green)' : 'var(--red)');
-    document.getElementById('task-command').value = '';
-
-    // Switch to history tab
-    switchTab('history');
-    fetchAll();
-  } catch (e) {
-    toast('Network error: ' + e.message, 'err');
-    addEvent('error', `Network error: ${e.message}`, 'var(--red)');
   }
-}
 
-async function deregisterAgent(name) {
-  if (!confirm(`Deregister ${name} from the mesh?`)) return;
-  try {
-    await fetch(`/agents/${name}`, { method: 'DELETE' });
-    toast(`Deregistered ${name}`, 'ok');
-    addEvent('deregister', `Agent ${name} deregistered`, 'var(--orange)');
-    selectedAgent = null;
-    fetchAll();
-  } catch (e) { toast('Error: ' + e.message, 'err'); }
-}
+  async function sendQuery() {
+    const q = queryInput.value.trim();
+    if (!q || isStreaming) return;
 
-// ── Task History ──
-async function loadTaskHistory() {
-  try {
-    const [pending, history] = await Promise.all([
-      fetch('/tasks').then(r => r.json()),
-      fetch('/task-history').then(r => r.json()),
-    ]);
+    isStreaming = true;
+    abortCtrl = new AbortController();
+    querySend.textContent = '…';
+    queryResponse.style.display = 'block';
+    responseText.textContent = '';
+    const route = agentRoute.value;
+    responseTag.textContent = route === 'auto' ? 'sophia · auto' : route;
 
-    const pendingTasks = pending.pending || [];
-    const historyEntries = history.entries || [];
+    // Simulated streaming response (replace with real endpoint)
+    const fakeResponses = [
+      'Mesh analysis complete. 7 active nodes, 3 dormant sectors detected. Capability pressure nominal at 0.34. Recommend expanding thefog coverage in the southern quadrant.',
+      'Federation sync positive. All hubs reporting within tolerance. Dark circle resolution: 2 pending, 14 resolved. Cross-hub latency: 23ms average.',
+      'Scout sweep returned. New void detected at coordinates [0.42, -0.17, 0.89]. Pressure reading: 0.67 — elevated. Initiating reach scan.',
+      'Agent consensus reached. Task rerouting from stella → trillian via mesh broadcast. Estimated completion: 4.2 seconds. No bottlenecks detected.',
+    ];
+    const response = fakeResponses[Math.floor(Math.random() * fakeResponses.length)];
 
-    let html = '';
+    await typewriter(responseText, response, 16);
 
-    if (pendingTasks.length) {
-      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--orange);letter-spacing:1px;padding:8px 0">PENDING</div>';
-      html += pendingTasks.map(t => taskRowHtml(t)).join('');
-    }
+    isStreaming = false;
+    abortCtrl = null;
+    querySend.textContent = 'Send';
 
-    if (historyEntries.length) {
-      html += '<div style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:1px;padding:8px 0;margin-top:12px">HISTORY</div>';
-      html += historyEntries.slice(0, 50).map(t => taskRowHtml(t)).join('');
-    }
-
-    document.getElementById('task-history').innerHTML = html || '<div class="empty">No tasks yet. Submit one from the Task tab.</div>';
-  } catch {
-    document.getElementById('task-history').innerHTML = '<div class="empty">Failed to load history</div>';
+    // Add to history
+    history.push({ q, a: response, route, time: new Date().toLocaleTimeString() });
+    renderHistory();
   }
-}
 
-function taskRowHtml(t) {
-  const statusColor = (t.status === 'completed' || t.status === 'success') ? 'var(--green)' : (t.status === 'failed' || t.status === 'error') ? 'var(--red)' : 'var(--orange)';
-  const time = t.created_at ? new Date(t.created_at).toLocaleTimeString() : t.completedAt ? new Date(t.completedAt).toLocaleTimeString() : '—';
-  return `<div class="task-row">
-    <span style="color:var(--text-dim)">${time}</span>
-    <span style="color:${statusColor}">${t.status}</span>
-    <span>${t.command || t.task?.command || '—'}</span>
-    <span style="color:var(--text-dim)">${t.target || t.task?.target || '—'}</span>
-    <span style="font-size:10px;color:var(--text-dim)">${t.id ? t.id.slice(0,8) : '—'}</span>
-  </div>`;
-}
+  querySend.addEventListener('click', sendQuery);
+  queryInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendQuery();
+  });
 
-function renderTaskHistory(tasks) {
-  loadTaskHistory();
-}
+  // Copy button
+  copyBtn.addEventListener('click', () => {
+    const text = responseText.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1500);
+    });
+  });
 
-// ── Live Feed ──
-function addEvent(type, text, color) {
-  const time = new Date().toLocaleTimeString();
-  eventLog.unshift({ time, type, text, color });
-  if (eventLog.length > 50) eventLog.pop();
-  renderFeed();
-}
+  // History toggle
+  historyToggle.addEventListener('click', () => {
+    historyToggle.classList.toggle('open');
+    historyDiv.classList.toggle('open');
+  });
 
-function renderFeed() {
-  document.getElementById('live-feed').innerHTML = eventLog.map(e =>
-    `<div class="feed-item">
-      <span class="feed-time">${e.time}</span>
-      <span class="feed-tag" style="background:${e.color}22;color:${e.color}">${e.type}</span>
-      <div class="feed-text">${e.text}</div>
-    </div>`
-  ).join('') || '<div class="empty">Waiting for events...</div>';
-}
+  function renderHistory() {
+    historyDiv.innerHTML = '';
+    history.slice().reverse().forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `<div class="history-q">${item.time} — ${item.route}: ${item.q}</div><div class="history-a">${item.a.substring(0, 80)}…</div>`;
+      div.addEventListener('click', () => {
+        queryResponse.style.display = 'block';
+        responseText.textContent = item.a;
+        responseTag.textContent = item.route;
+      });
+      historyDiv.appendChild(div);
+    });
+  }
+})();
+</script>
 
-// ── Helpers ──
-function timeAgo(date) {
-  const s = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (s < 60) return s + 's ago';
-  if (s < 3600) return Math.floor(s/60) + 'm ago';
-  if (s < 86400) return Math.floor(s/3600) + 'h ago';
-  return Math.floor(s/86400) + 'd ago';
-}
+<script type="module" src="./nexal.js"></script>
 
-// ── Quick Commands ──
-function quickCmd(cmd) {
-  document.getElementById('task-command').value = cmd;
-  document.getElementById('task-args').value = '{}';
-  submitTask();
-}
-
-// ── Init ──
-addEvent('system', 'Dashboard connected', 'var(--green)');
-fetchAll();
-setInterval(fetchAll, 5000);
+<script>
+// Trigger panel entrance animations
+document.addEventListener('DOMContentLoaded', () => {
+  const panels = document.querySelectorAll('.panel');
+  panels.forEach((panel) => {
+    const delay = parseFloat(getComputedStyle(panel).getPropertyValue('--enter-delay') || '0') * 1000;
+    setTimeout(() => panel.classList.add('entered'), delay + 100);
+  });
+});
 </script>
 </body>
 </html>
