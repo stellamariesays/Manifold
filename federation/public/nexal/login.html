@@ -1,133 +1,138 @@
+<!--
+  Caddy route:
+  handle_path /nexal/login* {
+    root * /srv/manifold/federation/public/nexal
+    rewrite * /login.html
+    file_server
+  }
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Nexal Network — Access Required</title>
+  <title>Nexal Network — Access</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-  <script type="importmap">
-    { "imports": { "three": "https://unpkg.com/three@0.128.0/build/three.module.js" } }
-  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --cyan:   #00e5ff;
+      --cyan: #00e5ff;
       --violet: #aa00ff;
-      --green:  #00ff88;
-      --bg:     #000510;
-      --panel:  rgba(0, 8, 24, 0.88);
-      --border: rgba(0,229,255,0.3);
-      --text:   #b0e0f8;
+      --bg: #000510;
+      --panel: rgba(0,10,30,0.88);
+      --border: rgba(0,229,255,0.25);
+      --text: #b0e0f8;
+      --danger: #ff3366;
     }
 
     html, body {
       width: 100%; height: 100%;
       background: var(--bg);
       overflow: hidden;
-      font-family: 'Rajdhani', monospace;
+      font-family: 'Rajdhani', sans-serif;
       color: var(--text);
-      user-select: none;
     }
 
-    /* 3D canvas behind everything */
-    #scene {
+    /* Three.js background canvas */
+    #bg-canvas {
       position: fixed; inset: 0;
-      display: block;
       width: 100%; height: 100%;
-      filter: brightness(0.45) blur(1px);
-      z-index: 1;
+      z-index: 0;
+      /* Start blurred/dimmed, reveal on login */
+      filter: blur(12px) brightness(0.25);
+      transition: filter 1.2s ease-out;
+    }
+    #bg-canvas.revealed {
+      filter: blur(0px) brightness(1);
     }
 
-    /* Full-screen overlay that fades out on login */
-    #gate {
+    /* Login overlay */
+    #login-overlay {
       position: fixed; inset: 0;
-      z-index: 20;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 5, 16, 0.55);
-      backdrop-filter: blur(2px);
-      transition: opacity 0.8s ease;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 10;
+      transition: opacity 0.8s ease, transform 0.8s ease;
     }
-
-    #gate.dissolving {
+    #login-overlay.hidden {
       opacity: 0;
+      transform: scale(1.1);
       pointer-events: none;
     }
 
-    /* Login card */
     .login-card {
-      width: 380px;
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 40px 36px 36px;
-      box-shadow:
-        0 0 60px rgba(0,229,255,0.08),
-        0 0 120px rgba(170,0,255,0.05),
-        inset 0 0 40px rgba(0,5,20,0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 40px 36px 32px;
+      width: 380px;
+      max-width: 90vw;
+      text-align: center;
       position: relative;
       overflow: hidden;
     }
 
-    /* Scanline texture */
-    .login-card::before {
-      content: '';
-      position: absolute; inset: 0;
-      background: repeating-linear-gradient(
-        0deg, transparent, transparent 2px,
-        rgba(0,229,255,0.015) 2px, rgba(0,229,255,0.015) 4px
-      );
-      pointer-events: none;
-    }
-
-    /* Corner accent lines */
     .login-card::after {
       content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 40px; height: 40px;
-      border-top: 2px solid var(--cyan);
-      border-left: 2px solid var(--cyan);
-      border-radius: 6px 0 0 0;
+      position: absolute; inset: -1px;
+      border-radius: 6px;
+      pointer-events: none;
+      background:
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 20px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 0 / 1px 20px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 20px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 0 / 1px 20px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 20px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 0 100% / 1px 20px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 20px 1px no-repeat,
+        linear-gradient(var(--cyan), var(--cyan)) 100% 100% / 1px 20px no-repeat;
+      animation: cornerPulse 3s ease-in-out infinite;
+    }
+    @keyframes cornerPulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
     }
 
-    .corner-br {
-      position: absolute;
-      bottom: 0; right: 0;
-      width: 40px; height: 40px;
-      border-bottom: 2px solid var(--violet);
-      border-right: 2px solid var(--violet);
-      border-radius: 0 0 6px 0;
-    }
-
-    .logo {
-      font-size: 32px;
+    /* Logo letter-by-letter animation */
+    .logo-text {
+      font-size: 36px;
       font-weight: 700;
       letter-spacing: 8px;
       color: var(--cyan);
-      text-shadow: 0 0 20px var(--cyan), 0 0 50px rgba(0,229,255,0.3);
-      text-align: center;
+      text-shadow: 0 0 25px var(--cyan), 0 0 50px rgba(0,229,255,0.3);
       margin-bottom: 4px;
+      display: flex;
+      justify-content: center;
+    }
+    .logo-text span {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(-10px);
+      animation: letterIn 0.4s ease forwards;
     }
 
-    .sub {
+    @keyframes letterIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .logo-sub {
       font-family: 'Share Tech Mono', monospace;
       font-size: 9px;
       letter-spacing: 3px;
       color: rgba(0,229,255,0.45);
-      text-align: center;
-      margin-bottom: 36px;
       text-transform: uppercase;
+      margin-bottom: 28px;
     }
 
-    .field-group {
+    .input-group {
       margin-bottom: 18px;
+      text-align: left;
     }
 
-    label {
+    .input-group label {
       display: block;
       font-size: 10px;
       letter-spacing: 2px;
@@ -136,190 +141,235 @@
       margin-bottom: 6px;
     }
 
-    input {
+    .input-group input {
       width: 100%;
-      background: rgba(0,229,255,0.04);
+      padding: 10px 14px;
+      background: rgba(0,10,30,0.6);
       border: 1px solid rgba(0,229,255,0.2);
       border-radius: 3px;
-      padding: 10px 14px;
       color: var(--text);
       font-family: 'Share Tech Mono', monospace;
       font-size: 14px;
-      letter-spacing: 1px;
+      letter-spacing: 4px;
+      text-align: center;
       outline: none;
       transition: border-color 0.2s, box-shadow 0.2s;
     }
 
-    input:focus {
+    .input-group input:focus {
       border-color: var(--cyan);
       box-shadow: 0 0 12px rgba(0,229,255,0.15);
     }
 
-    input::placeholder {
-      color: rgba(176,224,248,0.25);
-      letter-spacing: 0;
+    .input-group input.error {
+      border-color: var(--danger);
+      box-shadow: 0 0 12px rgba(255,51,102,0.15);
     }
 
-    /* Code input — monospace, uppercase */
-    #code-input {
-      letter-spacing: 3px;
-      text-transform: uppercase;
-    }
-
-    .btn-enter {
+    .login-btn {
       width: 100%;
-      margin-top: 28px;
       padding: 12px;
-      background: rgba(0,229,255,0.08);
-      border: 1px solid var(--cyan);
+      background: rgba(0,229,255,0.1);
+      border: 1px solid rgba(0,229,255,0.3);
       border-radius: 3px;
       color: var(--cyan);
-      font-family: 'Rajdhani', monospace;
-      font-size: 14px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 13px;
       font-weight: 600;
-      letter-spacing: 4px;
+      letter-spacing: 3px;
       text-transform: uppercase;
       cursor: pointer;
       transition: all 0.2s;
+      margin-top: 6px;
     }
 
-    .btn-enter:hover:not(:disabled) {
-      background: rgba(0,229,255,0.15);
-      box-shadow: 0 0 20px rgba(0,229,255,0.2);
+    .login-btn:hover {
+      background: rgba(0,229,255,0.2);
+      border-color: var(--cyan);
+      box-shadow: 0 0 20px rgba(0,229,255,0.15);
     }
 
-    .btn-enter:disabled {
-      opacity: 0.5;
-      cursor: default;
+    .login-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
     }
-
-    .btn-enter.loading::after {
-      content: ' ···';
-      animation: blink 0.8s infinite;
-    }
-
-    @keyframes blink { 50% { opacity: 0; } }
 
     .error-msg {
-      margin-top: 14px;
-      font-family: 'Share Tech Mono', monospace;
       font-size: 11px;
-      color: #ff3366;
-      text-align: center;
-      letter-spacing: 1px;
+      color: var(--danger);
+      margin-top: 10px;
       min-height: 16px;
     }
 
-    .footer-note {
-      margin-top: 28px;
-      text-align: center;
-      font-size: 9px;
-      letter-spacing: 2px;
-      color: rgba(176,224,248,0.2);
-      text-transform: uppercase;
+    .forgot-link {
+      margin-top: 18px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.25);
+      letter-spacing: 1px;
+    }
+    .forgot-link a {
+      color: rgba(0,229,255,0.4);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .forgot-link a:hover {
+      color: var(--cyan);
     }
 
-    /* Success flash */
-    @keyframes greenPulse {
-      0%   { box-shadow: 0 0 20px rgba(0,255,136,0.0); }
-      50%  { box-shadow: 0 0 40px rgba(0,255,136,0.4); }
-      100% { box-shadow: 0 0 20px rgba(0,255,136,0.0); }
+    /* Particle burst canvas overlay */
+    #burst-canvas {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      z-index: 15;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
     }
-    .login-card.success {
-      border-color: var(--green);
-      animation: greenPulse 0.6s ease;
+    #burst-canvas.active {
+      opacity: 1;
+    }
+
+    /* Token expiry notice */
+    .token-notice {
+      font-size: 8px;
+      color: rgba(255,255,255,0.2);
+      margin-top: 14px;
+      letter-spacing: 1px;
+    }
+
+    /* Mobile <480px */
+    @media (max-width: 480px) {
+      .login-card {
+        width: 100%;
+        max-width: 100vw;
+        border-radius: 0;
+        padding: 30px 24px 24px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .logo-text { font-size: 28px; letter-spacing: 5px; }
+      .logo-sub { margin-bottom: 24px; }
     }
   </style>
 </head>
 <body>
 
-<!-- 3D scene preview (blurred/dimmed) -->
-<canvas id="scene"></canvas>
+<canvas id="bg-canvas"></canvas>
+<canvas id="burst-canvas"></canvas>
 
-<!-- Gate overlay -->
-<div id="gate">
+<div id="login-overlay">
   <div class="login-card" id="login-card">
-    <div class="corner-br"></div>
-    <div class="logo">MANIFOLD</div>
-    <div class="sub">Intelligence Coordination Protocol — Access Required</div>
+    <div class="logo-text" id="logo-text"></div>
+    <div class="logo-sub">Numinous Architecture — Federation Mesh</div>
 
-    <div class="field-group">
-      <label for="username-input">Handle</label>
-      <input id="username-input" type="text" placeholder="your handle" autocomplete="off" spellcheck="false">
+    <div class="input-group">
+      <label>Access Code</label>
+      <input type="text" id="code-input" maxlength="8" placeholder="••••••••" autocomplete="off" spellcheck="false">
     </div>
 
-    <div class="field-group">
-      <label for="code-input">Access Code</label>
-      <input id="code-input" type="text" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" maxlength="14">
-    </div>
-
-    <button class="btn-enter" id="enter-btn">Enter</button>
+    <button class="login-btn" id="login-btn">Connect</button>
     <div class="error-msg" id="error-msg"></div>
 
-    <div class="footer-note">Nexal Network · Private Beta</div>
+    <div class="forgot-link">
+      <a href="https://discord.com/invite/clawd" target="_blank">Forgot your code?</a>
+    </div>
+
+    <div class="token-notice">Sessions expire after 24 hours</div>
   </div>
 </div>
 
-<!-- Minimal 3D scene for background preview -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+    }
+  }
+</script>
 <script type="module">
 import * as THREE from 'three';
 
-const canvas = document.getElementById('scene');
+// ── Logo letter-by-letter animation ──
+const logoEl = document.getElementById('logo-text');
+const letters = 'MANIFOLD';
+letters.split('').forEach((ch, i) => {
+  const span = document.createElement('span');
+  span.textContent = ch;
+  span.style.animationDelay = `${0.3 + i * 0.08}s`;
+  logoEl.appendChild(span);
+});
+
+// ── Three.js particle background ──
+const canvas = document.getElementById('bg-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
-camera.position.set(0, 8, 22);
-camera.lookAt(0, 0, 0);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.z = 5;
 
-// Fog
-scene.fog = new THREE.FogExp2(0x000510, 0.035);
+// Particles
+const particleCount = 1200;
+const positions = new Float32Array(particleCount * 3);
+const colors = new Float32Array(particleCount * 3);
+const sizes = new Float32Array(particleCount);
 
-// Ambient + directional light
-scene.add(new THREE.AmbientLight(0x001133, 1));
-const dir = new THREE.DirectionalLight(0x00e5ff, 0.6);
-dir.position.set(5, 10, 5);
-scene.add(dir);
+const cyan = new THREE.Color(0x00e5ff);
+const violet = new THREE.Color(0xaa00ff);
 
-// Particle field
-const N = 600;
-const positions = new Float32Array(N * 3);
-for (let i = 0; i < N; i++) {
-  positions[i * 3]     = (Math.random() - 0.5) * 60;
-  positions[i * 3 + 1] = (Math.random() - 0.5) * 40;
-  positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+for (let i = 0; i < particleCount; i++) {
+  positions[i * 3]     = (Math.random() - 0.5) * 10;
+  positions[i * 3 + 1] = (Math.random() - 0.5) * 10;
+  positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+
+  const c = Math.random() < 0.7 ? cyan : violet;
+  colors[i * 3]     = c.r;
+  colors[i * 3 + 1] = c.g;
+  colors[i * 3 + 2] = c.b;
+
+  sizes[i] = Math.random() * 3 + 1;
 }
-const pgeo = new THREE.BufferGeometry();
-pgeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-const pmat = new THREE.PointsMaterial({ color: 0x00e5ff, size: 0.12, transparent: true, opacity: 0.5 });
-scene.add(new THREE.Points(pgeo, pmat));
 
-// A few hub spheres
-const hubs = [
-  { pos: [-8, 2, -6], color: 0x00ff88 },
-  { pos: [8, 3, 2],   color: 0xaa00ff },
-  { pos: [-2, 5, 8],  color: 0x8800ff },
-];
-const hubMeshes = hubs.map(h => {
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.4, 16, 16),
-    new THREE.MeshPhongMaterial({ color: h.color, emissive: h.color, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 })
-  );
-  mesh.position.set(...h.pos);
-  scene.add(mesh);
-  return { mesh, base: [...h.pos], color: h.color, speed: 0.03 + Math.random() * 0.02, phase: Math.random() * Math.PI * 2 };
+const particleGeo = new THREE.BufferGeometry();
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+particleGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+const particleMat = new THREE.PointsMaterial({
+  size: 0.04,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.6,
+  blending: THREE.AdditiveBlending,
+  sizeAttenuation: true,
 });
 
-// Central fog blob
-const fgeo = new THREE.IcosahedronGeometry(2.5, 3);
-const fmat = new THREE.MeshPhongMaterial({
-  color: 0x0044aa, emissive: 0x001133, emissiveIntensity: 0.5,
-  wireframe: true, transparent: true, opacity: 0.18,
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// Wireframe icosahedron
+const icoGeo = new THREE.IcosahedronGeometry(1.5, 1);
+const icoMat = new THREE.MeshBasicMaterial({
+  color: 0x00e5ff,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.15,
 });
-const fog = new THREE.Mesh(fgeo, fmat);
-scene.add(fog);
+const ico = new THREE.Mesh(icoGeo, icoMat);
+scene.add(ico);
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = performance.now() / 1000;
+  particles.rotation.y = t * 0.02;
+  particles.rotation.x = Math.sin(t * 0.01) * 0.1;
+  ico.rotation.y = t * 0.05;
+  ico.rotation.x = t * 0.03;
+  renderer.render(scene, camera);
+}
+animate();
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -327,101 +377,114 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-let t = 0;
-(function loop() {
-  requestAnimationFrame(loop);
-  t += 0.008;
-  hubMeshes.forEach((h, i) => {
-    const r = 9 + i * 3;
-    h.mesh.position.x = Math.cos(t * (0.5 + i * 0.1) + h.phase) * r;
-    h.mesh.position.z = Math.sin(t * (0.5 + i * 0.1) + h.phase) * r * 0.6;
-    h.mesh.position.y = h.base[1] + Math.sin(t * 0.4 + h.phase) * 1.5;
-    const s = 1 + Math.sin(t * 2 + i) * 0.15;
-    h.mesh.scale.setScalar(s);
-  });
-  fog.rotation.y += 0.003;
-  fog.rotation.x += 0.001;
-  camera.position.x = Math.sin(t * 0.08) * 3;
-  camera.position.y = 8 + Math.sin(t * 0.05) * 1.5;
-  camera.lookAt(0, 0, 0);
-  renderer.render(scene, camera);
-})();
-</script>
+// ── Login logic ──
+const codeInput = document.getElementById('code-input');
+const loginBtn = document.getElementById('login-btn');
+const errorMsg = document.getElementById('error-msg');
+const overlay = document.getElementById('login-overlay');
+const bgCanvas = document.getElementById('bg-canvas');
+const burstCanvas = document.getElementById('burst-canvas');
 
-<!-- Auth logic -->
-<script type="module">
-const usernameEl = document.getElementById('username-input');
-const codeEl     = document.getElementById('code-input');
-const btnEl      = document.getElementById('enter-btn');
-const errEl      = document.getElementById('error-msg');
-const gateEl     = document.getElementById('gate');
-const cardEl     = document.getElementById('login-card');
-
-// Auto-format code input as XXXX-XXXX-XXXX
-codeEl.addEventListener('input', () => {
-  let v = codeEl.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 12);
-  const parts = [v.slice(0,4), v.slice(4,8), v.slice(8,12)].filter(Boolean);
-  codeEl.value = parts.join('-');
-});
-
-// Allow Enter key
-[usernameEl, codeEl].forEach(el => el.addEventListener('keydown', e => {
-  if (e.key === 'Enter') btnEl.click();
-}));
-
-btnEl.addEventListener('click', async () => {
-  errEl.textContent = '';
-  const username = usernameEl.value.trim();
-  const code     = codeEl.value.trim();
-
-  if (!username || code.replace(/-/g, '').length < 12) {
-    errEl.textContent = 'Enter your handle and full access code.';
+async function login() {
+  const code = codeInput.value.trim();
+  if (code.length < 4) {
+    errorMsg.textContent = 'Enter a valid access code';
+    codeInput.classList.add('error');
     return;
   }
-
-  btnEl.disabled = true;
-  btnEl.classList.add('loading');
-  btnEl.textContent = 'Verifying';
+  codeInput.classList.remove('error');
+  errorMsg.textContent = '';
+  loginBtn.disabled = true;
+  loginBtn.textContent = 'Connecting…';
 
   try {
     const res = await fetch('/auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, code }),
+      body: JSON.stringify({ code }),
     });
-    const data = await res.json();
 
-    if (data.ok) {
-      // Store session
-      localStorage.setItem('nexal_token', data.token);
-      localStorage.setItem('nexal_user',  data.username);
-
-      cardEl.classList.add('success');
-      btnEl.textContent = 'Granted';
-
-      setTimeout(() => {
-        gateEl.classList.add('dissolving');
-        setTimeout(() => window.location.href = '/nexal/', 900);
-      }, 600);
-    } else {
-      const messages = {
-        invalid_code:   'Access code not recognised.',
-        code_taken:     'This code is already bound to another handle.',
-        already_used:   'This code has already been redeemed. Each code is single-use — contact Hal for a new one.',
-        missing_fields: 'Please complete all fields.',
-      };
-      errEl.textContent = messages[data.error] ?? 'Access denied.';
-      btnEl.disabled = false;
-      btnEl.classList.remove('loading');
-      btnEl.textContent = 'Enter';
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      errorMsg.textContent = data.error || 'Invalid code';
+      codeInput.classList.add('error');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Connect';
+      return;
     }
-  } catch {
-    errEl.textContent = 'Connection error — try again.';
-    btnEl.disabled = false;
-    btnEl.classList.remove('loading');
-    btnEl.textContent = 'Enter';
+
+    // Success — particle burst + reveal
+    triggerBurst();
+    bgCanvas.classList.add('revealed');
+
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+    }, 600);
+
+    setTimeout(() => {
+      window.location.href = '/nexal/';
+    }, 1800);
+
+  } catch (err) {
+    errorMsg.textContent = 'Connection failed';
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Connect';
   }
+}
+
+loginBtn.addEventListener('click', login);
+codeInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') login();
+  if (e.key === 'Escape') { codeInput.value = ''; errorMsg.textContent = ''; codeInput.classList.remove('error'); }
 });
+
+// ── Particle burst on success ──
+function triggerBurst() {
+  const bCanvas = burstCanvas;
+  bCanvas.classList.add('active');
+  const ctx = bCanvas.getContext('2d');
+  bCanvas.width = window.innerWidth;
+  bCanvas.height = window.innerHeight;
+
+  const cx = bCanvas.width / 2;
+  const cy = bCanvas.height / 2;
+  const burstParticles = [];
+
+  for (let i = 0; i < 80; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 6 + 2;
+    burstParticles.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      decay: Math.random() * 0.02 + 0.01,
+      size: Math.random() * 4 + 1,
+      color: Math.random() < 0.6 ? '#00e5ff' : '#aa00ff',
+    });
+  }
+
+  function drawBurst() {
+    ctx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+    let alive = false;
+    burstParticles.forEach(p => {
+      if (p.life <= 0) return;
+      alive = true;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05; // gravity
+      p.life -= p.decay;
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    if (alive) requestAnimationFrame(drawBurst);
+    else bCanvas.classList.remove('active');
+  }
+  drawBurst();
+}
 </script>
 </body>
 </html>

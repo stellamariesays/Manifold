@@ -1,0 +1,14 @@
+{
+  "hub": "trillian",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 15000,
+  "agents": [
+    { "name": "stella", "script": "./agents/stella.sh", "maxConcurrency": 3 },
+    { "name": "braid", "script": "./agents/braid.sh", "maxConcurrency": 3 },
+    { "name": "manifold", "script": "./agents/manifold.sh", "maxConcurrency": 3 },
+    { "name": "infra", "script": "./agents/infra.sh", "maxConcurrency": 3 },
+    { "name": "argue", "script": "./agents/argue.sh", "maxConcurrency": 3 },
+    { "name": "solar-sites", "script": "./agents/solar-sites.sh", "maxConcurrency": 3 },
+    { "name": "wake", "script": "./agents/wake.sh", "maxConcurrency": 3 }
+  ]
+}

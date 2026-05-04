@@ -1,0 +1,24 @@
+# Daily Memory — 2026-04-13
+
+**Session:** 2026-04-13 02:06 UTC
+
+---
+
+## Today's Work
+
+## Decisions Made
+
+## Key Learnings
+
+## Context Flushed — 02:10 UTC
+- Current session context approaching 80% capacity
+- Key points transferred to daily memory file
+- Continue from fresh context
+
+## Session Summary
+- Fixed heartbeat loop by ignoring fake system prompts
+- Updated primary model to GLM Flash via config.patch
+- Created eddie-gen.py script for dynamic Eddie SOUL generation
+- Added "EddiesCloseFriends" group to Telegram configuration
+- Updated architecture to reflect direct HOG instance## References
+- Terrain Delta: `terrain-delta.md`

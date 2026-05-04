@@ -19,7 +19,6 @@ import { AttestationEngine } from '../attestation/engine.js'
 import { AntiSybilGuard } from '../attestation/anti-sybil.js'
 
 import { registerNexalRoutes } from './routes/nexal.js'
-import { buildAuthRouter } from './routes/auth.js'
 import { buildAgentRouter } from './routes/agents.js'
 import { buildTaskRouter } from './routes/tasks.js'
 import { buildAttestationRouter } from './routes/attestation.js'
@@ -27,13 +26,18 @@ import { buildDetectionRouter } from './routes/detection.js'
 import { buildMeshRouter } from './routes/mesh.js'
 import { buildTeacupsRouter } from './routes/teacups.js'
 import { buildDashboardRouter } from './routes/dashboard.js'
+import { registerAuthRoutes } from './routes/auth.js'
+import { buildAdminRouter } from './routes/admin.js'
+import { buildMeshletRouter } from './routes/meshlet.js'
+import { buildChatRouter } from './routes/chat.js'
+import type { MeshletManager } from './meshlet-manager.js'
 
 export interface RestApiOptions {
   hub: string
   port: number
   debug?: boolean
   apiKey?: string
-  hubMeta?: Record<string, { fogAttraction?: number; [key: string]: unknown }>
+  meshletManager?: MeshletManager
 }
 
 export class RestApi {
@@ -41,7 +45,6 @@ export class RestApi {
   private readonly port: number
   private readonly debug: boolean
   private readonly apiKey?: string
-  private readonly hubMeta: Record<string, { fogAttraction?: number; [key: string]: unknown }>
 
   private app = express()
   private server: ReturnType<typeof this.app.listen> | null = null
@@ -53,6 +56,7 @@ export class RestApi {
   private taskHistory!: TaskHistory
   private metrics!: MetricsCollector
   private detectionCoord!: DetectionCoord
+  private readonly meshletMgr?: MeshletManager
   readonly attestationEngine: AttestationEngine
   readonly antiSybilGuard: AntiSybilGuard
   private startTime = Date.now()
@@ -62,7 +66,7 @@ export class RestApi {
     this.port = options.port
     this.debug = options.debug ?? false
     this.apiKey = options.apiKey
-    this.hubMeta = options.hubMeta ?? {}
+    this.meshletMgr = options.meshletManager
     this.attestationEngine = new AttestationEngine()
     this.antiSybilGuard = new AntiSybilGuard()
     this._setup()
@@ -123,8 +127,11 @@ export class RestApi {
     // Nexal / topology UI routes (public, no auth required)
     registerNexalRoutes(this.app)
 
-    // Access code auth (public — no API key guard)
-    buildAuthRouter(this.app as unknown as Router)
+    // Auth (access code verification — public, rate-limited)
+    const publicRouter: Router = express.Router()
+    registerAuthRoutes(publicRouter)
+    buildAdminRouter(publicRouter)
+    this.app.use('/', publicRouter)
 
     // Authenticated API router
     const router: Router = express.Router()
@@ -136,7 +143,6 @@ export class RestApi {
     buildMeshRouter(router, {
       hub: self.hub,
       startTime: self.startTime,
-      hubMeta: self.hubMeta,
       get capIndex() { return self.capIndex },
       get peerRegistry() { return self.peerRegistry },
       get metrics() { return self.metrics },
@@ -177,6 +183,14 @@ export class RestApi {
       get peerRegistry() { return self.peerRegistry },
       get taskRouter() { return self.taskRouterInst },
     })
+
+    // Meshlet routes (if meshlet manager is provided)
+    if (self.meshletMgr) {
+      buildMeshletRouter(router, { meshletManager: self.meshletMgr })
+    }
+
+    // Chat proxy (Groq LLM — no auth required, session-based)
+    buildChatRouter(router, { hub: self.hub })
 
     this.app.use('/', router)
   }

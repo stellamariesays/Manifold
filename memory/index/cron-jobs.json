@@ -1,0 +1,30 @@
+{
+  "_comment": "OpenClaw cron jobs tracked by cron-monitor. IDs are primary keys.",
+  "_updated": "2026-04-15T20:30:00Z",
+  
+  "jobs": [
+    {"id": "6717a4b7", "name": "poreee-monitor", "schedule": "15min", "model": "glm5", "status": "active", "purpose": "$POREEE block mining + Moltbook comments"},
+    {"id": "2be8417a", "name": "data-detect", "schedule": "30min", "model": "glm5", "status": "active", "purpose": "data pipeline health scan"},
+    {"id": "d757db78", "name": "cron-monitor", "schedule": "60min", "model": "glm5", "status": "active", "purpose": "cron job health check, alert-only"},
+    {"id": "d2473b9d", "name": "terrain-rollup-day", "schedule": "6h", "model": "glm5", "status": "active", "purpose": "day→week terrain rollup"},
+    {"id": "3c93b0f7", "name": "terrain-rollup-day", "schedule": "6h", "model": "glm5", "status": "active", "purpose": "terrain day→week rollup"},
+    {"id": "71de7032", "name": "terrain-rollup-week", "schedule": "24h", "model": "glm5", "status": "active", "purpose": "terrain week→month rollup"},
+    {"id": "8a786238", "name": "terrain-rollup-month", "schedule": "7d", "model": "glm5", "status": "active", "purpose": "terrain month→year rollup"},
+    {"id": "13892947", "name": "bootstrap-gen", "schedule": "15min", "model": "glm5", "status": "active", "purpose": "generate BOOTSTRAP.md live state"},
+    {"id": "cfa10df4", "name": "injection-scanner", "schedule": "30min", "model": "glm5", "status": "active", "purpose": "scan group chats for injection attempts"},
+    {"id": "c4b7b751", "name": "market-open", "schedule": "9:30AM EST Mon-Fri", "model": null, "status": "active", "purpose": "open Clawstreet positions with risk checks"},
+    {"id": "d8b1ed3a", "name": "btc-stoploss", "schedule": "15min", "model": null, "status": "active", "purpose": "BTC stop-loss at $68,800"},
+    {"id": "efe632d1", "name": "argue-bet-expiry", "schedule": "6h", "model": null, "status": "active", "purpose": "auto-bet expiring argue.fun debates"},
+    {"id": "9b7b3fd4", "name": "portfolio-monitor", "schedule": "2h", "model": null, "status": "active", "purpose": "argue.fun portfolio monitoring"},
+    {"id": "619ce69d", "name": "manifold-pr-monitor", "schedule": "30min", "model": "groq/llama-3.3-70b", "status": "active", "purpose": "LLM-in-the-loop PR review for Manifold GitHub repo"},
+    {"id": "c8ad25a4", "name": "terrain-delta-update", "schedule": null, "model": "glm5", "status": "active", "purpose": "update terrain-delta (hit context overflow)"}
+  ],
+
+  "system_crons": [
+    {"name": "solar-watch", "schedule": "30min", "purpose": "solar scan via REST API (solar-watch-cron.sh)"},
+    {"name": "atlas-refresh", "schedule": "30min", "purpose": "refresh eddie-atlas.json (--no-voids)"},
+    {"name": "federation-server", "schedule": "systemd user", "purpose": "manifold-federation.service — auto-restart, survives logout"},
+    {"name": "agent-runner", "schedule": "systemd user", "purpose": "manifold-runner.service — auto-restart, 12 agents"},
+    {"name": "memory-guardian", "schedule": "@reboot", "purpose": "start eddie-memory-guardian on port 18794"}
+  ]
+}

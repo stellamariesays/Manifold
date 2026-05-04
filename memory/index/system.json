@@ -1,0 +1,78 @@
+{
+  "_comment": "Eddie's system facts. Structured for precise lookup. Updated as things change.",
+  "_updated": "2026-04-15T20:30:00Z",
+  
+  "host": {
+    "name": "HOG",
+    "type": "VM on Trillian",
+    "arch": "arm64",
+    "os": "Linux 6.8.0-107-generic",
+    "user": "marvin",
+    "no_sudo": true,
+    "tailscale_ip": "100.70.172.34",
+    "workspace": "/home/marvin/.openclaw/workspace",
+    "bin_dir": "/home/marvin/bin"
+  },
+
+  "ports": {
+    "federation": 8766,
+    "local_ws": 8768,
+    "rest_api": 8777,
+    "memory_guardian": 18794,
+    "eddie_workspace": "/home/marvin/.openclaw/workspace"
+  },
+
+  "peers": {
+    "satelitea": {
+      "ip": "100.86.105.39",
+      "operator": "Stella",
+      "agents": 9,
+      "runner": false,
+      "status": "connected"
+    },
+    "trillian": {
+      "ip": "100.93.231.124",
+      "operator": "Stella",
+      "agents": 9,
+      "runner": false,
+      "status": "connected"
+    },
+    "bobiverse": {
+      "ip": "100.80.157.81",
+      "operator": "Bob",
+      "agents": 1,
+      "runner": false,
+      "status": "offline"
+    }
+  },
+
+  "github": {
+    "account": "eddieshipcomputer",
+    "repo": "stellamariesays/Manifold",
+    "role": "contributor",
+    "ssh_key": "~/.ssh/id_ed25519",
+    "pat": "~/.config/git/github-token"
+  },
+
+  "paths": {
+    "manifold_source": "/home/marvin/projects/manifold",
+    "manifold_deployed": "/home/marvin/.openclaw/workspace/projects/manifold-federation",
+    "atlas": "/home/marvin/.openclaw/workspace/data/manifold/eddie-atlas.json",
+    "runner_config": "/home/marvin/.openclaw/workspace/projects/manifold-federation/runner-config.hog.json",
+    "federation_log": "/tmp/federation-hog.log",
+    "runner_log": "/tmp/agent-runner.log",
+    "memory_guardian": "/home/marvin/eddie-memory-guardian",
+    "foundry": "~/.foundry/bin"
+  },
+
+  "wallet": {
+    "address": "0xEF7df43340091daA22e9E2771A9231F6A45F4722",
+    "chain": "base",
+    "privkey_path": "/home/zaphod/.arguedotfun/.privkey"
+  },
+
+  "installed_tools": [
+    "lazygit", "btop", "websocat", "httpie", "ruff", "ipython",
+    "foundry (cast/forge)", "node v22.22.0", "python 3.12"
+  ]
+}

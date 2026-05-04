@@ -1,0 +1,349 @@
+{
+  "version": 1,
+  "updatedAt": "2026-04-18T17:57:49.524Z",
+  "entries": {
+    "memory:memory/daily/2026-04-15.md:168:188": {
+      "key": "memory:memory/daily/2026-04-15.md:168:188",
+      "path": "memory/daily/2026-04-15.md",
+      "startLine": 168,
+      "endLine": 188,
+      "source": "memory",
+      "snippet": "- **CRASH**: Build fails after adding `sourceHub` param to `routeTask()` — need to update all call sites (local WS handler, REST handler, peer handler) to pass sourceHub - TaskRouter.routeTask signature changed to `(task, replyTo, sourceHub?)` — local calls need `undefined`, peer calls need `_peer.hub` - Need to fix: index.ts line ~512 (peer handler passes `_peer.hub`), and ensure local handlers don't break **Federation server peer topology changed:** - Stella moved to stella-satelliteA (100.86.105.39) — Trillian semi-retired - Bob (bobiverse) at 100.80.157.81 — 1 agent, peered - Trillian still connected at 100.93.231.124 — 9 agents ## 19:30 UTC — Phase 3 Monitoring + Security + Teacups +",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.3828087031841278,
+      "maxScore": 0.3828087031841278,
+      "firstRecalledAt": "2026-04-18T17:46:02.877Z",
+      "lastRecalledAt": "2026-04-18T17:46:02.877Z",
+      "queryHashes": [
+        "887674c89b71"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "router",
+        "taskrouter.routetask",
+        "peer.hub",
+        "index.ts",
+        "stella-satellitea",
+        "100.86.105.39",
+        "semi-retired",
+        "100.80.157.81"
+      ]
+    },
+    "memory:memory/2026-04-01.md:20:40": {
+      "key": "memory:memory/2026-04-01.md:20:40",
+      "path": "memory/2026-04-01.md",
+      "startLine": 20,
+      "endLine": 40,
+      "source": "memory",
+      "snippet": "Key discovery: Eddie appearing in Skynet2.1 is NOT via the UTM VM `/tools/invoke` path. Eddie IS the Telegram bot configured for Trillian's OpenClaw instance. The normal `message` tool routes through Eddie automatically. The UTM VM path is a separate mechanism. **TODO: update `memory/entities/eddie.md` to document this.** ## Architecture Decisions - HOG is canonical workspace source; Trillian and Hermes drift naturally — no sync needed - Telegram longpolling allows only one consumer — handoff must be sequential (stop Trillian → start Hermes → test → stop Hermes → restart Trillian) - Memory search must not depend on LLM: BM25 always-on baseline, embeddings optional re-rank (noted as OpenCla",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.3748375594615936,
+      "maxScore": 0.3748375594615936,
+      "firstRecalledAt": "2026-04-18T17:46:02.877Z",
+      "lastRecalledAt": "2026-04-18T17:46:02.877Z",
+      "queryHashes": [
+        "887674c89b71"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "embedding",
+        "embeddings",
+        "skynet2.1",
+        "tools/invoke",
+        "memory/entities/eddie.md",
+        "always-on",
+        "re-rank",
+        "key"
+      ]
+    },
+    "memory:memory/2026-04-14.md:419:445": {
+      "key": "memory:memory/2026-04-14.md:419:445",
+      "path": "memory/2026-04-14.md",
+      "startLine": 419,
+      "endLine": 445,
+      "source": "memory",
+      "snippet": "- **Protocol sketch**: peer_announce, capability_query, agent_request messages over WebSocket federation port (8766) - **Key insight**: Maps perfectly to existing architecture (seams = mesh boundaries, dark circles = distributed gaps) - **Artifacts**: - Saved complete federation design proposal to `projects/manifold/docs/federation-design-proposal.md` (6186 bytes) - Includes: problem statement, option analysis, architecture diagrams, protocol specs, implementation roadmap, open questions - **Next Steps**: - Context compaction for fresh iteration on federation design - Audit Eddie's manifold mesh composition - Prototype Phase 1 peer registry + capability query protocol -",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.8883315175771713,
+      "maxScore": 0.47843103110790247,
+      "firstRecalledAt": "2026-04-18T17:57:42.845Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "4b60c00e73e0",
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "peer-announce",
+        "capability-query",
+        "agent-request",
+        "protocol",
+        "sketch",
+        "messages",
+        "websocket",
+        "federation"
+      ]
+    },
+    "memory:memory/daily/2026-04-16.md:1:33": {
+      "key": "memory:memory/daily/2026-04-16.md:1:33",
+      "path": "memory/daily/2026-04-16.md",
+      "startLine": 1,
+      "endLine": 33,
+      "source": "memory",
+      "snippet": "# 2026-04-16 Daily Log ## Session Events ### Federation Mesh Restored (~11:21 UTC) - Hal asked to get federation mesh back online - HOG server was running but 0 peers connected - satelliteA came back up, trillian and Bobiverse still down - Restarted federation server, connected to satelliteA (1 peer, 20 agents total) ### New Agent Runners Created (~11:30 UTC) - Hal asked why no agents were federated — runners only had 6 agents, 9 were ghost entries in atlas - Created 6 new runner scripts in `projects/agent-runners/`: - eddie-agent.py, manifold-agent.py, argue-agent.py, solar-sites-agent.py, wake-agent.py, deploy-agent.py - Skipped btc-signals, infra, stella to avoid duplicating satellit",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.8809106618165969,
+      "maxScore": 0.4423307597637176,
+      "firstRecalledAt": "2026-04-18T17:57:42.845Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "4b60c00e73e0",
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "projects/agent-runners",
+        "eddie-agent.py",
+        "manifold-agent.py",
+        "argue-agent.py",
+        "solar-sites-agent.py",
+        "wake-agent.py",
+        "deploy-agent.py",
+        "btc-signals"
+      ]
+    },
+    "memory:memory/2026-04-14.md:398:423": {
+      "key": "memory:memory/2026-04-14.md:398:423",
+      "path": "memory/2026-04-14.md",
+      "startLine": 398,
+      "endLine": 423,
+      "source": "memory",
+      "snippet": "- Eddie's workspace lacks `data/agents/` structure — different organization than Stella's - **Manifold Federation Design Brainstorm** - **Option 1 (Sync/Union)**: All manifold servers sync to maintain identical agent graphs - Pros: Single source of truth, easy queries, simple mental model - Cons: Consistency hell at scale, O(n²) network overhead, conflict resolution complexity - **Verdict**: Doesn't scale past ~10-50 machines - **Option 2 (Federated Hubs) — RECOMMENDED**: - Each manifold is independent hub with local mesh - Agents query local first, then peer hubs via WebSocket bridge - Capability-based discovery (find by what they do, not where they are)",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.44215585589408873,
+      "maxScore": 0.44215585589408873,
+      "firstRecalledAt": "2026-04-18T17:57:42.845Z",
+      "lastRecalledAt": "2026-04-18T17:57:42.845Z",
+      "queryHashes": [
+        "4b60c00e73e0"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "network",
+        "data/agents",
+        "sync/union",
+        "10-50",
+        "capability-based",
+        "eddie's",
+        "lacks",
+        "data"
+      ]
+    },
+    "memory:memory/2026-04-14.md:309:325": {
+      "key": "memory:memory/2026-04-14.md:309:325",
+      "path": "memory/2026-04-14.md",
+      "startLine": 309,
+      "endLine": 325,
+      "source": "memory",
+      "snippet": "- **Current mesh state**: 9 agents, 48 transition maps, deployment-strategy now highest pressure (p=0.70) - **Production coverage**: 1/5 projects automated (manifold-mri only), stingray-alerts blocked by API, 3 planned (solar-sites, braid-models, argue-debates) - **Manifold website live**: https://manifold.surge.sh showing updated 9-agent topology with deploy agent - All session artifacts preserved: deployment-orchestrator.py, agent definition, state persistence, lifecycle documentation - Next decision point: analyze deployment dark circles to determine if sub-voids needed or incremental coverage buildup preferred ## Session (4:13-4:20 AM WITA) - **SSJ2 deployment-identity Void -",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.40327222645282745,
+      "maxScore": 0.40327222645282745,
+      "firstRecalledAt": "2026-04-18T17:57:42.845Z",
+      "lastRecalledAt": "2026-04-18T17:57:42.845Z",
+      "queryHashes": [
+        "4b60c00e73e0"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "deployment-strategy",
+        "0.70",
+        "1/5",
+        "manifold-mri",
+        "stingray-alerts",
+        "solar-sites",
+        "braid-models",
+        "argue-debates"
+      ]
+    },
+    "memory:memory/2026-04-15.md:178:201": {
+      "key": "memory:memory/2026-04-15.md:178:201",
+      "path": "memory/2026-04-15.md",
+      "startLine": 178,
+      "endLine": 201,
+      "source": "memory",
+      "snippet": "- tardis/: 4 live symlink targets kept, stale files archived - terrain-gen.py dropped prices/pending (BOOTSTRAP owns those) - memory-gen.py no longer embeds terrain-delta verbatim - **Zero duplication across OpenClaw-loaded files** ## Sigs Cleanup + Daily File Fix (22:14-22:20 UTC) - Removed 93 stale `.sigs` files (pointed to archived/rolled-over files) - 6 live sigs remain (one per active daily + terrain-delta) - Fixed triplicated daily file back to single copy - Archived orphaned `memory/2026-04-15-satelite-transfer.md` - **Commit: `9f1534f`** — stale sigs, orphaned artifact, fix triplicated daily ## HOG Federation Reconnected (22:32-22:39 UTC) - HOG reachable over Tailscale (2ms ping) b",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.40221285223960873,
+      "maxScore": 0.40221285223960873,
+      "firstRecalledAt": "2026-04-18T17:57:42.845Z",
+      "lastRecalledAt": "2026-04-18T17:57:42.845Z",
+      "queryHashes": [
+        "4b60c00e73e0"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "terrain-gen.py",
+        "prices/pending",
+        "memory-gen.py",
+        "terrain-delta",
+        "openclaw-loaded",
+        "14-22",
+        "archived/rolled-over",
+        "32-22"
+      ]
+    },
+    "memory:memory/2026-04-16.md:42:69": {
+      "key": "memory:memory/2026-04-16.md:42:69",
+      "path": "memory/2026-04-16.md",
+      "startLine": 42,
+      "endLine": 69,
+      "source": "memory",
+      "snippet": "### Federation Restart - satelitea federation server was down (died during earlier OOM/restart cycle, never came back) - Restarted with `setsid npx tsx` — both nodes back online - satelitea: 21 agents, 1 peer | hog: 21 agents, 1 peer - Agent-runner on satelitea was running but had no server to connect to ### Eddie PR Monitor on HOG - Updated `/home/marvin/.openclaw/workspace/scripts/manifold-pr-monitor.py` with same fixes as satelitea: - No SKIP — always APPROVE/COMMENT/MERGE - Self-authored PR handling (eddieshipcomputer = implicit approval) - Auto-merge check: eddieshipcomputer + stellamariesays approvals - Added auto-loading of tokens from files (GH_TOKEN + GROQ_API_KEY) - Copied g",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.4185705780982971,
+      "maxScore": 0.4185705780982971,
+      "firstRecalledAt": "2026-04-18T17:57:49.524Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "oom/restart",
+        "agent-runner",
+        "home/marvin",
+        "approve/comment/merge",
+        "self-authored",
+        "auto-merge",
+        "auto-loading",
+        "gh-token"
+      ]
+    },
+    "memory:memory/daily/2026-04-15.md:147:171": {
+      "key": "memory:memory/daily/2026-04-15.md:147:171",
+      "path": "memory/daily/2026-04-15.md",
+      "startLine": 147,
+      "endLine": 171,
+      "source": "memory",
+      "snippet": "- Federation server connects to 3 peers: stella-satelliteA (100.86.105.39), bobiverse (100.80.157.81), trillian (100.93.231.124) **Re-enabled disabled crons:** - data-detect: 30min interval (was 15), glm5 model, id `2be8417a` - cron-monitor: 60min interval (was 30), glm5 model, id `d757db78` **Mesh cleanup:** - Removed duplicate `deploy` agent (overlapped with `hog-deploy`) - 14 agents on HOG, no local duplicates **Phase 3 PR #6 — Monitoring & Observability (committed, pushed):** - `TaskHistory` — append-only JSONL, daily rotation, 30-day retention - `MetricsCollector` — per-agent stats, success rates, avg latency - REST: `GET /metrics`, `GET /task-history?limit=N`, `GET /dashboard` - Das",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.4168015122413635,
+      "maxScore": 0.4168015122413635,
+      "firstRecalledAt": "2026-04-18T17:57:49.524Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "stella-satellitea",
+        "100.86.105.39",
+        "100.80.157.81",
+        "100.93.231.124",
+        "re-enabled",
+        "data-detect",
+        "cron-monitor",
+        "hog-deploy"
+      ]
+    },
+    "memory:memory/2026-04-16.md:19:48": {
+      "key": "memory:memory/2026-04-16.md:19:48",
+      "path": "memory/2026-04-16.md",
+      "startLine": 19,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "**Commits:** `2fd7f5f` (claim dedup), `1aedbfc` (claim broadcast fix), `6d5cdef` (verification/challenge broadcast fix) **PR:** [stellamariesays/Manifold#7](https://github.com/stellamariesays/Manifold/pull/7) — clean branch with all three fixes, detailed writeup. Waiting for Eddie's script to review/comment, then auto-merge on 2 approvals. ## HOG Config - Heap cap raised to 1GB (`--max-old-space-size=1024`) - HOG: `100.70.172.34` (marvin), federation port 8766, REST 8777 - Satelitea RSS ~343MB is V8 pre-allocation, not a leak - Detection ledger files truncated (4.2GB → 68KB) to clear accumulated bloat ## PR Monitor - Cron runs every 15 min, uses Groq to review PRs - Requires 2 approvals f",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.4068467408418655,
+      "maxScore": 0.4068467408418655,
+      "firstRecalledAt": "2026-04-18T17:57:49.524Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "verification/challenge",
+        "stellamariesays/manifold",
+        "review/comment",
+        "auto-merge",
+        "max-old-space-size",
+        "100.70.172.34",
+        "pre-allocation",
+        "4.2gb"
+      ]
+    },
+    "memory:memory/daily/2026-04-15.md:129:154": {
+      "key": "memory:memory/daily/2026-04-15.md:129:154",
+      "path": "memory/daily/2026-04-15.md",
+      "startLine": 129,
+      "endLine": 154,
+      "source": "memory",
+      "snippet": "- 30s default timeout, configurable per-request - Security: cross-hub tasks need explicit allowlists (future) ## 17:00 UTC — PR #5 Merged + Phase 3 Started **PR #5 merged** (feat/task-routing → main): - TaskRouter, REST task endpoints, server integration - Fixed parseMessage validation — Phase 2 message types added to discriminated union schema - `POST /task` returns `not_found` immediately when no runner (no blocking) - **Key bug found**: `parseMessage()` was silently dropping Phase 2 messages (task_request, task_result, agent_runner_ready) because they weren't in the validation schema. Fixed by adding them properly. - End-to-end tested: REST → server → runner → solar-detect → real SWPC d",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 0.405677717924118,
+      "maxScore": 0.405677717924118,
+      "firstRecalledAt": "2026-04-18T17:57:49.524Z",
+      "lastRecalledAt": "2026-04-18T17:57:49.524Z",
+      "queryHashes": [
+        "724e3c5e3f03"
+      ],
+      "recallDays": [
+        "2026-04-18"
+      ],
+      "conceptTags": [
+        "router",
+        "per-request",
+        "cross-hub",
+        "feat/task-routing",
+        "not-found",
+        "task-request",
+        "task-result",
+        "agent-runner-ready"
+      ]
+    }
+  }
+}

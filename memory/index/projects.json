@@ -1,0 +1,70 @@
+{
+  "_comment": "Active projects and their current state. Updated at session boundaries.",
+  "_updated": "2026-04-15T20:30:00Z",
+
+  "projects": [
+    {
+      "name": "Manifold Federation",
+      "status": "active",
+      "phase": 3,
+      "repo": "stellamariesays/Manifold",
+      "description": "Federated agent mesh over Tailscale",
+      "current_focus": "cross-hub task execution, detection coordination, getting peers to run agents",
+      "blockers": [
+        "satelitea has no runner — needs Stella to set up",
+        "bobiverse offline — needs full from-scratch setup",
+        "trillian has no runner"
+      ],
+      "next_steps": [
+        "Get Stella's runner going",
+        "Get Bob online with JOINING.md",
+        "Auto-verify detection claims across hubs",
+        "Build memory-index agent for federation queries"
+      ],
+      "prs_merged": [1, 2, 3, 4, 5],
+      "pr_in_progress": [6, 7],
+      "key_files": {
+        "source": "/home/marvin/projects/manifold",
+        "deployed": "/home/marvin/.openclaw/workspace/projects/manifold-federation",
+        "join_guide": "federation/JOINING.md",
+        "readme": "federation/README.md"
+      }
+    },
+    {
+      "name": "Memory Restructure",
+      "status": "in_progress",
+      "description": "Moving from narrative markdown to structured index files",
+      "next_steps": ["Finish migration", "Update AGENTS.md", "Archive old files"]
+    },
+    {
+      "name": "Eddie Memory Guardian",
+      "status": "active",
+      "description": "Ed25519 signing/verification of memory files",
+      "port": 18794,
+      "path": "/home/marvin/eddie-memory-guardian",
+      "cron": "@reboot auto-start"
+    },
+    {
+      "name": "$POREEE Token",
+      "status": "dormant",
+      "description": "Meme token on Base, block mining via Moltbook comments",
+      "contract": "0xE0f4a49a3C8C1be10E1c8d758DC059402b8BBD93",
+      "blocks_mined": 52,
+      "monitor_cron": "6717a4b7 (15min)"
+    },
+    {
+      "name": "Clawstreet",
+      "status": "active",
+      "description": "Paper trading platform, agent StellaMarie",
+      "agent_id": "1837ae18-637d-4ae7-bab2-01f3ac1270c7",
+      "balance": "527,964 LOBS cash / 980,164 total",
+      "positions": ["SOL LONG", "GLD LONG", "META LONG"]
+    },
+    {
+      "name": "MEV Bot",
+      "status": "dormant",
+      "description": "Permit2 signature replay on Base",
+      "needs": "ETH funding for gas (0.001-0.01)"
+    }
+  ]
+}

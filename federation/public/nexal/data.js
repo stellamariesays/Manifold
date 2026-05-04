@@ -16,17 +16,25 @@ export async function loadAgentsAndBuild(callbacks) {
   let meshData = null;
 
   try {
+<<<<<<< HEAD
     const response = await fetch('/api/mesh');
+=======
+    const response = await fetch('/mesh');
+>>>>>>> origin/main
     meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
       // Store mesh data globally for data highways (animation.js reads it)
       // Guard: window is undefined in Node.js test environments
+<<<<<<< HEAD
       if (typeof window !== 'undefined') {
         window._meshData = meshData;
         // hubMeta: keyed by hub name, contains fogAttraction (0–100) etc.
         window._hubMeta = meshData.hubMeta ?? {};
       }
+=======
+      if (typeof window !== 'undefined') window._meshData = meshData;
+>>>>>>> origin/main
       console.log('Mesh data loaded:', meshData.agents.length, 'agents,',
                   meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
     }
@@ -58,8 +66,57 @@ export async function loadAgentsAndBuild(callbacks) {
   callbacks.buildCentralNexus();
 
   // Notify the 2D layer (and anyone else who cares) via bridge
+<<<<<<< HEAD
   bridge.emit('mesh-updated', { agents });
 
   // Start animation loop
   callbacks.animate();
+=======
+  bridge.emit('mesh-updated', { agents, rtt: 0 });
+
+  // Start animation loop
+  callbacks.animate();
+
+  // Start periodic mesh polling
+  startMeshPolling(callbacks);
+}
+
+let _pollTimer = null;
+let _lastPollTime = 0;
+
+/**
+ * Poll /api/mesh every 5 seconds, measure RTT, and update global state.
+ */
+export function startMeshPolling(callbacks) {
+  if (_pollTimer) clearInterval(_pollTimer);
+
+  _pollTimer = setInterval(async () => {
+    try {
+      const t0 = performance.now();
+      const response = await fetch('/mesh');
+      const rtt = Math.round(performance.now() - t0);
+      const meshData = await response.json();
+      _lastPollTime = Date.now();
+
+      if (meshData && meshData.agents) {
+        if (typeof window !== 'undefined') {
+          window._meshData = meshData;
+          window._meshRTT = rtt;
+          window._meshLastPoll = _lastPollTime;
+        }
+
+        const agents = meshData.agents;
+        callbacks.buildAgentTopologies(agents);
+        bridge.emit('mesh-updated', { agents, rtt });
+      }
+    } catch (e) {
+      // Silently ignore poll failures — keep existing data
+      console.warn('Mesh poll failed:', e.message);
+    }
+  }, 5000);
+}
+
+export function getLastPollTime() {
+  return _lastPollTime;
+>>>>>>> origin/main
 }
