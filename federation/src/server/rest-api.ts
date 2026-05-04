@@ -29,6 +29,7 @@ import { buildDashboardRouter } from './routes/dashboard.js'
 import { registerAuthRoutes } from './routes/auth.js'
 import { buildAdminRouter } from './routes/admin.js'
 import { buildMeshletRouter } from './routes/meshlet.js'
+import { buildChatRouter } from './routes/chat.js'
 import type { MeshletManager } from './meshlet-manager.js'
 
 export interface RestApiOptions {
@@ -187,6 +188,9 @@ export class RestApi {
     if (self.meshletMgr) {
       buildMeshletRouter(router, { meshletManager: self.meshletMgr })
     }
+
+    // Chat proxy (Groq LLM — no auth required, session-based)
+    buildChatRouter(router, { hub: self.hub })
 
     this.app.use('/', router)
   }
