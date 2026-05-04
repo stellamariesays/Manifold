@@ -17,8 +17,11 @@ import json
 import os
 import hashlib
 import sys
+<<<<<<< HEAD
+=======
 import time
 import urllib.error
+>>>>>>> origin/main
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +54,33 @@ SOURCES = {
 
 
 def _file_claim(summary: str, confidence: float, issue_type: str, source: str, evidence: dict | None = None) -> str | None:
+<<<<<<< HEAD
+    """File a detection claim to the federation coordination layer."""
+    try:
+        data = {
+            "source": "data-detect@hog",
+            "domain": "data_pipeline",
+            "summary": summary,
+            "confidence": confidence,
+            "evidence": {
+                "issue_type": issue_type,
+                "source_name": source,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                **(evidence or {}),
+            },
+            "ttl_seconds": 3600,  # 1h TTL for data pipeline issues
+        }
+        req = urllib.request.Request(
+            f"{FEDERATION_REST}/detection/claim",
+            data=json.dumps(data).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            result = json.loads(r.read())
+            return result.get("claim_id")
+    except Exception:
+        return None
+=======
     """File a detection claim to the federation coordination layer.
 
     Retries up to 3 times with exponential backoff (2s → 4s → 8s) on HTTP 429
@@ -107,6 +137,7 @@ def _file_claim(summary: str, confidence: float, issue_type: str, source: str, e
 
     # Should not reach here; but if we do, retries were exhausted
     return None
+>>>>>>> origin/main
 
 
 def _file_hash(path: Path) -> str | None:
