@@ -16,25 +16,17 @@ export async function loadAgentsAndBuild(callbacks) {
   let meshData = null;
 
   try {
-<<<<<<< HEAD
-    const response = await fetch('/api/mesh');
-=======
     const response = await fetch('/mesh');
->>>>>>> origin/main
     meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
       // Store mesh data globally for data highways (animation.js reads it)
       // Guard: window is undefined in Node.js test environments
-<<<<<<< HEAD
       if (typeof window !== 'undefined') {
         window._meshData = meshData;
         // hubMeta: keyed by hub name, contains fogAttraction (0–100) etc.
         window._hubMeta = meshData.hubMeta ?? {};
       }
-=======
-      if (typeof window !== 'undefined') window._meshData = meshData;
->>>>>>> origin/main
       console.log('Mesh data loaded:', meshData.agents.length, 'agents,',
                   meshData.darkCircles ? meshData.darkCircles.length : 0, 'darkCircles');
     }
@@ -66,12 +58,6 @@ export async function loadAgentsAndBuild(callbacks) {
   callbacks.buildCentralNexus();
 
   // Notify the 2D layer (and anyone else who cares) via bridge
-<<<<<<< HEAD
-  bridge.emit('mesh-updated', { agents });
-
-  // Start animation loop
-  callbacks.animate();
-=======
   bridge.emit('mesh-updated', { agents, rtt: 0 });
 
   // Start animation loop
@@ -85,7 +71,7 @@ let _pollTimer = null;
 let _lastPollTime = 0;
 
 /**
- * Poll /api/mesh every 5 seconds, measure RTT, and update global state.
+ * Poll /mesh every 5 seconds, measure RTT, and update global state.
  */
 export function startMeshPolling(callbacks) {
   if (_pollTimer) clearInterval(_pollTimer);
@@ -103,6 +89,7 @@ export function startMeshPolling(callbacks) {
           window._meshData = meshData;
           window._meshRTT = rtt;
           window._meshLastPoll = _lastPollTime;
+          window._hubMeta = meshData.hubMeta ?? {};
         }
 
         const agents = meshData.agents;
@@ -118,5 +105,4 @@ export function startMeshPolling(callbacks) {
 
 export function getLastPollTime() {
   return _lastPollTime;
->>>>>>> origin/main
 }
