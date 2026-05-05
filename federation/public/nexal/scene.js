@@ -175,7 +175,6 @@ export function buildSpiderWeb() {
 
     const material = new THREE.MeshBasicMaterial({
       color: 0x2a4a6a, transparent: true, opacity: 0.3,
-      emissive: 0x000000, emissiveIntensity: 0,
     });
 
     const line = new THREE.Line(geometry, material);
