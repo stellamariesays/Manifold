@@ -173,107 +173,105 @@ let currentAbortController = null
 let typingInterval = null
 
 export function initQueryPanel(agents) {
-  const panel = document.getElementById('query-panel')
+  // IDs match the HTML in index.html
   const input = document.getElementById('query-input')
   const sendBtn = document.getElementById('query-send')
-  const agentSelect = document.getElementById('query-agent')
-  const toggleBtn = panel.querySelector('.query-toggle')
-  const histToggle = document.getElementById('query-history-toggle')
-  const copyBtn = document.getElementById('query-copy')
+  const agentSelect = document.getElementById('agent-route')
+  const responseDiv = document.getElementById('query-response')
+  const responseText = document.getElementById('response-text')
+  const responseTag = document.getElementById('response-tag')
+  const copyBtn = document.getElementById('copy-btn')
+  const histToggle = document.getElementById('history-toggle')
+  const historyDiv = document.getElementById('query-history')
 
-  // Populate agent dropdown
-  function refreshAgentOptions() {
-    const val = agentSelect.value
-    agentSelect.innerHTML = '<option value="">Auto</option>'
+  if (!input || !sendBtn) return // panel not in DOM
+
+  // Build agent lookup: name → name@hub
+  const agentMap = {}
+  agents.forEach(a => {
+    const key = a.name || a.id
+    agentMap[key] = `${key}@${a.hub}`
+  })
+
+  // Populate agent dropdown with live agents
+  const currentVal = agentSelect ? agentSelect.value : ''
+  if (agentSelect) {
+    agentSelect.innerHTML = '<option value="auto">⟐ Auto-route</option>'
     agents.forEach(a => {
+      const name = a.name || a.id
       const opt = document.createElement('option')
-      opt.value = a.name || a.id
-      opt.textContent = a.name || a.id
+      opt.value = name
+      opt.textContent = `${name} · ${a.hub}`
       agentSelect.appendChild(opt)
     })
-    agentSelect.value = val
+    agentSelect.value = currentVal || 'auto'
   }
-  refreshAgentOptions()
 
-  // Collapse toggle
-  toggleBtn.addEventListener('click', () => {
-    panel.classList.toggle('collapsed')
-    toggleBtn.textContent = panel.classList.contains('collapsed') ? '▲' : '▼'
-  })
+  // Copy button
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      const text = (responseText || responseDiv).textContent.replace('📋 Copy', '').trim()
+      navigator.clipboard.writeText(text).catch(() => {})
+      copyBtn.textContent = '✓ Copied'
+      setTimeout(() => { copyBtn.textContent = '📋 Copy' }, 1500)
+    })
+  }
 
   // History toggle
-  histToggle.addEventListener('click', () => {
-    const list = document.getElementById('query-history-list')
-    const visible = list.style.display !== 'none' && list.style.display !== ''
-    list.style.display = visible ? 'none' : 'block'
-    histToggle.textContent = visible ? '▸ History' : '▾ History'
-  })
-
-  // Copy
-  copyBtn.addEventListener('click', () => {
-    const resp = document.getElementById('query-response')
-    const text = resp.textContent.replace('Copy', '').trim()
-    navigator.clipboard.writeText(text).catch(() => {})
-    copyBtn.textContent = 'Copied!'
-    setTimeout(() => { copyBtn.textContent = 'Copy' }, 1200)
-  })
+  if (histToggle && historyDiv) {
+    histToggle.addEventListener('click', () => {
+      histToggle.classList.toggle('open')
+      historyDiv.classList.toggle('open')
+    })
+  }
 
   // Send query
   function sendQuery() {
     const command = input.value.trim()
     if (!command) return
-    const agent = agentSelect.value || undefined
+    const selectedAgent = agentSelect ? agentSelect.value : 'auto'
+    const target = selectedAgent !== 'auto' ? (agentMap[selectedAgent] || selectedAgent) : null
     input.value = ''
     sendBtn.disabled = true
 
+    // Show response area
+    if (responseDiv) responseDiv.style.display = 'block'
+    if (responseTag) responseTag.textContent = target ? `→ ${target}` : '→ auto'
+    if (responseText) responseText.textContent = '…'
+
     // Add to history
-    queryHistory.unshift({ command, agent })
+    queryHistory.unshift({ command, agent: target })
     if (queryHistory.length > MAX_HISTORY) queryHistory.pop()
     renderHistory()
 
     // Cancel any in-flight
     cancelQuery()
-
     currentAbortController = new AbortController()
-    const responseDiv = document.getElementById('query-response')
-    responseDiv.innerHTML = '<button class="copy-btn" id="query-copy">Copy</button><span class="typing-cursor"></span>'
 
-    // Re-bind copy
-    responseDiv.querySelector('.copy-btn').addEventListener('click', () => {
-      const text = responseDiv.textContent.replace('Copy', '').trim()
-      navigator.clipboard.writeText(text).catch(() => {})
-      responseDiv.querySelector('.copy-btn').textContent = 'Copied!'
-      setTimeout(() => { responseDiv.querySelector('.copy-btn').textContent = 'Copy' }, 1200)
-    })
-
-    const tag = document.createElement('span')
-    tag.className = 'agent-tag'
-    tag.textContent = agent ? `→ ${agent}` : '→ auto'
-    responseDiv.insertBefore(tag, responseDiv.querySelector('.copy-btn'))
-    responseDiv.insertBefore(document.createElement('br'), responseDiv.querySelector('.copy-btn'))
+    const body = target
+      ? { command, target, timeout_ms: 20000 }
+      : { command, capability: 'task-execution', timeout_ms: 20000 }
 
     fetch('/api/task', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command, agent }),
+      body: JSON.stringify(body),
       signal: currentAbortController.signal
     })
     .then(r => r.json())
     .then(data => {
-      const copyEl = responseDiv.querySelector('.copy-btn')
-      const cursorEl = responseDiv.querySelector('.typing-cursor')
-      // Update agent tag with actual responder
-      if (data.hub || data.agent) {
-        tag.textContent = `${data.hub || ''}/${data.agent || agent || 'auto'}`
+      // Update tag with actual responder
+      if (data.executed_by && responseTag) responseTag.textContent = `→ ${data.executed_by}`
+      const text = data.output || data.error || data.status || 'No response'
+      if (responseText) {
+        responseText.textContent = ''
+        typewriterEffect(responseText, text, null, null)
       }
-      const text = data.response || data.error || 'No response'
-      typewriterEffect(responseDiv, text, copyEl, cursorEl)
     })
     .catch(err => {
       if (err.name === 'AbortError') return
-      const cursorEl = responseDiv.querySelector('.typing-cursor')
-      if (cursorEl) cursorEl.remove()
-      responseDiv.innerHTML += `<span style="color: var(--danger)">Error: ${err.message}</span>`
+      if (responseText) responseText.textContent = `Mesh unreachable: ${err.message}`
+      if (responseTag) responseTag.textContent = '× offline'
     })
     .finally(() => {
       sendBtn.disabled = false
@@ -287,17 +285,20 @@ export function initQueryPanel(agents) {
   })
 
   function renderHistory() {
-    const list = document.getElementById('query-history-list')
-    list.innerHTML = ''
+    if (!historyDiv) return
+    historyDiv.innerHTML = ''
     queryHistory.forEach(item => {
-      const el = document.createElement('div')
-      el.className = 'query-history-item'
-      el.textContent = `${item.agent ? '[' + item.agent + '] ' : ''}${item.command}`
-      el.addEventListener('click', () => {
+      const div = document.createElement('div')
+      div.className = 'history-item'
+      div.innerHTML = `<div class="history-q">${item.agent ? item.agent + ': ' : ''}${item.command}</div>`
+      div.addEventListener('click', () => {
         input.value = item.command
-        agentSelect.value = item.agent || ''
+        if (agentSelect && item.agent) {
+          const name = item.agent.split('@')[0]
+          agentSelect.value = name
+        }
       })
-      list.appendChild(el)
+      historyDiv.appendChild(div)
     })
   }
 }
@@ -331,19 +332,18 @@ function cancelQuery() {
 // Global hotkeys
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', e => {
-    // Q toggles panel (only when not typing in input)
+    // Q focuses query input (only when not already typing)
     if (e.key === 'q' || e.key === 'Q') {
       const active = document.activeElement
       if (active && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) return
-      const panel = document.getElementById('query-panel')
-      if (!panel) return
-      panel.classList.toggle('collapsed')
-      const btn = panel.querySelector('.query-toggle')
-      btn.textContent = panel.classList.contains('collapsed') ? '▲' : '▼'
+      const input = document.getElementById('query-input')
+      if (input) { e.preventDefault(); input.focus() }
     }
-    // Escape cancels in-flight
+    // Escape cancels in-flight query
     if (e.key === 'Escape') {
       cancelQuery()
+      const input = document.getElementById('query-input')
+      if (input) { input.value = ''; input.blur() }
     }
   })
 }

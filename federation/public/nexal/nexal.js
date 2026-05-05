@@ -14,7 +14,7 @@
 import { bridge } from './bridge.js';
 import { init, buildSpiderWeb, buildAgentTopologies, buildCentralNexus, getCamera, getRenderer, getScene, getClickableObjects } from './scene.js';
 import { animate } from './animation.js';
-import { updateAgentsList, updateStatusPanel, showAgentDetails, showHubDetails, hideDetailPanel } from './ui.js';
+import { updateAgentsList, updateStatusPanel, showAgentDetails, showHubDetails, hideDetailPanel, initQueryPanel } from './ui.js';
 import { loadAgentsAndBuild } from './data.js';
 import * as THREE from 'three';
 
@@ -26,9 +26,15 @@ init();
 // ── Bridge: 2D layer listens to 3D events ─────────────────────────────────
 
 // When mesh data arrives, populate the HUD agent list and status panel
+let _queryPanelInitialised = false;
 bridge.on('mesh-updated', ({ agents, rtt }) => {
   updateAgentsList(agents);
   updateStatusPanel(agents, rtt);
+  // Init query panel once on first load with live agent list
+  if (!_queryPanelInitialised) {
+    _queryPanelInitialised = true;
+    initQueryPanel(agents);
+  }
 });
 
 // When user clicks an agent in 3D space, show the detail panel
