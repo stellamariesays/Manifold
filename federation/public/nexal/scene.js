@@ -241,6 +241,12 @@ export function buildSpiderWeb() {
 }
 
 export function buildAgentTopologies(agents) {
+  // Clear any previously built agents/hubs to prevent duplication on re-calls
+  agentGroups.forEach(group => scene.remove(group));
+  agentGroups.length = 0;
+  // Remove agent-type clickables (hub centers and agent meshes added here)
+  clickableObjects.length = 0;
+
   const hubColors = {
     'relay': 0x00e5ff,
     'hog': 0x00ff88,

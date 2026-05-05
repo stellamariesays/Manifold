@@ -16,7 +16,7 @@ export async function loadAgentsAndBuild(callbacks) {
   let meshData = null;
 
   try {
-    const response = await fetch('/api/mesh');
+    const response = await fetch('/mesh');
     meshData = await response.json();
     if (meshData && meshData.agents) {
       agents = meshData.agents;
@@ -58,8 +58,55 @@ export async function loadAgentsAndBuild(callbacks) {
   callbacks.buildCentralNexus();
 
   // Notify the 2D layer (and anyone else who cares) via bridge
-  bridge.emit('mesh-updated', { agents });
+  bridge.emit('mesh-updated', { agents, rtt: 0 });
 
   // Start animation loop
   callbacks.animate();
+
+  // Start periodic mesh polling
+  startMeshPolling(callbacks);
+}
+
+let _pollTimer = null;
+let _lastPollTime = 0;
+
+/**
+ * Poll /mesh every 30 seconds, measure RTT, and update HUD state.
+ * Does NOT rebuild the 3D scene — agents are stable, rebuilding causes
+ * accumulation glitches. Only updates window globals and emits 'mesh-updated'
+ * so the 2D HUD (agent list, counters, latency) stays fresh.
+ */
+export function startMeshPolling(callbacks) {
+  if (_pollTimer) clearInterval(_pollTimer);
+
+  _pollTimer = setInterval(async () => {
+    try {
+      const t0 = performance.now();
+      const response = await fetch('/mesh');
+      const rtt = Math.round(performance.now() - t0);
+      const meshData = await response.json();
+      _lastPollTime = Date.now();
+
+      if (meshData && meshData.agents) {
+        if (typeof window !== 'undefined') {
+          window._meshData = meshData;
+          window._meshRTT = rtt;
+          window._meshLastPoll = _lastPollTime;
+          window._hubMeta = meshData.hubMeta ?? {};
+        }
+
+        // Only update the 2D HUD — do NOT call buildAgentTopologies here.
+        // Rebuilding the 3D scene on every poll causes shape accumulation.
+        const agents = meshData.agents;
+        bridge.emit('mesh-updated', { agents, rtt });
+      }
+    } catch (e) {
+      // Silently ignore poll failures — keep existing data
+      console.warn('Mesh poll failed:', e.message);
+    }
+  }, 30000);
+}
+
+export function getLastPollTime() {
+  return _lastPollTime;
 }

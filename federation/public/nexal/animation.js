@@ -23,9 +23,17 @@ import { getHubOrbitPosition, getHubOrbitParams } from './hub-orbits.js';
 
 // Global frame counter (read by animateDataHighways)
 let animationFrame = 0;
+let _animationRunning = false;
 
 export function animate() {
-  requestAnimationFrame(animate);
+  // Guard: prevent multiple concurrent animation loops
+  if (_animationRunning) return;
+  _animationRunning = true;
+  _animateLoop();
+}
+
+function _animateLoop() {
+  requestAnimationFrame(_animateLoop);
   animationFrame++;
 
   const elapsed = performance.now() / 1000;
