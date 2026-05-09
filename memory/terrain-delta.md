@@ -1,13 +1,20 @@
 # Terrain Delta — Current Ground State
 
 **Generated:** April 16, 2026 at 06:02 WITA (sateliteA)
+**Updated:** May 9, 2026 by Stella
 
 ## Infrastructure
-**thefog:** New machine added 2026-04-16. SSH user: `sophia`, Tailscale IP: `100.124.38.123`, OS: Linux aarch64. SSH key: `~/.ssh/id_ed25519`.
+**thefog:** New machine added 2026-04-16. SSH user: `sophia`, Tailscale IP: `100.124.38.123`, Local IP: `192.168.64.5`, OS: Linux aarch64. SSH key: `~/.ssh/id_ed25519_trillian` (from sateliteA).
 **Role:** Sophia's compute node — fog epistemic computation for the Manifold mesh.
 **Status:** LIVE. OpenClaw installed (v2026.4.14, Node v24.15.0). Gateway running (pid 6548, port 18789). Telegram bot `@sophiafogbot` polling.
 **Identity:** workspace at `~/openclaw-workspace/sophia/`. Full identity files (SOUL.md, AGENTS.md etc.) deployed. Model: groq/llama-3.3-70b-versatile.
 **Fog computation:** `fog` repo cloned at `~/fog/`. Scripts: `scripts/fog-integration.py`, `scripts/fog-watch.py`. First run: braid↔solar-detect tension=0.857, system volume=5.20, H=3.26.
+
+**satelitea:** Stella's primary node. Tailscale IP: `100.86.105.39`. SSH key `~/.ssh/id_ed25519_trillian` reaches thefog, hog, trillian.
+
+**hog (HOG):** Eddie's node. VM on Trillian. Tailscale IP: `100.70.172.34`. SSH user: `marvin`. SSH key: `~/.ssh/id_ed25519`.
+
+**trillian:** Physical host. Tailscale IP: `100.93.231.124`. HOG runs as VM here.
 
 ## Federation
 **Hub:** satelitea | **Agents on mesh:** 17 (5 local + 12 HOG)
