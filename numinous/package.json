@@ -1,0 +1,25 @@
+{
+  "name": "numinous",
+  "version": "0.1.0",
+  "description": "Functional memory layer for Manifold mesh agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "numinous": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsc --watch",
+    "test": "node --test dist/test/*.test.js"
+  },
+  "dependencies": {
+    "fp-ts": "^2.16.0",
+    "io-ts": "^2.2.0",
+    "io-ts-reporters": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^22.0.0"
+  }
+}
