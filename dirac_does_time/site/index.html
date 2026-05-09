@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dirac Does Time — Inverted QM Visualization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #c8c8d4;
+    font-family: 'Courier New', monospace;
+    overflow-x: hidden;
+  }
+  h1 { color: #e04080; font-size: 1.6rem; letter-spacing: 2px; }
+  h2 { color: #40c0e0; font-size: 1.1rem; margin: 20px 0 10px; letter-spacing: 1px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .header {
+    text-align: center;
+    padding: 30px 0;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  .header p { color: #666; font-size: 0.85rem; margin-top: 8px; }
+
+  /* 4-cell matrix */
+  .four-cell {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    max-width: 320px;
+    margin: 15px auto;
+  }
+  .cell {
+    padding: 18px 10px;
+    text-align: center;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .cell:hover { transform: scale(1.05); z-index: 2; }
+  .cell .spin { font-size: 0.95rem; font-weight: bold; display: block; }
+  .cell .dir { font-size: 0.65rem; opacity: 0.7; }
+  .cell .charge { font-size: 0.6rem; margin-top: 4px; opacity: 0.5; }
+  .c1 { background: rgba(0, 200, 255, 0.15); border: 1px solid rgba(0, 200, 255, 0.3); }
+  .c1 .spin { color: #00c8ff; }
+  .c2 { background: rgba(0, 255, 160, 0.15); border: 1px solid rgba(0, 255, 160, 0.3); }
+  .c2 .spin { color: #00ffa0; }
+  .c3 { background: rgba(255, 80, 120, 0.15); border: 1px solid rgba(255, 80, 120, 0.3); }
+  .c3 .spin { color: #ff5078; }
+  .c4 { background: rgba(255, 180, 0, 0.15); border: 1px solid rgba(255, 180, 0, 0.3); }
+  .c4 .spin { color: #ffb400; }
+
+  .cell-label {
+    text-align: center;
+    font-size: 0.65rem;
+    color: #444;
+    margin-top: 8px;
+  }
+
+  /* Spinor viz */
+  .spinor-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin: 15px 0;
+    flex-wrap: wrap;
+  }
+  .spinor-bar {
+    width: 200px;
+  }
+  .spinor-bar label {
+    font-size: 0.65rem;
+    color: #666;
+    display: block;
+    margin-bottom: 3px;
+  }
+  .bar-track {
+    height: 6px;
+    background: #1a1a2e;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s;
+  }
+
+  /* Canvas sections */
+  canvas {
+    display: block;
+    margin: 10px auto;
+    border: 1px solid #1a1a2e;
+    border-radius: 4px;
+  }
+
+  /* Axioms */
+  .axiom {
+    background: #0e0e18;
+    border-left: 2px solid #e04080;
+    padding: 12px 16px;
+    margin: 8px 0;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+  .axiom em { color: #e04080; font-style: normal; }
+
+  /* Comparison */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0;
+  }
+  .compare-box {
+    background: #0e0e18;
+    padding: 12px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+  .compare-box h3 {
+    font-size: 0.8rem;
+    margin-bottom: 6px;
+  }
+  .standard h3 { color: #666; }
+  .inverted h3 { color: #e04080; }
+  .compare-box code {
+    color: #40c0e0;
+    font-size: 0.7rem;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 20px 0;
+    font-size: 0.65rem;
+    color: #333;
+    border-top: 1px solid #1a1a2e;
+    margin-top: 30px;
+  }
+
+  .status-line {
+    text-align: center;
+    font-size: 0.65rem;
+    color: #333;
+    margin-top: 4px;
+  }
+
+  .substructure-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin: 15px 0;
+    font-size: 0.7rem;
+    flex-wrap: wrap;
+  }
+  .group-box {
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 10px 16px;
+    text-align: center;
+  }
+  .group-box .gname { font-weight: bold; }
+  .group-box .gdesc { font-size: 0.6rem; color: #555; margin-top: 3px; }
+  .arrow { color: #e04080; font-size: 1.2rem; }
+  .breaking { color: #ff5078; font-size: 0.6rem; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>DIRAC DOES TIME</h1>
+    <p>Inverted quantum mechanics — time as operator, space as parameter</p>
+    <p class="status-line">ψ evolves in x. t is observable. Pauli was right about the wrong thing.</p>
+  </div>
+
+  <h2>I. Axioms</h2>
+  <div class="axiom"><em>Axiom I:</em> Time <strong>t̂</strong> is a self-adjoint operator on the Hilbert space. Continuous spectrum (−∞, +∞). Pauli's objection dissolves — <strong>K̂</strong> is unbounded in both directions.</div>
+  <div class="axiom"><em>Corollary I:</em> [K̂, t̂] = iℏ — Spatial displacement and temporal position are conjugate observables.</div>
+  <div class="axiom"><em>Corollary II:</em> ΔK · Δt ≥ ℏ/2 — Temporal uncertainty principle.</div>
+  <div class="axiom"><em>Axiom II:</em> Position x is the evolution parameter. <code>K̂ψ = iℏ ∂ψ/∂x</code></div>
+
+  <h2>II. Standard vs Inverted</h2>
+  <div class="compare">
+    <div class="compare-box standard">
+      <h3>Standard QM</h3>
+      <p>Evolution parameter: <code>t</code></p>
+      <p>Operators: <code>x̂, p̂</code></p>
+      <p>Generator: <code>Ĥ</code> (energy)</p>
+      <p>Commutation: <code>[Ĥ, t]</code> — t is not an operator</p>
+      <p>Particle/antiparticle: distinct fields</p>
+    </div>
+    <div class="compare-box inverted">
+      <h3>Inverted Frame</h3>
+      <p>Evolution parameter: <code>x</code></p>
+      <p>Operators: <code>t̂, K̂</code></p>
+      <p>Generator: <code>K̂</code> (spatial displacement)</p>
+      <p>Commutation: <code>[K̂, t̂] = iℏ</code></p>
+      <p>Particle/antiparticle: temporal direction eigenstates</p>
+    </div>
+  </div>
+
+  <h2>III. Electron 4-Cell Matrix</h2>
+  <p style="font-size:0.7rem;text-align:center;color:#555;margin-bottom:10px;">Spin × Temporal Direction = 2×2 minimal representation</p>
+  <div class="four-cell">
+    <div class="cell c1">
+      <span class="spin">↑</span>
+      <span class="dir">t-forward</span>
+      <span class="charge">q = −e</span>
+    </div>
+    <div class="cell c2">
+      <span class="spin">↓</span>
+      <span class="dir">t-forward</span>
+      <span class="charge">q = −e</span>
+    </div>
+    <div class="cell c3">
+      <span class="spin">↑</span>
+      <span class="dir">t-backward</span>
+      <span class="charge">q = +e</span>
+    </div>
+    <div class="cell c4">
+      <span class="spin">↓</span>
+      <span class="dir">t-backward</span>
+      <span class="charge">q = +e</span>
+    </div>
+  </div>
+  <div class="cell-label">Click cells to see spinor dynamics ↓</div>
+
+  <div id="spinor-viz" class="spinor-row"></div>
+
+  <h2>IV. Wavefunction Evolution</h2>
+  <p style="font-size:0.7rem;text-align:center;color:#555;">Spatial Schrödinger: K̂ψ = iℏ ∂ψ/∂x — state evolves through space, not time</p>
+  <canvas id="waveCanvas" width="600" height="200"></canvas>
+  <div class="status-line" id="wave-status">x-axis: spatial parameter | amplitude: |ψ(x)| at fixed t-observable</div>
+
+  <h2>V. Temporal Probability Density</h2>
+  <p style="font-size:0.7rem;text-align:center;color:#555;">P(t) = |⟨t|ψ⟩|² — probability of measuring temporal position t</p>
+  <canvas id="probCanvas" width="600" height="180"></canvas>
+
+  <h2>VI. Substructure: U(2) Conjecture</h2>
+  <div class="substructure-diagram">
+    <div class="group-box">
+      <div class="gname" style="color:#e04080;">U(2)</div>
+      <div class="gdesc">unified symmetry</div>
+    </div>
+    <div class="arrow">→ breaking →</div>
+    <div class="group-box">
+      <div class="gname" style="color:#00c8ff;">SU(2)</div>
+      <div class="gdesc">spin</div>
+    </div>
+    <div class="arrow">×</div>
+    <div class="group-box">
+      <div class="gname" style="color:#ffb400;">ℤ₂</div>
+      <div class="gdesc">temporal direction</div>
+    </div>
+  </div>
+  <div class="breaking">Symmetry breaking ratio → fine structure constant α ≈ 1/137 ?</div>
+
+  <div class="footer">
+    dirac_does_time — Hal + Sophia — 2026-05-09<br>
+    "the unclaimed region is always more interesting than the claimed one"
+  </div>
+</div>
+
+<script>
+// Wavefunction evolution (spatial Schrödinger)
+const waveCanvas = document.getElementById('waveCanvas');
+const waveCtx = waveCanvas.getContext('2d');
+let phase = 0;
+
+function drawWave() {
+  const W = waveCanvas.width, H = waveCanvas.height;
+  waveCtx.clearRect(0, 0, W, H);
+
+  // Grid
+  waveCtx.strokeStyle = '#1a1a2e';
+  waveCtx.lineWidth = 0.5;
+  for (let i = 0; i < 10; i++) {
+    const y = H * i / 10;
+    waveCtx.beginPath(); waveCtx.moveTo(0, y); waveCtx.lineTo(W, y); waveCtx.stroke();
+  }
+
+  // Re(ψ) - spatial evolving wavefunction
+  waveCtx.strokeStyle = '#00c8ff';
+  waveCtx.lineWidth = 1.5;
+  waveCtx.beginPath();
+  for (let px = 0; px < W; px++) {
+    const x = (px / W) * 4 * Math.PI;
+    const k = 2;
+    const psi_re = Math.cos(k * x - phase) * Math.exp(-0.1 * Math.abs(x - 2 * Math.PI));
+    const py = H / 2 - psi_re * H * 0.35;
+    px === 0 ? waveCtx.moveTo(px, py) : waveCtx.lineTo(px, py);
+  }
+  waveCtx.stroke();
+
+  // Im(ψ)
+  waveCtx.strokeStyle = 'rgba(255, 80, 120, 0.6)';
+  waveCtx.lineWidth = 1;
+  waveCtx.beginPath();
+  for (let px = 0; px < W; px++) {
+    const x = (px / W) * 4 * Math.PI;
+    const k = 2;
+    const psi_im = Math.sin(k * x - phase) * Math.exp(-0.1 * Math.abs(x - 2 * Math.PI));
+    const py = H / 2 - psi_im * H * 0.35;
+    px === 0 ? waveCtx.moveTo(px, py) : waveCtx.lineTo(px, py);
+  }
+  waveCtx.stroke();
+
+  // |ψ|² envelope
+  waveCtx.strokeStyle = 'rgba(255, 180, 0, 0.4)';
+  waveCtx.lineWidth = 1;
+  waveCtx.beginPath();
+  for (let px = 0; px < W; px++) {
+    const x = (px / W) * 4 * Math.PI;
+    const env = Math.exp(-0.2 * Math.abs(x - 2 * Math.PI));
+    const py = H / 2 - env * H * 0.35;
+    px === 0 ? waveCtx.moveTo(px, py) : waveCtx.lineTo(px, py);
+  }
+  waveCtx.stroke();
+
+  waveCtx.strokeStyle = 'rgba(255, 180, 0, 0.4)';
+  waveCtx.beginPath();
+  for (let px = 0; px < W; px++) {
+    const x = (px / W) * 4 * Math.PI;
+    const env = Math.exp(-0.2 * Math.abs(x - 2 * Math.PI));
+    const py = H / 2 + env * H * 0.35;
+    px === 0 ? waveCtx.moveTo(px, py) : waveCtx.lineTo(px, py);
+  }
+  waveCtx.stroke();
+
+  // Legend
+  waveCtx.fillStyle = '#333';
+  waveCtx.font = '10px monospace';
+  waveCtx.fillText('Re(ψ)', 10, 15);
+  waveCtx.fillStyle = 'rgba(255,80,120,0.6)';
+  waveCtx.fillText('Im(ψ)', 70, 15);
+  waveCtx.fillStyle = 'rgba(255,180,0,0.5)';
+  waveCtx.fillText('|ψ|² envelope', 130, 15);
+
+  phase += 0.03;
+  requestAnimationFrame(drawWave);
+}
+drawWave();
+
+// Temporal probability density
+const probCanvas = document.getElementById('probCanvas');
+const probCtx = probCanvas.getContext('2d');
+
+function drawProb() {
+  const W = probCanvas.width, H = probCanvas.height;
+  probCtx.clearRect(0, 0, W, H);
+
+  // Grid
+  probCtx.strokeStyle = '#1a1a2e';
+  probCtx.lineWidth = 0.5;
+  for (let i = 0; i < 10; i++) {
+    const y = H * i / 10;
+    probCtx.beginPath(); probCtx.moveTo(0, y); probCtx.lineTo(W, y); probCtx.stroke();
+  }
+
+  // P(t) = gaussian centered at t=0 with slight oscillation
+  const t0 = 0;
+  const sigma = 1.5;
+  probCtx.fillStyle = 'rgba(0, 200, 255, 0.15)';
+  probCtx.beginPath();
+  probCtx.moveTo(0, H);
+  for (let px = 0; px < W; px++) {
+    const t = (px / W - 0.5) * 8;
+    const P = Math.exp(-((t - t0) ** 2) / (2 * sigma ** 2)) * (1 + 0.1 * Math.sin(3 * t + phase));
+    const py = H - P * H * 0.8;
+    probCtx.lineTo(px, py);
+  }
+  probCtx.lineTo(W, H);
+  probCtx.closePath();
+  probCtx.fill();
+
+  probCtx.strokeStyle = '#00c8ff';
+  probCtx.lineWidth = 1.5;
+  probCtx.beginPath();
+  for (let px = 0; px < W; px++) {
+    const t = (px / W - 0.5) * 8;
+    const P = Math.exp(-((t - t0) ** 2) / (2 * sigma ** 2)) * (1 + 0.1 * Math.sin(3 * t + phase));
+    const py = H - P * H * 0.8;
+    px === 0 ? probCtx.moveTo(px, py) : probCtx.lineTo(px, py);
+  }
+  probCtx.stroke();
+
+  // Uncertainty markers
+  const dt = sigma;
+  const cx = W / 2;
+  const dpx = (dt / 4) * W;
+  probCtx.strokeStyle = 'rgba(255, 80, 120, 0.5)';
+  probCtx.lineWidth = 1;
+  probCtx.setLineDash([4, 4]);
+  [cx - dpx, cx + dpx].forEach(lx => {
+    probCtx.beginPath(); probCtx.moveTo(lx, 0); probCtx.lineTo(lx, H); probCtx.stroke();
+  });
+  probCtx.setLineDash([]);
+
+  probCtx.fillStyle = 'rgba(255,80,120,0.5)';
+  probCtx.font = '10px monospace';
+  probCtx.fillText('Δt', cx - dpx + 4, 15);
+
+  requestAnimationFrame(drawProb);
+}
+drawProb();
+
+// Cell click interaction
+const cells = document.querySelectorAll('.cell');
+const spinorViz = document.getElementById('spinor-viz');
+const cellData = [
+  { label: 'Spin-up, t-forward (electron)', color: '#00c8ff', vals: [0.8, 0.3, 0.1, 0.05] },
+  { label: 'Spin-down, t-forward (electron)', color: '#00ffa0', vals: [0.3, 0.7, 0.05, 0.15] },
+  { label: 'Spin-up, t-backward (positron)', color: '#ff5078', vals: [0.1, 0.05, 0.75, 0.25] },
+  { label: 'Spin-down, t-backward (positron)', color: '#ffb400', vals: [0.05, 0.15, 0.2, 0.7] }
+];
+const componentNames = ['ψ₁ (↑, t→)', 'ψ₂ (↓, t→)', 'ψ₃ (↑, t←)', 'ψ₄ (↓, t←)'];
+
+cells.forEach((cell, i) => {
+  cell.addEventListener('click', () => {
+    spinorViz.innerHTML = '';
+    cellData[i].vals.forEach((v, j) => {
+      const bar = document.createElement('div');
+      bar.className = 'spinor-bar';
+      bar.innerHTML = `<label>${componentNames[j]}</label><div class="bar-track"><div class="bar-fill" style="width:${v * 100}%;background:${cellData[i].color};"></div></div>`;
+      spinorViz.appendChild(bar);
+    });
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:0.7rem;color:#666;text-align:center;width:100%;margin-top:5px;';
+    info.textContent = cellData[i].label;
+    spinorViz.appendChild(info);
+  });
+});
+</script>
+
+</body>
+</html>
