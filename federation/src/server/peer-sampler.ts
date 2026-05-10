@@ -142,6 +142,7 @@ export class PeerSampler extends EventEmitter {
    */
   addDescriptor(desc: PeerDescriptor): boolean {
     // Don't add ourselves (check both hub name and address)
+    console.log(`[Sampler:${this.selfHub}] addDescriptor: hub=${desc.hub} addr=${desc.address} selfHub=${this.selfHub} selfAddr=${this.selfAddress}`)
     if (desc.hub === this.selfHub || desc.address === this.selfAddress) return false
 
     this.knownAddresses.set(desc.address, desc)

@@ -136,7 +136,7 @@ export class TaskExecutor extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Task queue full (${this.queue.queue.length}/${this.queue.bp.maxQueueSize})`,
+            error: { code: 'queue_full', message: `Task queue full (${this.queue.queue.length}/${this.queue.bp.maxQueueSize})` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -152,7 +152,7 @@ export class TaskExecutor extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'not_found',
-        error: `No runner available for agent: ${agentName}`,
+        error: { code: 'runner_unavailable', message: `No runner available for agent: ${agentName}` },
         executed_by: `${agentName}@${this.hub}`,
         completed_at: new Date().toISOString(),
       }
@@ -212,7 +212,7 @@ export class TaskExecutor extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Hub ${targetHub} unreachable and forward queue full`,
+            error: { code: 'hub_unreachable', message: `Hub ${targetHub} unreachable and forward queue full` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -272,7 +272,7 @@ export class TaskExecutor extends EventEmitter {
     const result: TaskResult = {
       id: taskId,
       status: 'timeout',
-      error: `Task timed out`,
+      error: { code: 'timeout', message: 'Task timed out' },
       completed_at: new Date().toISOString(),
     }
 
@@ -287,7 +287,16 @@ export class TaskExecutor extends EventEmitter {
   // ── Send Result ────────────────────────────────────────────────────────
 
   sendResult(result: TaskResult, ws: WebSocket | null, originHub?: string): void {
-    const msg: TaskResultMessage = { type: 'task_result', result }
+    // v1.0 §4.2: flat top-level fields
+    const msg: TaskResultMessage = {
+      type: 'task_result',
+      id: result.id,
+      status: result.status,
+      body: result.body,
+      error: result.error,
+      executed_by: result.executed_by,
+      completed_at: result.completed_at,
+    }
 
     if (ws && ws.readyState === 1) {
       ws.send(JSON.stringify(msg))

@@ -147,15 +147,22 @@ export interface TaskRequest {
   }
 }
 
+export interface TaskError {
+  /** Machine-readable error code */
+  code: string
+  /** Human-readable error description */
+  message: string
+}
+
 export interface TaskResult {
   /** Matches TaskRequest.id */
   id: string
   /** "success" | "error" | "timeout" | "not_found" | "rejected" */
   status: 'success' | 'error' | 'timeout' | 'not_found' | 'rejected'
   /** Agent's JSON output (structured, agent-defined schema) */
-  output?: unknown
-  /** Human-readable error message if status != "success" */
-  error?: string
+  body?: unknown
+  /** Structured error (v1.0 §4.2: {code, message}) */
+  error?: TaskError
   /** Which agent actually executed the task (may differ from target if routed) */
   executed_by?: string
   /** Wall-clock execution time in ms */
@@ -171,7 +178,12 @@ export interface TaskRequestMessage extends BaseMessage {
 
 export interface TaskResultMessage extends BaseMessage {
   type: 'task_result'
-  result: TaskResult
+  id: string
+  status: TaskResult['status']
+  body?: unknown
+  error?: TaskError
+  executed_by?: string
+  completed_at: string
 }
 
 /** Acknowledgment that a task was received and queued for execution */

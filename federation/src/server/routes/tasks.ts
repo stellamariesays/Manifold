@@ -74,7 +74,7 @@ function _submitTask(req: Request, res: Response, { hub, capIndex, taskRouter }:
       res.json({
         task_id: result.result.id,
         status: result.result.status,
-        output: result.result.output,
+        output: result.result.body,
         error: result.result.error,
         executed_by: result.result.executed_by,
         execution_ms: result.result.execution_ms,

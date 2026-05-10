@@ -80,9 +80,15 @@ function executeTask(task) {
     const err = Buffer.concat(stderr).toString().trim();
 
     if (code === 0 && out) {
-      let output;
-      try { output = JSON.parse(out); } catch { output = { text: out }; }
-      sendResult({ id: task.id, status: 'success', output, executed_by: `${agentName}@${config.hub}`, execution_ms: execMs, completed_at: new Date().toISOString() });
+      let agentResult;
+      try { agentResult = JSON.parse(out); } catch { agentResult = { body: { text: out } }; }
+      const result = { id: task.id, status: 'success', executed_by: `${agentName}@${config.hub}`, execution_ms: execMs, completed_at: new Date().toISOString() };
+      // Promote agent output fields into result
+      if (agentResult.body) result.body = agentResult.body;
+      if (agentResult.output) result.output = agentResult.output;
+      if (!result.body && agentResult.text) result.body = { text: agentResult.text };
+      if (!result.body && !result.output) result.body = { text: JSON.stringify(agentResult) };
+      sendResult(result);
       log(`✓ ${agentName} ${task.command} (${execMs}ms)`);
     } else {
       sendResult({ id: task.id, status: code === null ? 'timeout' : 'error', error: err || `exit code ${code}`, output: out ? { raw: out } : undefined, executed_by: `${agentName}@${config.hub}`, execution_ms: execMs, completed_at: new Date().toISOString() });

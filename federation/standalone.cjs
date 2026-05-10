@@ -1,8 +1,12 @@
 const { ManifoldServer } = require('./dist/server/index.js');
 const { MeshletManager } = require('./dist/server/meshlet-manager.js');
+const fs = require('fs');
+const path = require('path');
 
 (async () => {
-  // Create meshlet manager (simulated mode — no Elixir on this host)
+  const configPath = path.join(__dirname, 'config-satelliteA.json');
+  const fileConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
   const meshletManager = new MeshletManager({
     elixirAvailable: false,
     defaultTtlMs: 2 * 60 * 60 * 1000,
@@ -12,18 +16,18 @@ const { MeshletManager } = require('./dist/server/meshlet-manager.js');
   meshletManager.start();
 
   const server = new ManifoldServer({
-    name: 'trillian',
-    federationPort: 8766,
-    localPort: 8768,
-    restPort: 8767,
-    peers: ['ws://100.70.172.34:8766', 'ws://100.124.38.123:8766'],
-    atlasPath: '/home/stella/stella/data/manifold/stella-atlas.json',
+    ...fileConfig,
     meshletManager,
     debug: true,
   });
 
-  console.log('🚀 Starting Manifold Federation Server (Trillian) with Meshlet support');
+  console.log(`🚀 Starting Manifold Federation Server (${fileConfig.name}) with Meshlet support`);
 
-  await server.start();
-  console.log('✅ Federation running — meshlet workshop at http://localhost:8767/nexal/meshlet');
+  try {
+    await server.start();
+    console.log(`✅ Federation running — meshlet workshop at http://localhost:${fileConfig.restPort || 8767}/meshlet`);
+  } catch (err) {
+    console.error('❌ START FAILED:', err);
+    process.exit(1);
+  }
 })();

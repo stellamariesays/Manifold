@@ -305,6 +305,12 @@ export class PeerRegistry extends EventEmitter {
    * Ensure we have an outbound connection to a peer descriptor.
    */
   private _ensureConnection(desc: { hub: string; address: string }): void {
+    // Reject self-connections from gossip
+    if (desc.hub === this.selfHub) {
+      this.log(`Skipping self-connection from gossip: ${desc.hub} at ${desc.address}`)
+      return
+    }
+
     // Already connected?
     if (this.byHub.has(desc.hub)) {
       const existing = this.byHub.get(desc.hub)!
@@ -360,6 +366,7 @@ export class PeerRegistry extends EventEmitter {
 
     ws.on('message', (data) => {
       entry.lastSeen = new Date().toISOString()
+      console.log(`[outbound-msg] hub=${entry.hub} addr=${entry.address} raw_type=${typeof data === "string" ? JSON.parse(data).type : "binary"}`)
       const raw = typeof data === 'string' ? data : data.toString()
 
       // Check for shuffle messages
@@ -408,6 +415,22 @@ export class PeerRegistry extends EventEmitter {
   }
 
   private _handlePeerAnnounce(entry: PeerEntry, msg: PeerAnnounceMessage): void {
+    // Reject self-connections — prevents dual-route task dispatch
+    if (msg.hub === this.selfHub) {
+      console.log(`[PeerRegistry:${this.selfHub}] Rejecting self-peer connection from ${entry.address} (claimed hub: ${msg.hub})`)
+      entry.ws?.close(4003, 'Self-connection rejected')
+      // Remove from ALL maps
+      this.inbound.delete(entry.address)
+      this.inbound.delete(entry.hub)
+      this.inbound.delete(msg.hub)
+      this.outbound.delete(entry.address)
+      this.outbound.delete(entry.hub)
+      this.outbound.delete(msg.hub)
+      this.byHub.delete(entry.hub)
+      this.byHub.delete(msg.hub)
+      return
+    }
+
     const oldHub = entry.hub
     const oldAddress = entry.address
 

@@ -193,20 +193,35 @@ export class TaskRouter extends EventEmitter {
    * Route a task_request. Called when the server receives one from any source.
    */
   routeTask(task: TaskRequest, replyTo: WebSocket | null, sourceHub?: string): void {
+    // DIAG: dual-firing detection
+    const callerLine = new Error().stack?.split('\n')[2]?.trim() ?? 'unknown';
+    this.log(`[routeTask] ENTRY task_id=${task.id} target=${task.target} caller=${callerLine}`);
     // Parse target
-    const [agentName, targetHub] = task.target.includes('@')
+    const [agentName, rawTargetHub] = task.target.includes('@')
       ? task.target.split('@')
       : [task.target, this.hub]
-
+    // Strip pubkey suffix (e.g. "nexal#e24dce03" → "nexal") for hub routing
+    const targetHub = rawTargetHub?.includes('#') ? rawTargetHub.split('#')[0] : rawTargetHub
     const resolvedHub = targetHub ?? this.hub
 
+    // Prefer local routing: if the agent name exists as a local runner,
+    // route locally regardless of the hub suffix in the target.
+    // This handles cases where an agent registers with hub='nexal' but
+    // is physically connected as a local runner on this hub.
+    const localRunner = this.findRunnerForAgent(agentName)
+    if (localRunner) {
+      this.log(`Agent '${agentName}' found locally despite target hub '${resolvedHub}' — routing locally`)
+    }
+
+    const shouldRouteLocal = localRunner !== null || resolvedHub === this.hub
+
     // Security: check allowlist for remote tasks
-    if (sourceHub && this.allowlist) {
+    if (sourceHub && this.allowlist && !shouldRouteLocal) {
       if (!this.allowlist.isAllowed(sourceHub, task.target)) {
         const result: TaskResult = {
           id: task.id,
           status: 'rejected',
-          error: `Hub ${sourceHub} is not allowed to target ${task.target}`,
+          error: { code: 'hub_not_allowed', message: `Hub ${sourceHub} is not allowed to target ${task.target}` },
           completed_at: new Date().toISOString(),
         }
         this.sendResult(result, replyTo)
@@ -221,7 +236,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Rate limit exceeded for ${rateKey}`,
+        error: { code: 'rate_limit', message: `Rate limit exceeded for ${rateKey}` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -232,11 +247,14 @@ export class TaskRouter extends EventEmitter {
     // Check if we already have this task (dedup).
     // Key is scoped to (originHub, taskId) so the same numeric/UUID task ID
     // generated independently on two different hubs is NOT treated as a duplicate.
-    if (this.pending.has(this.pendingKey(task))) {
+    const dedupKey = this.pendingKey(task)
+    if (this.pending.has(dedupKey)) {
+      const existing = this.pending.get(dedupKey)
+      this.log(`[DEDUP-REJECT] key=${dedupKey} existing_origin=${existing?.originHub} existing_replyTo=${existing?.replyTo ? 'ws' : 'null'} new_replyTo=${replyTo ? 'ws' : 'null'} new_sourceHub=${sourceHub}`)
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: 'Duplicate task ID',
+        error: { code: 'duplicate_task', message: 'Duplicate task ID' },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo, sourceHub)
@@ -250,7 +268,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Too many tasks in flight (${totalInFlight}/${this.bp.maxPendingTotal})`,
+        error: { code: 'backpressure_total', message: `Too many tasks in flight (${totalInFlight}/${this.bp.maxPendingTotal})` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -268,7 +286,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Source ${sourceKey} has too many pending tasks (${sourceCount}/${this.bp.maxPendingPerSource})`,
+        error: { code: 'backpressure_source', message: `Source ${sourceKey} has too many pending tasks (${sourceCount}/${this.bp.maxPendingPerSource})` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -277,8 +295,8 @@ export class TaskRouter extends EventEmitter {
       return
     }
 
-    // Route based on target hub
-    if (resolvedHub === this.hub) {
+    // Route based on target hub — prefer local if runner is physically here
+    if (shouldRouteLocal) {
       this.routeToLocal(task, agentName, replyTo, sourceKey)
     } else {
       this.routeToRemote(task, resolvedHub, replyTo, sourceKey)
@@ -301,7 +319,7 @@ export class TaskRouter extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Task queue full (${this.queue.length}/${this.bp.maxQueueSize})`,
+            error: { code: 'queue_full', message: `Task queue full (${this.queue.length}/${this.bp.maxQueueSize})` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -320,7 +338,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'not_found',
-        error: `No runner available for agent: ${agentName}`,
+        error: { code: 'runner_unavailable', message: `No runner available for agent: ${agentName}` },
         executed_by: `${agentName}@${this.hub}`,
         completed_at: new Date().toISOString(),
       }
@@ -387,7 +405,7 @@ export class TaskRouter extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Hub ${targetHub} unreachable and forward queue full`,
+            error: { code: 'hub_unreachable', message: `Hub ${targetHub} unreachable and forward queue full` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -487,7 +505,7 @@ export class TaskRouter extends EventEmitter {
     const result: TaskResult = {
       id: taskId,
       status: 'timeout',
-      error: `Task timed out`,
+      error: { code: 'timeout', message: 'Task timed out' },
       completed_at: new Date().toISOString(),
     }
 
@@ -576,7 +594,16 @@ export class TaskRouter extends EventEmitter {
   }
 
   private sendResult(result: TaskResult, ws: WebSocket | null, originHub?: string): void {
-    const msg: TaskResultMessage = { type: 'task_result', result }
+    // v1.0 §4.2: flat top-level fields, no result wrapper
+    const msg: TaskResultMessage = {
+      type: 'task_result',
+      id: result.id,
+      status: result.status,
+      body: result.body,
+      error: result.error,
+      executed_by: result.executed_by,
+      completed_at: result.completed_at,
+    }
 
     if (ws && ws.readyState === 1) { // WebSocket.OPEN
       ws.send(JSON.stringify(msg))
@@ -713,9 +740,10 @@ export class TaskRouter extends EventEmitter {
     if (task.origin === this.hub || this.taskIdToKey.has(task.id)) return
 
     // Parse target
-    const [, targetHub] = task.target.includes('@')
+    const [, rawForwardHub] = task.target.includes('@')
       ? task.target.split('@')
       : [task.target, this.hub]
+    const targetHub = rawForwardHub?.includes('#') ? rawForwardHub.split('#')[0] : rawForwardHub
 
     // If target is local, route it locally
     if (targetHub === this.hub) {
@@ -774,7 +802,7 @@ export class TaskRouter extends EventEmitter {
         const result: TaskResult = {
           id: entry.task.id,
           status: 'timeout',
-          error: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)`,
+          error: { code: 'forward_expired', message: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)` },
           completed_at: new Date().toISOString(),
         }
         this.sendResult(result, entry.replyTo)

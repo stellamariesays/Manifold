@@ -424,6 +424,9 @@ export class Gate extends EventEmitter {
       
       this._log('Authentication successful', { meshId })
       this.emit('session:authenticated', { meshId, publicKey: meshIdObj.publicKey })
+
+      // Register this agent's hub with the federation server so it appears as a peer
+      this._registerRemoteHub(meshId, meshIdObj.publicKey)
       
     } catch (error) {
       this._log('Auth message error', error)
@@ -527,6 +530,77 @@ export class Gate extends EventEmitter {
     } catch (error) {
       this._log('Federation message error', error)
     }
+  }
+
+  /** Registered remote hubs keyed by hub name for heartbeat */
+  private remoteHubHeartbeats = new Map<string, NodeJS.Timeout>()
+
+  /**
+   * Register a remote agent's hub with the federation server.
+   * Parses the meshId (name@hub#fingerprint), registers the agent under its own hub,
+   * and starts a periodic heartbeat to keep the federation entry alive.
+   */
+  private _registerRemoteHub(meshId: string, publicKey: string): void {
+    const parts = meshId.split('#')[0].split('@')
+    const agentName = parts[0]
+    const agentHub = parts[1] || 'unknown'
+
+    // Don't register local hub agents as remote
+    if (agentHub === this.config.hubName) return
+
+    this._log('Registering remote hub agent', { agentName, agentHub })
+
+    // Send agent_register to federation with the remote hub identity
+    const registerMsg = JSON.stringify({
+      type: 'agent_register',
+      name: agentName,
+      hub: agentHub,
+      capabilities: this._extractCapabilitiesFromMeshId(meshId),
+      seams: [],
+      timestamp: new Date().toISOString()
+    })
+
+    if (this.federationWs && this.federationWs.readyState === WebSocket.OPEN) {
+      this.federationWs.send(registerMsg)
+      this._log('Sent agent_register to federation', { agentName, agentHub })
+    }
+
+    // Start heartbeat for this remote hub (every 60s)
+    if (!this.remoteHubHeartbeats.has(agentHub)) {
+      const hb = setInterval(() => {
+        if (this.federationWs && this.federationWs.readyState === WebSocket.OPEN) {
+          const heartbeatMsg = JSON.stringify({
+            type: 'mesh_delta',
+            hub: agentHub,
+            agents: [{
+              name: agentName,
+              hub: agentHub,
+              capabilities: this._extractCapabilitiesFromMeshId(meshId),
+              seams: [],
+              lastSeen: new Date().toISOString(),
+              isLocal: false
+            }],
+            timestamp: new Date().toISOString()
+          })
+          this.federationWs.send(heartbeatMsg)
+        }
+      }, 60_000)
+      this.remoteHubHeartbeats.set(agentHub, hb)
+    }
+  }
+
+  /**
+   * Extract capabilities from meshId registration data.
+   * For now returns a generic set based on the agent name.
+   * TODO: Store capabilities in the atlas/registry for richer registration.
+   */
+  private _extractCapabilitiesFromMeshId(meshId: string): string[] {
+    const agentName = meshId.split('#')[0].split('@')[0]
+    // Default capabilities based on known agents
+    const knownCapabilities: Record<string, string[]> = {
+      'mamasan': ['message-context', 'ambient-awareness', 'operator-gateway', 'storage-indexing', 'skynet-integration'],
+    }
+    return knownCapabilities[agentName] || [agentName, 'task-execution']
   }
 
   private _startCleanupTimers(): void {

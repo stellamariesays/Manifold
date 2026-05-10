@@ -51,7 +51,19 @@ export class WebSocketHandler {
     }
 
     if (msgType === 'task_result') {
-      const result = (msg as any).result as TaskResult
+      // Support both §4.2 flat shape (id/status/body at top level) and legacy nested shape
+      const raw = msg as any
+      const result: TaskResult = raw.result
+        ? raw.result   // legacy: { type, result: { id, status, ... } }
+        : {            // flat:   { type, id, status, body, ... }
+            id: raw.id,
+            status: raw.status,
+            body: raw.body,
+            error: raw.error,
+            executed_by: raw.executed_by,
+            execution_ms: raw.execution_ms,
+            completed_at: raw.completed_at,
+          }
       this.deps.taskRouter.handleResult(result)
       return
     }
@@ -113,12 +125,31 @@ export class WebSocketHandler {
     // Phase 2 task messages from remote peers
     if (msgType === 'task_request') {
       const task = (msg as any).task as TaskRequest
+      // Drop task_requests that originated from our own hub — they already
+      // arrived via handleClientMessage; the peer is echoing them back.
+      const origin = task.origin ?? this.deps.hub
+      if (origin === this.deps.hub) {
+        console.log(`[WSHandler:${this.deps.hub}] Dropping self-origin task_request from peer ${peerHub}: ${task.id} (origin=${origin})`)
+        return
+      }
       this.deps.taskRouter.routeTask(task, null, peerHub)
       return
     }
 
     if (msgType === 'task_result') {
-      const result = (msg as any).result as TaskResult
+      // Support both §4.2 flat shape (id/status/body at top level) and legacy nested shape
+      const raw = msg as any
+      const result: TaskResult = raw.result
+        ? raw.result   // legacy: { type, result: { id, status, ... } }
+        : {            // flat:   { type, id, status, body, ... }
+            id: raw.id,
+            status: raw.status,
+            body: raw.body,
+            error: raw.error,
+            executed_by: raw.executed_by,
+            execution_ms: raw.execution_ms,
+            completed_at: raw.completed_at,
+          }
       this.deps.taskRouter.handleResult(result)
       return
     }
