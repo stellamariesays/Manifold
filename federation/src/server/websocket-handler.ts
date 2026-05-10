@@ -51,6 +51,7 @@ export class WebSocketHandler {
     }
 
     if (msgType === 'task_result') {
+      console.log(`[wire:client:task_result] raw_keys=${Object.keys(msg).join(',')} body=${(msg as any).body ? JSON.stringify((msg as any).body).substring(0,300) : 'MISSING'} status=${(msg as any).status}`)
       // Support both §4.2 flat shape (id/status/body at top level) and legacy nested shape
       const raw = msg as any
       const result: TaskResult = raw.result
@@ -137,6 +138,7 @@ export class WebSocketHandler {
     }
 
     if (msgType === 'task_result') {
+      console.log(`[wire:peer:task_result] raw_keys=${Object.keys(msg).join(',')} body=${(msg as any).body ? JSON.stringify((msg as any).body).substring(0,300) : 'MISSING'} status=${(msg as any).status}`)
       // Support both §4.2 flat shape (id/status/body at top level) and legacy nested shape
       const raw = msg as any
       const result: TaskResult = raw.result
