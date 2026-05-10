@@ -179,11 +179,13 @@ class AgentRunner:
 
         self.log(f"Executing: {agent_name} {command} (task {task.get('id', '?')[:8]}...)")
 
-        # Send ack
+        # Send ack with eta_ms for long-running tasks (extends server timeout)
+        eta_ms = int(timeout_ms * 1.2) if timeout_ms > 10_000 else 30_000
         self._send({
             "type": "task_ack",
             "task_id": task.get("id", ""),
             "queue_position": 0,
+            "eta_ms": eta_ms,
         })
 
         agent_type = agent_cfg.get("type", "script")
@@ -221,10 +223,23 @@ class AgentRunner:
                 except json.JSONDecodeError:
                     output = {"text": proc.stdout.strip()}
 
+                # Unpack envelope-format agent response into spec §4.2 shape:
+                #   agent returns:  {"body": {...}, "error": null}
+                #   wire wants:     {"body": {...}, "error": null} at top level
+                # Legacy agents that return bare {"text": ...} get wrapped.
+                body = output.get("body") if isinstance(output, dict) else None
+                error = output.get("error") if isinstance(output, dict) else None
+
+                if body is None:
+                    # Legacy agent — wrap entire output as body.text
+                    body = output
+                    error = None
+
                 self._send_result({
                     "id": task["id"],
                     "status": "success",
-                    "output": output,
+                    "body": body,
+                    "error": error,
                     "executed_by": f"{agent_name}@{self.hub}",
                     "execution_ms": execution_ms,
                     "completed_at": datetime.now(timezone.utc).isoformat(),

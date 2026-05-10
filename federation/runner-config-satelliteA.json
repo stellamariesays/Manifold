@@ -2,13 +2,13 @@
   "hub": "satelliteA",
   "wsUrl": "ws://localhost:8768",
   "restUrl": "http://localhost:8778",
-  "defaultTimeoutMs": 30000,
+  "defaultTimeoutMs": 60000,
   "agents": [
     {
       "name": "stella",
       "script": "agents/stella-agent.py",
       "cwd": "/home/stella/projects/Manifold",
-      "timeout_ms": 30000,
+      "timeout_ms": 60000,
       "maxConcurrency": 1
     },
     {
