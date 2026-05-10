@@ -28,6 +28,7 @@ export interface PendingTask {
   task: TaskRequest
   origin: 'local' | 'remote'
   originHub?: string      // hub that sent the task (for remote tasks, to send result back)
+  remoteTarget?: string   // hub this task was routed to (for remote-race dedup guard)
   sourceKey: string       // for backpressure tracking
   runnerId?: string       // local runner handling this task
   replyTo: WebSocket | null    // null if from remote peer
@@ -424,6 +425,7 @@ export class TaskRouter extends EventEmitter {
     const pending: PendingTask = {
       task,
       origin: 'local',
+      remoteTarget: targetHub,
       sourceKey,
       replyTo,
       createdAt: Date.now(),
@@ -450,6 +452,14 @@ export class TaskRouter extends EventEmitter {
 
     if (!pending || !pKey) {
       this.log(`Received result for unknown task: ${result.id.substring(0, 8)}...`)
+      return
+    }
+
+    // Race-condition guard: if this is a remotely-routed task and we get a
+    // "duplicate_task" rejection, it's a false reject from the remote hub's
+    // dual-firing. Ignore it — the real result will follow.
+    if ((pending as any).remoteTarget && result.status === 'rejected' && result.error?.code === 'duplicate_task') {
+      this.log(`Ignoring false duplicate_task reject for remote task ${result.id.substring(0, 8)}...`)
       return
     }
 
