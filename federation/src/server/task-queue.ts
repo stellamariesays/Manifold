@@ -212,7 +212,7 @@ export class TaskQueue extends EventEmitter {
         const result: TaskResult = {
           id: entry.task.id,
           status: 'timeout',
-          error: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)`,
+          error: { code: 'forward_expired', message: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)` },
           completed_at: new Date().toISOString(),
         }
         this.executor.sendResult(result, entry.replyTo)

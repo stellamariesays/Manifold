@@ -1,0 +1,8 @@
+{
+  "name": "echo",
+  "hub": "nexal",
+  "meshId": "echo@nexal#e24dce03",
+  "publicKey": "e24dce03f95ed15153f23928a372c605d1af8598bd35279d83d61a40d3469b9f",
+  "privateKey": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEINyHd3KgvYnmejXD+93NJT2p2aE9OJ1ivV1jKR77wlBC\n-----END PRIVATE KEY-----\n",
+  "created": "2026-05-10T17:58:30.360Z"
+}
