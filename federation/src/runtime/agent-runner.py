@@ -238,8 +238,7 @@ class AgentRunner:
                 self._send_result({
                     "id": task["id"],
                     "status": "success",
-                    "body": body,
-                    "error": error,
+                    "output": body,
                     "executed_by": f"{agent_name}@{self.hub}",
                     "execution_ms": execution_ms,
                     "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -384,10 +383,17 @@ class AgentRunner:
 
     def _send(self, msg: dict) -> None:
         if self.ws and self.ws.sock and self.ws.sock.connected:
-            self.ws.send(json.dumps(msg))
+            payload = json.dumps(msg)
+            self.log(f"[WS-SEND] type={msg.get('type','?')} len={len(payload)}")
+            self.ws.send(payload)
+        else:
+            self.log(f"[WS-SEND-FAIL] ws={self.ws is not None} sock={self.ws.sock is not None if self.ws else False} connected={self.ws.sock.connected if self.ws and self.ws.sock else False}")
 
     def _send_result(self, result: dict) -> None:
-        self._send({"type": "task_result", "result": result})
+        self.log(f"[RESULT] task={result.get('id','?')[:8]} status={result.get('status','?')}")
+        # Strip None values — the TS validation schema rejects null for optional string fields
+        cleaned = {k: v for k, v in result.items() if v is not None}
+        self._send({"type": "task_result", "result": cleaned})
 
     # ── Heartbeat ──────────────────────────────────────────────────────────
 
