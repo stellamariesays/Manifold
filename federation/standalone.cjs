@@ -12,7 +12,7 @@ const { MeshletManager } = require('./dist/server/meshlet-manager.js');
   meshletManager.start();
 
   const server = new ManifoldServer({
-    name: 'trillian',
+    name: 'satelliteA',
     federationPort: 8766,
     localPort: 8768,
     restPort: 8767,
@@ -22,7 +22,7 @@ const { MeshletManager } = require('./dist/server/meshlet-manager.js');
     debug: true,
   });
 
-  console.log('🚀 Starting Manifold Federation Server (Trillian) with Meshlet support');
+  console.log('🚀 Starting Manifold Federation Server (satelliteA) with Meshlet support');
 
   await server.start();
   console.log('✅ Federation running — meshlet workshop at http://localhost:8767/nexal/meshlet');

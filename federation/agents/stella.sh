@@ -6,6 +6,11 @@ COMMAND="${1:-ping}"
 ARGS="${2:-{}}"
 
 case "$COMMAND" in
+  envelope_v1)
+    # Delegate to persona-primed Python agent (pass args via stdin to avoid shell quoting hell)
+    # GROQ_API_KEY should be inherited from the runner environment
+    exec echo "$ARGS" | python3 /home/stella/projects/Manifold/agents/stella-agent.py envelope_v1 --stdin
+    ;;
   ping)
     echo '{"status":"ok","message":"pong","agent":"stella"}'
     ;;

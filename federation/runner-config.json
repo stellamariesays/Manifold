@@ -1,9 +1,9 @@
 {
   "hub": "trillian",
   "wsUrl": "ws://localhost:8768",
-  "defaultTimeoutMs": 15000,
+  "defaultTimeoutMs": 30000,
   "agents": [
-    { "name": "stella", "script": "./agents/stella.sh", "maxConcurrency": 3 },
+    { "name": "stella", "script": "./agents/stella.sh", "maxConcurrency": 3, "timeout_ms": 30000 },
     { "name": "braid", "script": "./agents/braid.sh", "maxConcurrency": 3 },
     { "name": "manifold", "script": "./agents/manifold.sh", "maxConcurrency": 3 },
     { "name": "infra", "script": "./agents/infra.sh", "maxConcurrency": 3 },

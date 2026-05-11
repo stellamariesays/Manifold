@@ -4,7 +4,8 @@
   "localPort": 8768,
   "restPort": 8778,
   "peers": [
-    "ws://100.70.172.34:8766"
+    "ws://100.70.172.34:8766",
+    "wss://nexal.network/ws/federation"
   ],
   "atlasPath": null,
   "debug": false
