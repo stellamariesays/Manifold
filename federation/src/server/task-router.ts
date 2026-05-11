@@ -206,7 +206,7 @@ export class TaskRouter extends EventEmitter {
         const result: TaskResult = {
           id: task.id,
           status: 'rejected',
-          error: `Hub ${sourceHub} is not allowed to target ${task.target}`,
+          error: { code: 'hub_not_allowed', message: `Hub ${sourceHub} is not allowed to target ${task.target}` },
           completed_at: new Date().toISOString(),
         }
         this.sendResult(result, replyTo)
@@ -221,7 +221,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Rate limit exceeded for ${rateKey}`,
+        error: { code: 'rate_limit', message: `Rate limit exceeded for ${rateKey}` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -236,7 +236,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: 'Duplicate task ID',
+        error: { code: 'duplicate_task', message: 'Duplicate task ID' },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo, sourceHub)
@@ -250,7 +250,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Too many tasks in flight (${totalInFlight}/${this.bp.maxPendingTotal})`,
+        error: { code: 'backpressure_total', message: `Too many tasks in flight (${totalInFlight}/${this.bp.maxPendingTotal})` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -268,7 +268,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'rejected',
-        error: `Source ${sourceKey} has too many pending tasks (${sourceCount}/${this.bp.maxPendingPerSource})`,
+        error: { code: 'backpressure_source', message: `Source ${sourceKey} has too many pending tasks (${sourceCount}/${this.bp.maxPendingPerSource})` },
         completed_at: new Date().toISOString(),
       }
       this.sendResult(result, replyTo)
@@ -301,7 +301,7 @@ export class TaskRouter extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Task queue full (${this.queue.length}/${this.bp.maxQueueSize})`,
+            error: { code: 'queue_full', message: `Task queue full (${this.queue.length}/${this.bp.maxQueueSize})` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -320,7 +320,7 @@ export class TaskRouter extends EventEmitter {
       const result: TaskResult = {
         id: task.id,
         status: 'not_found',
-        error: `No runner available for agent: ${agentName}`,
+        error: { code: 'runner_unavailable', message: `No runner available for agent: ${agentName}` },
         executed_by: `${agentName}@${this.hub}`,
         completed_at: new Date().toISOString(),
       }
@@ -387,7 +387,7 @@ export class TaskRouter extends EventEmitter {
           const result: TaskResult = {
             id: task.id,
             status: 'rejected',
-            error: `Hub ${targetHub} unreachable and forward queue full`,
+            error: { code: 'hub_unreachable', message: `Hub ${targetHub} unreachable and forward queue full` },
             completed_at: new Date().toISOString(),
           }
           this.sendResult(result, replyTo)
@@ -487,7 +487,7 @@ export class TaskRouter extends EventEmitter {
     const result: TaskResult = {
       id: taskId,
       status: 'timeout',
-      error: `Task timed out`,
+      error: { code: 'timeout', message: 'Task timed out' },
       completed_at: new Date().toISOString(),
     }
 
@@ -576,7 +576,16 @@ export class TaskRouter extends EventEmitter {
   }
 
   private sendResult(result: TaskResult, ws: WebSocket | null, originHub?: string): void {
-    const msg: TaskResultMessage = { type: 'task_result', result }
+    // v1.0 §4.2: flat top-level fields, no result wrapper
+    const msg: TaskResultMessage = {
+      type: 'task_result',
+      id: result.id,
+      status: result.status,
+      body: result.body,
+      error: result.error,
+      executed_by: result.executed_by,
+      completed_at: result.completed_at,
+    }
 
     if (ws && ws.readyState === 1) { // WebSocket.OPEN
       ws.send(JSON.stringify(msg))
@@ -774,7 +783,7 @@ export class TaskRouter extends EventEmitter {
         const result: TaskResult = {
           id: entry.task.id,
           status: 'timeout',
-          error: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)`,
+          error: { code: 'forward_expired', message: `Task expired in forward queue (${Math.round(elapsed / 1000)}s)` },
           completed_at: new Date().toISOString(),
         }
         this.sendResult(result, entry.replyTo)
