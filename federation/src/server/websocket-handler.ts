@@ -51,7 +51,16 @@ export class WebSocketHandler {
     }
 
     if (msgType === 'task_result') {
-      const result = (msg as any).result as TaskResult
+      // v1.0 §4.2: flat top-level fields — build TaskResult from message
+      const m = msg as Record<string, any>
+      const result: TaskResult = {
+        id: m.id ?? m.result?.id,
+        status: m.status ?? m.result?.status,
+        body: m.body ?? m.result?.body,
+        error: m.error ?? m.result?.error,
+        executed_by: m.executed_by ?? m.result?.executed_by,
+        completed_at: m.completed_at ?? m.result?.completed_at,
+      }
       this.deps.taskRouter.handleResult(result)
       return
     }
@@ -118,7 +127,16 @@ export class WebSocketHandler {
     }
 
     if (msgType === 'task_result') {
-      const result = (msg as any).result as TaskResult
+      // v1.0 §4.2: flat top-level fields — build TaskResult from message
+      const m = msg as Record<string, any>
+      const result: TaskResult = {
+        id: m.id ?? m.result?.id,
+        status: m.status ?? m.result?.status,
+        body: m.body ?? m.result?.body,
+        error: m.error ?? m.result?.error,
+        executed_by: m.executed_by ?? m.result?.executed_by,
+        completed_at: m.completed_at ?? m.result?.completed_at,
+      }
       this.deps.taskRouter.handleResult(result)
       return
     }

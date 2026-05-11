@@ -528,6 +528,8 @@ export class ManifoldServer extends EventEmitter {
 
   private _wirePeerRegistry(): void {
     this.peerRegistry.on('message', (msg: FederationMessage | Record<string, any>, _peer: PeerEntry) => {
+      const msgType = (msg as Record<string, any>).type
+      this.log(`[PEER-MSG] type=${msgType} from=${_peer.hub} keys=${Object.keys(msg).join(',')}`)
       this.wsHandler.handlePeerMessage(msg, _peer.hub)
     })
 
