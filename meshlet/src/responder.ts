@@ -39,7 +39,10 @@ export class MessageResponder {
       
       case 'agent_request':
         return this.handleAgentRequest(message)
-      
+
+      case 'task_request':
+        return this.handleTaskRequest(message)
+
       default:
         return this.handleGenericMessage(message)
     }
@@ -166,6 +169,72 @@ export class MessageResponder {
       verified: true,
       confidence: 0.95
     }
+  }
+
+  /**
+   * Handle gate-originated task_request messages (Phase 2 task execution protocol).
+   * Responds with a task_result in the §4.2 flat shape the gate/federation expects.
+   */
+  private async handleTaskRequest(message: MeshMessage): Promise<MeshMessage> {
+    const task = message.task
+    const startTime = Date.now()
+    let body: any
+    let status: 'success' | 'error' = 'success'
+    let errorMsg: string | undefined
+
+    try {
+      switch (task?.command) {
+        case 'ping':
+          body = { message: 'pong', agent: this.context.agentName }
+          break
+
+        case 'status':
+          body = {
+            agent: this.context.agentName,
+            hub: this.context.hubName,
+            capabilities: this.context.capabilities,
+            uptime: process.uptime(),
+          }
+          break
+
+        default:
+          if (this.config.llmMode === 'groq' && this.config.groqApiKey) {
+            body = await this.handleWithGroq(task)
+          } else {
+            body = {
+              message: `Meshlet ${this.context.agentName} handled task`,
+              agent: this.context.agentName,
+              command: task?.command,
+              args: task?.args,
+            }
+          }
+      }
+    } catch (err) {
+      status = 'error'
+      errorMsg = err instanceof Error ? err.message : 'Unknown error'
+    }
+
+    const result: any = {
+      id: task?.id,
+      status,
+      completed_at: new Date().toISOString(),
+      executed_by: `${this.context.agentName}@${this.context.hubName}`,
+      execution_ms: Date.now() - startTime,
+    }
+    if (status === 'success') {
+      result.body = body
+      result.output = body  // legacy compat
+    }
+    if (errorMsg) {
+      result.error = errorMsg
+    }
+
+    return {
+      type: 'task_result',
+      result,
+      timestamp: new Date().toISOString(),
+      sender: this.context.meshId,
+    } as MeshMessage
   }
 
   private async handleWithGroq(task: any): Promise<any> {

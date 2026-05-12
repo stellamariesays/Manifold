@@ -372,6 +372,10 @@ class AgentRunner:
             self.ws.send(json.dumps(msg))
 
     def _send_result(self, result: dict) -> None:
+        # Normalize: gate/federation expects 'body', but callers often set 'output'.
+        # Send both so either wire format works. See lessons-learned 2026-05-12.
+        if "output" in result and "body" not in result:
+            result["body"] = result["output"]
         self._send({"type": "task_result", "result": result})
 
     # ── Heartbeat ──────────────────────────────────────────────────────────
