@@ -9,6 +9,8 @@
     { "name": "infra", "script": "./agents/infra.sh", "maxConcurrency": 3 },
     { "name": "argue", "script": "./agents/argue.sh", "maxConcurrency": 3 },
     { "name": "solar-sites", "script": "./agents/solar-sites.sh", "maxConcurrency": 3 },
-    { "name": "wake", "script": "./agents/wake.sh", "maxConcurrency": 3 }
+    { "name": "wake", "script": "./agents/wake.sh", "maxConcurrency": 3 },
+    { "name": "btc-signals", "script": "./agents/btc-signals.sh", "maxConcurrency": 3 },
+    { "name": "btc-settlement", "script": "./agents/btc-settlement.sh", "maxConcurrency": 3 }
   ]
 }
