@@ -33,7 +33,7 @@ class TrustLedger:
             "executor": report.executor,
             "caller": report.caller,
             "grade": report.grade.name,
-            "grade_value": report.grade.value,
+            "grade_value": report.grade.numeric,
             "feedback": report.feedback,
             "timestamp": report.timestamp,
             "execution_time_ms": report.execution_time_ms,
