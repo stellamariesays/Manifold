@@ -95,6 +95,8 @@ class TaskRequest:
     timeout_ms: int = 30000              # 30s default
     origin: str = ""                      # origin hub name
     caller: str = ""                      # "agent@hub" identity
+    thread_id: str | None = None          # groups related tasks into a conversation
+    in_reply_to: str | None = None        # task_id this request follows up on
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -128,6 +130,8 @@ class TaskResult:
     error_code: ErrorCode | None = None   # machine-readable error code
     executed_by: str | None = None       # "agent@hub"
     execution_ms: int | None = None      # wall-clock time
+    thread_id: str | None = None         # echoes thread_id from request
+    in_reply_to: str | None = None       # echoes request id
     completed_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -160,6 +164,33 @@ class TaskAck:
     type: str = "task_ack"
     task_id: str = ""
     queue_position: int = 0             # 0 = executing immediately
+
+
+# ── Threading ───────────────────────────────────────────────────────────────────
+
+@dataclass
+class Thread:
+    """Groups related tasks into a conversation thread."""
+    thread_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    task_ids: list[str] = field(default_factory=list)
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+    def add(self, task_id: str) -> None:
+        if task_id not in self.task_ids:
+            self.task_ids.append(task_id)
+
+    @property
+    def length(self) -> int:
+        return len(self.task_ids)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Thread:
+        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
 
 # ── Wire Messages ───────────────────────────────────────────────────────────────

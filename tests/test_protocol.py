@@ -213,3 +213,81 @@ if __name__ == "__main__":
     test_error_code_all_statuses()
     test_parse_message()
     print("\n🟢 All protocol tests passed")
+
+
+# ── Multi-turn threading tests ─────────────────────────────────────────────────
+
+def test_task_request_with_thread():
+    """TaskRequest with thread_id and in_reply_to serializes/deserializes correctly."""
+    from manifold.protocol import TaskRequest
+    req = TaskRequest(
+        target="agent@hub",
+        command="followup",
+        thread_id="thread-abc",
+        in_reply_to="task-123",
+    )
+    d = req.to_dict()
+    assert d["thread_id"] == "thread-abc"
+    assert d["in_reply_to"] == "task-123"
+    req2 = TaskRequest.from_dict(d)
+    assert req2.thread_id == "thread-abc"
+    assert req2.in_reply_to == "task-123"
+    print("✅ TaskRequest threading fields")
+
+
+def test_task_request_without_thread():
+    """TaskRequest without threading fields defaults to None."""
+    from manifold.protocol import TaskRequest
+    req = TaskRequest(target="agent@hub", command="ping")
+    assert req.thread_id is None
+    assert req.in_reply_to is None
+    print("✅ TaskRequest no-thread defaults")
+
+
+def test_task_result_with_thread():
+    """TaskResult echoes thread_id from request."""
+    from manifold.protocol import TaskResult
+    res = TaskResult(id="task-456", thread_id="thread-abc", in_reply_to="task-123")
+    d = res.to_dict()
+    assert d["thread_id"] == "thread-abc"
+    assert d["in_reply_to"] == "task-123"
+    res2 = TaskResult.from_dict(d)
+    assert res2.thread_id == "thread-abc"
+    print("✅ TaskResult threading fields")
+
+
+def test_thread_dataclass():
+    """Thread groups task IDs and serializes."""
+    from manifold.protocol import Thread
+    t = Thread(thread_id="t-1", task_ids=["a", "b"])
+    t.add("c")
+    t.add("a")  # duplicate, ignored
+    assert t.length == 3
+    assert t.task_ids == ["a", "b", "c"]
+    d = t.to_dict()
+    t2 = Thread.from_dict(d)
+    assert t2.thread_id == "t-1"
+    assert t2.task_ids == ["a", "b", "c"]
+    print("✅ Thread dataclass")
+
+
+def test_conversation_thread():
+    """Simulate a multi-turn conversation."""
+    from manifold.protocol import TaskRequest, TaskResult, Thread, TaskStatus
+    thread = Thread(thread_id="conv-1")
+    # Turn 1
+    r1 = TaskRequest(target="analyst@hub", command="analyze", thread_id=thread.thread_id)
+    thread.add(r1.id)
+    res1 = TaskResult(id=r1.id, status=TaskStatus.SUCCESS, thread_id=thread.thread_id)
+    # Turn 2 — follow-up
+    r2 = TaskRequest(target="analyst@hub", command="deeper", thread_id=thread.thread_id, in_reply_to=r1.id)
+    thread.add(r2.id)
+    res2 = TaskResult(id=r2.id, status=TaskStatus.SUCCESS, thread_id=thread.thread_id, in_reply_to=r2.id)
+    assert thread.length == 2
+    assert r2.in_reply_to == r1.id
+    print("✅ Multi-turn conversation")
+
+
+if __name__ == "__main__":
+    # ... existing calls stay, add new ones
+    pass
