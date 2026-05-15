@@ -17,6 +17,7 @@ from .chart import Chart
 from .persist import PersistentStore
 from .trust import Claim, Grade, Stake, TrustLedger
 from .audience import AudienceRouter, AudienceReport, AudienceEntry
+from .dispatch import TaskDispatcher, DispatchResult, TaskPriority
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -692,6 +693,35 @@ class Agent:
             min_score=min_score,
             exclude_self=exclude_self,
             max_results=max_results,
+        )
+
+    def dispatcher(
+        self,
+        max_retries: int = 3,
+        min_score: float = 0.05,
+    ) -> TaskDispatcher:
+        """
+        Create a TaskDispatcher bound to this agent.
+
+        The dispatcher uses audience routing to find the best agent
+        for each task, with fallback and retry logic.
+
+        Args:
+            max_retries:  How many fallback agents to try.
+            min_score:    Minimum audience score for candidates.
+
+        Returns:
+            A TaskDispatcher ready to dispatch tasks.
+
+        Example::
+
+            disp = agent.dispatcher()
+            result = await disp.dispatch("solar-prediction", payload={"region": "eu"})
+        """
+        return TaskDispatcher(
+            agent=self,
+            max_retries=max_retries,
+            min_score=min_score,
         )
 
     def __repr__(self) -> str:
