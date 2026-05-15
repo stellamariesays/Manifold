@@ -16,6 +16,7 @@ from .atlas import Atlas
 from .chart import Chart
 from .persist import PersistentStore
 from .trust import Claim, Grade, Stake, TrustLedger
+from .audience import AudienceRouter, AudienceReport, AudienceEntry
 
 
 def _transport_from_uri(uri: str) -> Transport:
@@ -647,6 +648,51 @@ class Agent:
         from .sophia import sophia_scan, SophiaReading
         atlas = self.atlas(embedding_fn=embedding_fn)
         return sophia_scan(atlas)
+
+    def audience(
+        self,
+        topic: str,
+        min_score: float = 0.0,
+        exclude_self: bool = True,
+        max_results: int | None = None,
+        weights: dict[str, float] | None = None,
+    ) -> AudienceReport:
+        """
+        Route a topic to the best audience of agents on the mesh.
+
+        Blends capability match, focus proximity, trust history, fog gaps,
+        and topology closeness into a single ranked list. This is the
+        routing layer — *who should receive this message?*
+
+        Unlike ``seek()`` (which finds complementary peers by gap analysis),
+        audience routing optimises for *reach*: which agents are most likely
+        to benefit from or act on this topic right now.
+
+        Args:
+            topic:        What you're routing for.
+            min_score:    Drop agents below this score (0–1). Default 0.
+            exclude_self: Don't include yourself. Default True.
+            max_results:  Cap list length. None = unlimited.
+            weights:      Override signal weights. Keys: capability, focus,
+                          trust, fog_gap, topology. Auto-normalised.
+
+        Returns:
+            An AudienceReport with ranked entries.
+
+        Example::
+
+            report = agent.audience("solar-prediction", min_score=0.3)
+            print(report.summary())
+            for entry in report.entries:
+                await agent.publish(f"task:{entry.name}", {...})
+        """
+        router = AudienceRouter(self, weights=weights)
+        return router.route(
+            topic=topic,
+            min_score=min_score,
+            exclude_self=exclude_self,
+            max_results=max_results,
+        )
 
     def __repr__(self) -> str:
         caps = ", ".join(self._capabilities[:3])
