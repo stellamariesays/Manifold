@@ -49,24 +49,41 @@ class MeshHealthReport:
 
 
 def check_hub(url: str, timeout: float = 5.0) -> HubHealth:
-    """Check a single hub's health."""
+    """Check a single hub's health via WebSocket."""
     health = HubHealth(name=url.split("//")[1].split(":")[0], url=url)
     start = time.monotonic()
 
+    ws_url = url.replace("http://", "ws://").replace("https://", "wss://")
+    # Try local port (8768) which is the agent-facing WS
     try:
-        req = urllib.request.Request(f"{url}/api/status", method="GET")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode())
+        import websocket
+        ws = websocket.create_connection(ws_url, timeout=timeout)
+        # Send a status request
+        ws.send(json.dumps({"type": "status"}))
+        resp = ws.recv()
+        ws.close()
+        data = json.loads(resp)
+        health.latency_ms = (time.monotonic() - start) * 1000
+        health.reachable = True
+        health.agent_count = len(data.get("agents", []))
+        health.active_tasks = data.get("active_tasks", 0)
+        health.uptime_seconds = data.get("uptime_seconds", 0)
+        health.name = data.get("hub", health.name)
+    except ImportError:
+        # Fallback: try raw TCP connect to check if port is open
+        import socket
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(ws_url if "://" in ws_url else f"ws://{ws_url}")
+            host = parsed.hostname or "localhost"
+            port = parsed.port or 8768
+            sock = socket.create_connection((host, port), timeout=timeout)
+            sock.close()
             health.latency_ms = (time.monotonic() - start) * 1000
             health.reachable = True
-            health.agent_count = len(data.get("agents", []))
-            health.active_tasks = data.get("active_tasks", 0)
-            health.uptime_seconds = data.get("uptime_seconds", 0)
-            health.name = data.get("hub", health.name)
-    except urllib.error.ConnectionError:
-        health.error = "Connection refused"
-    except urllib.error.TimeoutError:
-        health.error = "Timeout"
+            health.name = f"{host}:{port}"
+        except Exception as e:
+            health.error = str(e)
     except Exception as e:
         health.error = str(e)
 
