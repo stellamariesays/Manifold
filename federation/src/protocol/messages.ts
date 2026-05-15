@@ -32,6 +32,12 @@ export type MessageType =
   | 'attestation_peer'
   // Phase 3: Detection-Coordination sync
   | 'detection_gossip'
+  // Bitcoin Settlement
+  | 'btc_stake_request'
+  | 'btc_stake_confirmed'
+  | 'btc_settlement_request'
+  | 'btc_settlement_result'
+  | 'btc_address_announce'
 
 export interface BaseMessage {
   type: MessageType
@@ -277,6 +283,113 @@ export interface ErrorMessage extends BaseMessage {
   code: string
   message: string
   requestId?: string
+}
+
+// ── Bitcoin Settlement (Phase 4) ───────────────────────────────────────────
+//
+// Real Bitcoin behind trust claims. Agents stake sats on tasks,
+// escrow holds them, settlement releases or burns based on grade.
+
+export interface BtcStakeRequestPayload {
+  /** Contract ID (8-char hex) */
+  contractId: string
+  /** Agent staking */
+  agentName: string
+  /** Task ID */
+  taskId: string
+  /** Amount in sats */
+  amountSats: number
+  /** Escrow address (bech32) */
+  escrowAddress: string
+  /** Hub managing the escrow */
+  escrowHub: string
+  /** Deadline for deposit (ISO timestamp) */
+  depositDeadline: string
+  /** Bitcoin network: "testnet" | "mainnet" */
+  network: string
+}
+
+export interface BtcStakeConfirmedPayload {
+  /** Contract ID */
+  contractId: string
+  /** Confirmation txid */
+  txid: string
+  /** Confirmations on chain */
+  confirmations: number
+  /** Amount actually received */
+  receivedSats: number
+  /** Hub confirming */
+  confirmedBy: string
+}
+
+export interface BtcSettlementRequestPayload {
+  /** Contract to settle */
+  contractId: string
+  /** Grade score 0.0–1.0 */
+  score: number
+  /** Agent that was graded */
+  agentName: string
+  /** Task ID */
+  taskId: string
+  /** Requester hub */
+  requestedBy: string
+  /** Requester identity */
+  requesterMeshId: string
+}
+
+export interface BtcSettlementResultPayload {
+  /** Contract that was settled */
+  contractId: string
+  /** "released" | "slashed" | "expired" */
+  outcome: 'released' | 'slashed' | 'expired'
+  /** Amount settled */
+  amountSats: number
+  /** Address sats went to */
+  settlementAddress: string
+  /** Settlement txid (if available) */
+  txid?: string
+  /** Hub that executed settlement */
+  settledBy: string
+  /** ISO timestamp */
+  settledAt: string
+}
+
+export interface BtcAddressAnnouncePayload {
+  /** Agent name */
+  agentName: string
+  /** Bitcoin address (bech32) */
+  address: string
+  /** Network */
+  network: string
+  /** Hub announcing */
+  hub: string
+  /** Proof of control (signed message) */
+  proofOfControl?: string
+}
+
+export interface BtcStakeRequestMessage extends BaseMessage {
+  type: 'btc_stake_request'
+  payload: BtcStakeRequestPayload
+}
+
+export interface BtcStakeConfirmedMessage extends BaseMessage {
+  type: 'btc_stake_confirmed'
+  payload: BtcStakeConfirmedPayload
+}
+
+export interface BtcSettlementRequestMessage extends BaseMessage {
+  type: 'btc_settlement_request'
+  payload: BtcSettlementRequestPayload
+}
+
+export interface BtcSettlementResultMessage extends BaseMessage {
+  type: 'btc_settlement_result'
+  payload: BtcSettlementResultPayload
+}
+
+export interface BtcAddressAnnounceMessage extends BaseMessage {
+  type: 'btc_address_announce'
+  payload: BtcAddressAnnouncePayload
 }
 
 // ── Union ──────────────────────────────────────────────────────────────────────
@@ -548,3 +661,9 @@ export type FederationMessage =
   | AttestationChallengeMessage
   | AttestationProofMessage
   | AttestationPeerMessage
+  // Bitcoin Settlement
+  | BtcStakeRequestMessage
+  | BtcStakeConfirmedMessage
+  | BtcSettlementRequestMessage
+  | BtcSettlementResultMessage
+  | BtcAddressAnnounceMessage
