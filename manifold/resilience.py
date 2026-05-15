@@ -2,121 +2,120 @@
 
 from __future__ import annotations
 
-import asyncio
-import enum
-import logging
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Sequence, Type
+from enum import Enum
+from typing import Any, Callable, TypeVar
 
-logger = logging.getLogger(__name__)
-
-
-class CircuitState(enum.Enum):
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
+T = TypeVar("T")
 
 
-class CircuitBreaker:
-    """Trip after *failure_threshold* failures; reset after *reset_timeout* seconds."""
+class CircuitState(str, Enum):
+    CLOSED = "closed"      # normal operation
+    OPEN = "open"          # blocking requests
+    HALF_OPEN = "half_open"  # allowing one probe
 
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        reset_timeout: float = 30.0,
-    ) -> None:
-        self.failure_threshold = failure_threshold
-        self.reset_timeout = reset_timeout
-        self.state: CircuitState = CircuitState.CLOSED
-        self.failure_count: int = 0
-        self.last_failure_time: float = 0.0
-        self._half_open_in_flight: bool = False
 
-    def allow_request(self) -> bool:
-        if self.state is CircuitState.CLOSED:
-            return True
-        if self.state is CircuitState.OPEN:
-            if time.monotonic() - self.last_failure_time >= self.reset_timeout:
-                self.state = CircuitState.HALF_OPEN
-                self._half_open_in_flight = False
-                # fall through to HALF_OPEN check
-            else:
-                return False
-        # HALF_OPEN: allow exactly one probe
-        if not self._half_open_in_flight:
-            self._half_open_in_flight = True
-            return True
-        return False
-
-    def record_success(self) -> None:
-        self.failure_count = 0
-        self.state = CircuitState.CLOSED
-        self._half_open_in_flight = False
-
-    def record_failure(self) -> None:
-        self.failure_count += 1
-        self.last_failure_time = time.monotonic()
-        if self.state is CircuitState.HALF_OPEN:
-            self.state = CircuitState.OPEN
-            self._half_open_in_flight = False
-        elif self.failure_count >= self.failure_threshold:
-            self.state = CircuitState.OPEN
-            self._half_open_in_flight = False
+class CircuitOpenError(Exception):
+    """Raised when circuit breaker is open."""
+    pass
 
 
 @dataclass
 class RetryPolicy:
     max_retries: int = 3
-    backoff_base: float = 1.0
-    max_backoff: float = 60.0
-    retryable_errors: Sequence[Type[Exception]] = field(
-        default_factory=lambda: (Exception,)
-    )
+    backoff_base: float = 0.5  # seconds
+    max_backoff: float = 30.0
+    retryable_exceptions: tuple[type[Exception], ...] = (Exception,)
 
     def backoff(self, attempt: int) -> float:
-        """Exponential backoff with full jitter."""
-        ceiling = min(self.backoff_base * (2 ** attempt), self.max_backoff)
-        return random.uniform(0, ceiling)
+        """Exponential backoff with jitter."""
+        delay = min(self.backoff_base * (2 ** attempt), self.max_backoff)
+        jitter = random.uniform(0, delay * 0.5)
+        return delay + jitter
 
 
-class CircuitOpenError(Exception):
-    """Raised when the circuit breaker rejects a request."""
+class CircuitBreaker:
+    """Trips after N failures, resets after timeout, probes in HALF_OPEN."""
+
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        reset_timeout: float = 60.0,
+    ):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.success_count = 0
+        self.last_failure_time: float = 0.0
+
+    def record_success(self) -> None:
+        self.success_count += 1
+        self.failure_count = 0
+        self.state = CircuitState.CLOSED
+
+    def record_failure(self) -> None:
+        self.failure_count += 1
+        self.last_failure_time = time.monotonic()
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+
+    def allow_request(self) -> bool:
+        if self.state == CircuitState.CLOSED:
+            return True
+        if self.state == CircuitState.OPEN:
+            elapsed = time.monotonic() - self.last_failure_time
+            if elapsed >= self.reset_timeout:
+                self.state = CircuitState.HALF_OPEN
+                return True
+            return False
+        # HALF_OPEN — allow one probe
+        return True
+
+    def trip(self) -> None:
+        """Manually trip the breaker."""
+        self.state = CircuitState.OPEN
+        self.last_failure_time = time.monotonic()
+
+    def reset(self) -> None:
+        """Manually reset the breaker."""
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
 
 
 class TaskResilience:
-    """Wraps task execution with retry + circuit breaker logic."""
+    """Wraps task execution with retry and circuit breaker."""
 
     def __init__(
         self,
         retry_policy: RetryPolicy | None = None,
         circuit_breaker: CircuitBreaker | None = None,
-    ) -> None:
+    ):
         self.retry_policy = retry_policy or RetryPolicy()
-        self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        self.circuit = circuit_breaker or CircuitBreaker()
 
-    async def execute(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        if not self.circuit_breaker.allow_request():
-            raise CircuitOpenError("circuit breaker is open")
+    def execute(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """Execute fn with retry and circuit breaker logic."""
+        if not self.circuit.allow_request():
+            raise CircuitOpenError("Circuit breaker is open")
 
-        last_exc: Exception | None = None
+        last_error: Exception | None = None
         for attempt in range(self.retry_policy.max_retries + 1):
             try:
                 result = fn(*args, **kwargs)
-                if asyncio.iscoroutine(result):
-                    result = await result
-                self.circuit_breaker.record_success()
+                self.circuit.record_success()
                 return result
-            except BaseException as exc:
-                if not isinstance(exc, tuple(self.retry_policy.retryable_errors)):
-                    raise
-                last_exc = exc
+            except self.retry_policy.retryable_exceptions as e:
+                last_error = e
+                self.circuit.record_failure()
+                if not self.circuit.allow_request():
+                    raise CircuitOpenError(
+                        f"Circuit opened after failure: {e}"
+                    ) from e
                 if attempt < self.retry_policy.max_retries:
                     delay = self.retry_policy.backoff(attempt)
-                    logger.debug("attempt %d failed, retrying in %.2fs: %s", attempt + 1, delay, exc)
-                    await asyncio.sleep(delay)
+                    time.sleep(delay)
 
-        # all retries exhausted
-        self.circuit_breaker.record_failure()
-        raise last_exc  # type: ignore[misc]
+        raise last_error  # type: ignore
