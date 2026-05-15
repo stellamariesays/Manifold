@@ -24,6 +24,36 @@ class TaskStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class ErrorCode(str, Enum):
+    """Standardized error codes for task execution failures.
+
+    These map to TaskStatus values and provide fine-grained failure reasons
+    in TaskResult.error_code.
+    """
+    # Execution errors
+    TIMEOUT = "timeout"                          # Agent did not respond within timeout_ms
+    CAPABILITY_NOT_FOUND = "capability-not-found"  # No agent provides the requested capability
+    TRUST_THRESHOLD_NOT_MET = "trust-threshold-not-met"  # Caller trust score too low
+    STAKE_FORFEITED = "stake-forfeited"          # Stake was slashed due to failure/misbehavior
+    AGENT_UNREACHABLE = "agent-unreachable"      # Target agent is offline or network-partitioned
+    RATE_LIMITED = "rate-limited"                # Caller exceeded rate limit
+
+    # General errors
+    INTERNAL_ERROR = "internal-error"            # Unexpected server/agent error
+    INVALID_REQUEST = "invalid-request"          # Malformed or invalid task request
+    CAPACITY_EXCEEDED = "capacity-exceeded"      # Agent at max concurrent tasks
+
+    @classmethod
+    def from_status(cls, status: TaskStatus) -> "ErrorCode | None":
+        """Map a TaskStatus to a default ErrorCode, if applicable."""
+        mapping = {
+            TaskStatus.TIMEOUT: cls.TIMEOUT,
+            TaskStatus.NOT_FOUND: cls.CAPABILITY_NOT_FOUND,
+            TaskStatus.REJECTED: cls.TRUST_THRESHOLD_NOT_MET,
+        }
+        return mapping.get(status)
+
+
 class MessageType(str, Enum):
     # Existing federation messages
     PEER_ANNOUNCE = "peer_announce"
@@ -95,6 +125,7 @@ class TaskResult:
     status: TaskStatus = TaskStatus.SUCCESS
     output: Any = None                   # agent-defined JSON structure
     error: str | None = None             # human-readable if status != success
+    error_code: ErrorCode | None = None   # machine-readable error code
     executed_by: str | None = None       # "agent@hub"
     execution_ms: int | None = None      # wall-clock time
     completed_at: str = field(
@@ -104,12 +135,18 @@ class TaskResult:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["status"] = self.status.value
+        if self.error_code is not None:
+            d["error_code"] = self.error_code.value
+        else:
+            d["error_code"] = None
         return d
 
     @classmethod
     def from_dict(cls, data: dict) -> TaskResult:
         if "status" in data and isinstance(data["status"], str):
             data["status"] = TaskStatus(data["status"])
+        if "error_code" in data and isinstance(data["error_code"], str):
+            data["error_code"] = ErrorCode(data["error_code"])
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
     @property

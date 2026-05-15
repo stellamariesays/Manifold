@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from manifold.protocol import (
-    TaskRequest, TaskResult, TaskStatus,
+    TaskRequest, TaskResult, TaskStatus, ErrorCode,
     TaskRequestMessage, TaskResultMessage, parse_message,
 )
 
@@ -119,6 +119,71 @@ def test_json_typescript_compatible():
     print("✅ JSON TypeScript compatible")
 
 
+def test_error_codes_enum():
+    """All defined error codes have string values."""
+    assert ErrorCode.TIMEOUT.value == "timeout"
+    assert ErrorCode.CAPABILITY_NOT_FOUND.value == "capability-not-found"
+    assert ErrorCode.TRUST_THRESHOLD_NOT_MET.value == "trust-threshold-not-met"
+    assert ErrorCode.STAKE_FORFEITED.value == "stake-forfeited"
+    assert ErrorCode.AGENT_UNREACHABLE.value == "agent-unreachable"
+    assert ErrorCode.RATE_LIMITED.value == "rate-limited"
+    assert ErrorCode.INTERNAL_ERROR.value == "internal-error"
+    assert ErrorCode.INVALID_REQUEST.value == "invalid-request"
+    assert ErrorCode.CAPACITY_EXCEEDED.value == "capacity-exceeded"
+    print("✅ ErrorCode enum values")
+
+
+def test_error_code_from_status():
+    """ErrorCode.from_status maps TaskStatus to default ErrorCode."""
+    assert ErrorCode.from_status(TaskStatus.TIMEOUT) == ErrorCode.TIMEOUT
+    assert ErrorCode.from_status(TaskStatus.NOT_FOUND) == ErrorCode.CAPABILITY_NOT_FOUND
+    assert ErrorCode.from_status(TaskStatus.REJECTED) == ErrorCode.TRUST_THRESHOLD_NOT_MET
+    assert ErrorCode.from_status(TaskStatus.SUCCESS) is None
+    print("✅ ErrorCode.from_status mapping")
+
+
+def test_task_result_with_error_code():
+    """TaskResult with error_code roundtrips correctly."""
+    result = TaskResult(
+        id="err-001",
+        status=TaskStatus.TIMEOUT,
+        error="Agent did not respond within 30000ms",
+        error_code=ErrorCode.TIMEOUT,
+    )
+    d = result.to_dict()
+    assert d["error_code"] == "timeout"
+    result2 = TaskResult.from_dict(d)
+    assert result2.error_code == ErrorCode.TIMEOUT
+    assert result2.ok is False
+    print("✅ TaskResult error_code roundtrip")
+
+
+def test_task_result_no_error_code():
+    """TaskResult without error_code serializes to None."""
+    result = TaskResult(id="ok-001", status=TaskStatus.SUCCESS, output={"done": True})
+    d = result.to_dict()
+    assert d["error_code"] is None
+    result2 = TaskResult.from_dict(d)
+    assert result2.error_code is None
+    print("✅ TaskResult no error_code roundtrip")
+
+
+def test_error_code_all_statuses():
+    """Each error code can be used with a matching TaskStatus."""
+    cases = [
+        (TaskStatus.TIMEOUT, ErrorCode.TIMEOUT),
+        (TaskStatus.ERROR, ErrorCode.INTERNAL_ERROR),
+        (TaskStatus.NOT_FOUND, ErrorCode.CAPABILITY_NOT_FOUND),
+        (TaskStatus.REJECTED, ErrorCode.RATE_LIMITED),
+    ]
+    for status, code in cases:
+        result = TaskResult(id="x", status=status, error_code=code)
+        d = result.to_dict()
+        r2 = TaskResult.from_dict(d)
+        assert r2.error_code == code
+    print("✅ Error codes with various statuses")
+
+
 def test_parse_message():
     """parse_message handles all types."""
     req_msg = {"type": "task_request", "task": {"target": "x@y", "command": "test"}}
@@ -141,5 +206,10 @@ if __name__ == "__main__":
     test_error_result()
     test_wire_message()
     test_json_typescript_compatible()
+    test_error_codes_enum()
+    test_error_code_from_status()
+    test_task_result_with_error_code()
+    test_task_result_no_error_code()
+    test_error_code_all_statuses()
     test_parse_message()
     print("\n🟢 All protocol tests passed")
