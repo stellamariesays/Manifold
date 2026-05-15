@@ -7,7 +7,7 @@ from pathlib import Path
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from core.protocol import (
+from manifold.protocol import (
     TaskRequest, TaskResult, TaskStatus,
     TaskRequestMessage, TaskResultMessage, parse_message,
 )

@@ -19,7 +19,7 @@ from bitcoin.oracle import BitcoinOracle, is_valid_address
 from bitcoin.settlement import SettlementEngine, SettlementStatus
 from bitcoin.agent_bitcoin import BitcoinManifoldLayer
 
-from core.trust import Claim, Grade, TrustLedger
+from manifold.trust import Claim, Grade, TrustLedger
 
 
 # ─── Wallet tests ─────────────────────────────────────────────────────────────

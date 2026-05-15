@@ -33,7 +33,7 @@ except ImportError:
 from bitcoin.agent_bitcoin import BitcoinManifoldLayer
 from bitcoin.wallet import generate_federation_seed
 from bitcoin.settlement import SettlementStatus
-from core.trust import TrustLedger, Grade
+from manifold.trust import TrustLedger, Grade
 
 logging.basicConfig(
     level=logging.INFO,
@@ -173,7 +173,7 @@ class BtcFederationBridge:
         if agent not in self.layer.wallet.agents:
             self.layer.register_agent(agent)
 
-        from core.trust import Claim
+        from manifold.trust import Claim
         claim = Claim(agent=agent, task=task, domain="btc-settlement")
         contract = self.layer.stake_claim(claim, amount_sats=int(amount), hub=self.hub)
 

@@ -24,12 +24,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
-from core.atlas import Atlas
-from core.sophia import SophiaReading, SophiaRegion, sophia_scan
-from core.bottleneck import BottleneckReading, bottleneck_topology
-from core.bleed import BleedReading, bleed_rate
-from core.glossolalia import GlossolaliaReading, GlossolaliaProbe
-from core.chart import _tokenize
+from manifold.atlas import Atlas
+from manifold.sophia import SophiaReading, SophiaRegion, sophia_scan
+from manifold.bottleneck import BottleneckReading, bottleneck_topology
+from manifold.bleed import BleedReading, bleed_rate
+from manifold.glossolalia import GlossolaliaReading, GlossolaliaProbe
+from manifold.chart import _tokenize
 
 
 # ── Snapshot dataclass ─────────────────────────────────────────────────────

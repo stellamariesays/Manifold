@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bitcoin.agent_bitcoin import BitcoinManifoldLayer, quickstart
 from bitcoin.wallet import generate_federation_seed
 from bitcoin.settlement import SettlementStatus
-from core.trust import TrustLedger, Grade
+from manifold.trust import TrustLedger, Grade
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
@@ -128,7 +128,7 @@ def cmd_stake(args: dict):
     if not agent or not task or not amount:
         return {"error": "provide agent_name, task_id, amount_sats"}
 
-    from core.trust import Claim
+    from manifold.trust import Claim
     claim = Claim(agent=agent, task=task, domain="btc-settlement")
 
     try:

@@ -30,8 +30,8 @@ import os
 # Add parent to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.trust import Claim, Grade, Stake, TrustLedger
-from core.protocol import TaskRequest, TaskResult, TaskStatus
+from manifold.trust import Claim, Grade, Stake, TrustLedger
+from manifold.protocol import TaskRequest, TaskResult, TaskStatus
 
 from .oracle import BitcoinOracle
 from .wallet import FederationWallet, AgentWallet, generate_federation_seed, burn_address

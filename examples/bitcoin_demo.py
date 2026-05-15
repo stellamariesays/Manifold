@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from bitcoin.agent_bitcoin import BitcoinManifoldLayer, quickstart
 from bitcoin.wallet import generate_federation_seed, burn_address
 from bitcoin.settlement import SettlementStatus
-from core.trust import Claim, Grade, TrustLedger
+from manifold.trust import Claim, Grade, TrustLedger
 
 
 def main():

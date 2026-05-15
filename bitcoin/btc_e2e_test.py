@@ -22,7 +22,7 @@ from bitcoin.agent_bitcoin import BitcoinManifoldLayer
 from bitcoin.wallet import generate_federation_seed
 from bitcoin.settlement import SettlementStatus
 from bitcoin.btc_federation_bridge import BtcFederationBridge
-from core.trust import TrustLedger, Claim, Grade, Stake
+from manifold.trust import TrustLedger, Claim, Grade, Stake
 
 
 # ── Simulated Hub ─────────────────────────────────────────────────────────────

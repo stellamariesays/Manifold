@@ -5,10 +5,10 @@ Topology is epistemology. Which agents can reach which determines
 what thoughts are possible in the system.
 
 Architecture:
-- core/          Pure mesh computation (agents, capabilities, transitions)
+- manifold/     Core mesh computation (agents, capabilities, transitions)
 - visualization/ Rendering outputs (MRI scans, trust diagrams)
 - federation/    Networking infrastructure (TypeScript/WebSocket)
-- bridge/        Cross-language integration
+- bridge/        Cross-language integration (within manifold.bridge)
 
 Quick start::
 
@@ -23,10 +23,6 @@ Quick start::
     await agent.think("multi-star-prediction")
 """
 
-# Re-export core primitives for backward compatibility.
-# Use relative imports so this package is self-contained when installed;
-# absolute `from core import` fails in environments where the top-level
-# `core` directory is not on sys.path (e.g. after `pip install -e .`).
 from .agent import Agent
 from .registry import AgentRef
 from .blindspot import BlindSpot
@@ -39,12 +35,15 @@ from .bottleneck import BottleneckReading, bottleneck_topology
 from .teacup import Teacup, TeacupStore
 from .fog import FogMap, FogDelta, FogSeam, Gap, GapKind
 from .glossolalia import GlossolaliaReading, GlossolaliaProbe
+from .topology import *
+from .transition import *
+from .semantic import *
 from .store import PersistentStore
 from .persist import *
+from .trust import TrustLedger, Claim, Grade, Stake
 
 # Re-export visualization for backward compatibility
 from visualization import (
-    Claim, Grade, Stake, TrustLedger,
     MRISnapshot, capture, generate_html,
 )
 
@@ -61,4 +60,4 @@ __all__ = [
     "MRISnapshot", "capture", "generate_html",
     "PersistentStore",
 ]
-__version__ = "0.10.0"  # Bumped for architecture change
+__version__ = "0.11.0"
