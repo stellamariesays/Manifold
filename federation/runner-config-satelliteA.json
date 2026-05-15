@@ -80,6 +80,13 @@
       "cwd": "/home/stella/projects/Manifold",
       "timeout_ms": 30000,
       "maxConcurrency": 1
+    },
+    {
+      "name": "btc-settlement",
+      "script": "agents/btc-settlement-agent.py",
+      "cwd": "/home/stella/projects/Manifold",
+      "timeout_ms": 30000,
+      "maxConcurrency": 1
     }
   ]
 }
