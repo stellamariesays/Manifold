@@ -2631,6 +2631,247 @@ def load_subscription_pack(
     return specs
 
 
+# ─── Trust & Verification Pack ──────────────────────────────────────────
+
+
+def _trust_grade(payload: dict[str, Any]) -> dict[str, Any]:
+    """File a grade for an agent after task completion."""
+    from .grading import Grade, GradeReport
+    ledger = payload.get("__ledger__")
+    executor = payload.get("executor", "")
+    caller = payload.get("caller", "unknown")
+    task_id = payload.get("task_id", "")
+    grade_str = payload.get("grade", "C")
+    feedback = payload.get("feedback", "")
+    exec_ms = payload.get("execution_time_ms")
+
+    try:
+        grade = Grade(grade_str)
+    except ValueError:
+        return {"ok": False, "error": f"Invalid grade: {grade_str}. Use A/B/C/D/F."}
+
+    report = GradeReport(
+        task_id=task_id,
+        executor=executor,
+        caller=caller,
+        grade=grade,
+        feedback=feedback,
+        execution_time_ms=exec_ms,
+    )
+    score = ledger.record_grade(report)
+    return {
+        "ok": True,
+        "executor": executor,
+        "grade": grade_str,
+        "new_score": round(score, 4),
+        "grade_id": report.id,
+    }
+
+
+def _trust_score(payload: dict[str, Any]) -> dict[str, Any]:
+    """Query trust score for a specific agent."""
+    ledger = payload.get("__ledger__")
+    agent = payload.get("agent", "")
+    score = ledger.get_agent_trust(agent)
+    reliable = ledger.scorer.is_reliable(agent)
+    count = ledger.scorer._grade_counts.get(agent, 0)
+    return {
+        "ok": True,
+        "agent": agent,
+        "trust_score": score,
+        "reliable": reliable,
+        "grade_count": count,
+    }
+
+
+def _trust_leaderboard(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get the top trusted agents."""
+    ledger = payload.get("__ledger__")
+    limit = payload.get("limit", 10)
+    top = ledger.get_top_agents(n=limit)
+    return {
+        "ok": True,
+        "leaderboard": [{"agent": a, "score": round(s, 4)} for a, s in top],
+        "count": len(top),
+    }
+
+
+def _trust_history(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get grade history for a specific agent."""
+    ledger = payload.get("__ledger__")
+    agent = payload.get("agent", "")
+    limit = payload.get("limit", 20)
+    history = ledger.get_grade_history(agent)
+    recent = history[-limit:]
+    return {
+        "ok": True,
+        "agent": agent,
+        "grades": [g.to_dict() for g in recent],
+        "total": len(history),
+    }
+
+
+def _trust_recent(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get recent grades across all agents."""
+    ledger = payload.get("__ledger__")
+    limit = payload.get("limit", 10)
+    recent = ledger.get_recent_grades(n=limit)
+    return {
+        "ok": True,
+        "grades": [g.to_dict() for g in recent],
+        "count": len(recent),
+    }
+
+
+def _trust_verify(payload: dict[str, Any]) -> dict[str, Any]:
+    """Verify if an agent meets a minimum trust threshold."""
+    ledger = payload.get("__ledger__")
+    agent = payload.get("agent", "")
+    min_score = payload.get("min_score", 2.0)
+    score = ledger.get_agent_trust(agent)
+    raw = ledger.scorer.get_raw_score(agent)
+    reliable = ledger.scorer.is_reliable(agent)
+    meets = (score is not None) and (score >= min_score)
+    return {
+        "ok": True,
+        "agent": agent,
+        "trust_score": score,
+        "raw_score": round(raw, 4) if raw is not None else None,
+        "reliable": reliable,
+        "meets_threshold": meets,
+        "threshold": min_score,
+    }
+
+
+def _trust_compare(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compare trust scores between two agents."""
+    ledger = payload.get("__ledger__")
+    agent_a = payload.get("agent_a", "")
+    agent_b = payload.get("agent_b", "")
+    score_a = ledger.get_agent_trust(agent_a)
+    score_b = ledger.get_agent_trust(agent_b)
+    if score_a is not None and score_b is not None:
+        winner = agent_a if score_a >= score_b else agent_b
+    elif score_a is not None:
+        winner = agent_a
+    elif score_b is not None:
+        winner = agent_b
+    else:
+        winner = None
+    return {
+        "ok": True,
+        "agent_a": agent_a,
+        "score_a": score_a,
+        "agent_b": agent_b,
+        "score_b": score_b,
+        "recommended": winner,
+    }
+
+
+def load_trust_pack(
+    builder: CapabilityBuilder,
+    ledger: Any | None = None,
+) -> list[CapSpec]:
+    """Load trust and verification capabilities.
+
+    Provides trust primitives for grade filing, score queries, leaderboards,
+    verification, and comparison — all backed by the TrustLedger:
+    - **trust-grade**: File a grade (A–F) for an agent after task completion
+    - **trust-score**: Query an agent's current EMA trust score
+    - **trust-leaderboard**: Get top-N agents ranked by trust
+    - **trust-history**: Get grade history for a specific agent
+    - **trust-recent**: Get recent grades across all agents
+    - **trust-verify**: Check if an agent meets a minimum trust threshold
+    - **trust-compare**: Compare trust scores between two agents
+
+    Args:
+        builder: The capability builder to register with.
+        ledger:  A TrustLedger instance. Created in-memory if not provided.
+    """
+    if ledger is None:
+        from .grading import TrustLedger as GradingLedger
+        ledger = GradingLedger(path="trust_pack_ledger.json")
+
+    def _wrap(handler):
+        async def _wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+            return handler({**payload, "__ledger__": ledger})
+        return _wrapped
+
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="trust-grade",
+        handler=_wrap(_trust_grade),
+        version="1.0.0",
+        description="File a grade (A–F) for an agent after task completion",
+        inputs=["executor", "grade"],
+        outputs=["ok", "executor", "grade", "new_score", "grade_id"],
+        tags=["trust", "grading", "verification"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-score",
+        handler=_wrap(_trust_score),
+        version="1.0.0",
+        description="Query an agent's current EMA trust score",
+        inputs=["agent"],
+        outputs=["ok", "agent", "trust_score", "reliable", "grade_count"],
+        tags=["trust", "score", "query"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-leaderboard",
+        handler=_wrap(_trust_leaderboard),
+        version="1.0.0",
+        description="Get top-N agents ranked by trust score",
+        inputs=[],
+        outputs=["ok", "leaderboard", "count"],
+        tags=["trust", "leaderboard", "ranking"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-history",
+        handler=_wrap(_trust_history),
+        version="1.0.0",
+        description="Get grade history for a specific agent",
+        inputs=["agent"],
+        outputs=["ok", "agent", "grades", "total"],
+        tags=["trust", "history", "audit"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-recent",
+        handler=_wrap(_trust_recent),
+        version="1.0.0",
+        description="Get recent grades across all agents",
+        inputs=[],
+        outputs=["ok", "grades", "count"],
+        tags=["trust", "recent", "audit"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-verify",
+        handler=_wrap(_trust_verify),
+        version="1.0.0",
+        description="Check if an agent meets a minimum trust threshold",
+        inputs=["agent"],
+        outputs=["ok", "agent", "trust_score", "raw_score", "reliable", "meets_threshold", "threshold"],
+        tags=["trust", "verification", "threshold"],
+    ))
+
+    specs.append(builder.register(
+        name="trust-compare",
+        handler=_wrap(_trust_compare),
+        version="1.0.0",
+        description="Compare trust scores between two agents and recommend one",
+        inputs=["agent_a", "agent_b"],
+        outputs=["ok", "agent_a", "score_a", "agent_b", "score_b", "recommended"],
+        tags=["trust", "comparison", "recommendation"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -2649,6 +2890,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_tool_use_pack(builder))
     specs.extend(load_collaboration_pack(builder, agent))
     specs.extend(load_subscription_pack(builder))
+    specs.extend(load_trust_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
