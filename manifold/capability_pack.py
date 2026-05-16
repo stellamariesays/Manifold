@@ -3469,6 +3469,299 @@ def load_audit_pack(
     return specs
 
 
+# ─── Deliberation Pack ───────────────────────────────────────────────────
+
+async def _deliberation_propose(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a structured proposal for agent deliberation."""
+    topic = payload.get("topic", "")
+    proposal_text = payload.get("proposal", "")
+    proposer = payload.get("proposer", "unknown")
+    options = payload.get("options", [])
+    deadline_s = payload.get("deadline_s", 3600)
+
+    if not topic:
+        raise ValueError("topic is required")
+
+    proposal_id = str(uuid.uuid4())[:8]
+    now = time.time()
+
+    proposal = {
+        "id": proposal_id,
+        "topic": topic,
+        "proposal": proposal_text,
+        "proposer": proposer,
+        "options": options or ["support", "oppose", "abstain"],
+        "created_at": now,
+        "deadline": now + deadline_s,
+        "status": "open",
+        "votes": {},
+        "arguments": [],
+    }
+
+    return {
+        "ok": True,
+        "proposal_id": proposal_id,
+        "proposal": proposal,
+        "status": "open",
+    }
+
+
+async def _deliberation_argue(payload: dict[str, Any]) -> dict[str, Any]:
+    """Submit a structured argument (for/against) on a proposal."""
+    proposal_id = payload.get("proposal_id", "")
+    position = payload.get("position", "neutral")  # support | oppose | neutral
+    argument = payload.get("argument", "")
+    agent_name = payload.get("agent", "unknown")
+    evidence = payload.get("evidence", [])
+    confidence = payload.get("confidence", 0.5)
+
+    if not proposal_id or not argument:
+        raise ValueError("proposal_id and argument are required")
+
+    arg_entry = {
+        "id": str(uuid.uuid4())[:8],
+        "agent": agent_name,
+        "position": position,
+        "argument": argument,
+        "evidence": evidence,
+        "confidence": max(0.0, min(1.0, confidence)),
+        "timestamp": time.time(),
+    }
+
+    # Score argument quality heuristically
+    length_score = min(len(argument.split()) / 50.0, 1.0) * 0.3
+    evidence_score = min(len(evidence) / 3.0, 1.0) * 0.3
+    confidence_score = abs(confidence - 0.5) * 2 * 0.2  # extreme positions score higher
+    has_structure = 0.2 if any(kw in argument.lower() for kw in ["because", "therefore", "however", "evidence", "data"]) else 0.0
+    quality = min(length_score + evidence_score + confidence_score + has_structure, 1.0)
+
+    arg_entry["quality_score"] = round(quality, 3)
+
+    return {
+        "ok": True,
+        "argument_id": arg_entry["id"],
+        "position": position,
+        "quality_score": round(quality, 3),
+        "argument": arg_entry,
+    }
+
+
+async def _deliberation_vote(payload: dict[str, Any]) -> dict[str, Any]:
+    """Cast a vote on a proposal with optional weighting."""
+    proposal_id = payload.get("proposal_id", "")
+    agent_name = payload.get("agent", "unknown")
+    vote = payload.get("vote", "abstain")
+    weight = payload.get("weight", 1.0)
+    rationale = payload.get("rationale", "")
+
+    if not proposal_id:
+        raise ValueError("proposal_id is required")
+
+    valid_votes = ["support", "oppose", "abstain"]
+    if vote not in valid_votes:
+        raise ValueError(f"vote must be one of {valid_votes}")
+
+    vote_entry = {
+        "agent": agent_name,
+        "vote": vote,
+        "weight": max(0.0, weight),
+        "rationale": rationale,
+        "timestamp": time.time(),
+    }
+
+    # Tally (simulated — real impl would update proposal state)
+    tally = {
+        "support": weight if vote == "support" else 0.0,
+        "oppose": weight if vote == "oppose" else 0.0,
+        "abstain": weight if vote == "abstain" else 0.0,
+    }
+
+    return {
+        "ok": True,
+        "vote": vote_entry,
+        "tally": tally,
+    }
+
+
+async def _deliberation_consensus(payload: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate consensus level from a set of positions."""
+    positions = payload.get("positions", [])
+    threshold = payload.get("threshold", 0.6)
+
+    if not positions:
+        raise ValueError("positions list is required")
+
+    total = len(positions)
+    position_counts: dict[str, int] = {}
+    for p in positions:
+        pos = p.get("position", "neutral")
+        position_counts[pos] = position_counts.get(pos, 0) + 1
+
+    if not position_counts:
+        return {"ok": True, "consensus": False, "agreement": 0.0, "dominant": None}
+
+    dominant = max(position_counts, key=position_counts.get)  # type: ignore[arg-type]
+    agreement = position_counts[dominant] / total
+    has_consensus = agreement >= threshold
+
+    # Compute entropy (lower = more agreement)
+    entropy = 0.0
+    for count in position_counts.values():
+        if count > 0:
+            p = count / total
+            entropy -= p * math.log2(p) if p > 0 else 0.0
+    max_entropy = math.log2(max(len(position_counts), 1))
+    normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0.0
+
+    return {
+        "ok": True,
+        "consensus": has_consensus,
+        "agreement": round(agreement, 3),
+        "dominant": dominant,
+        "threshold": threshold,
+        "position_counts": position_counts,
+        "entropy": round(normalized_entropy, 3),
+        "total": total,
+    }
+
+
+async def _deliberation_quorum(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check if a quorum of agents have participated."""
+    participants = payload.get("participants", [])
+    total_eligible = payload.get("total_eligible", 10)
+    quorum_fraction = payload.get("quorum_fraction", 0.5)
+
+    count = len(set(participants))
+    quorum_size = math.ceil(total_eligible * quorum_fraction)
+    met = count >= quorum_size
+    participation_rate = count / max(total_eligible, 1)
+
+    return {
+        "ok": True,
+        "quorum_met": met,
+        "participants": count,
+        "quorum_size": quorum_size,
+        "total_eligible": total_eligible,
+        "participation_rate": round(participation_rate, 3),
+        "deficit": max(0, quorum_size - count),
+    }
+
+
+async def _deliberation_synthesize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Synthesize arguments into a collective position."""
+    arguments = payload.get("arguments", [])
+
+    if not arguments:
+        raise ValueError("arguments list is required")
+
+    # Group by position
+    by_position: dict[str, list[dict]] = {}
+    for arg in arguments:
+        pos = arg.get("position", "neutral")
+        by_position.setdefault(pos, []).append(arg)
+
+    # Weight by quality scores
+    weighted_positions: dict[str, float] = {}
+    for pos, args in by_position.items():
+        total_quality = sum(a.get("quality_score", 0.5) for a in args)
+        avg_confidence = sum(a.get("confidence", 0.5) for a in args) / max(len(args), 1)
+        weighted_positions[pos] = total_quality * avg_confidence
+
+    total_weight = sum(weighted_positions.values()) or 1.0
+    normalized = {k: round(v / total_weight, 3) for k, v in weighted_positions.items()}
+
+    # Collect strongest arguments per position
+    strongest: dict[str, list[str]] = {}
+    for pos, args in by_position.items():
+        top = sorted(args, key=lambda a: a.get("quality_score", 0), reverse=True)[:3]
+        strongest[pos] = [a.get("argument", "")[:120] for a in top]
+
+    # Collective position = highest weighted
+    collective = max(normalized, key=normalized.get) if normalized else "neutral"  # type: ignore[arg-type]
+
+    return {
+        "ok": True,
+        "collective_position": collective,
+        "weighted_positions": normalized,
+        "strongest_arguments": strongest,
+        "argument_counts": {k: len(v) for k, v in by_position.items()},
+        "total_arguments": len(arguments),
+    }
+
+
+def load_deliberation_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register multi-agent deliberation capabilities.
+
+    Caps: propose, argue, vote, consensus, quorum, synthesize.
+    Enables structured multi-agent deliberation: proposals, arguments,
+    weighted voting, consensus detection, quorum checks, and synthesis
+    of collective positions from diverse agent arguments.
+    """
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="deliberation-propose",
+        handler=_deliberation_propose,
+        version="1.0.0",
+        description="Create a structured proposal for agent deliberation",
+        inputs=["topic"],
+        outputs=["ok", "proposal_id", "status"],
+        tags=["deliberation", "governance", "proposal"],
+    ))
+
+    specs.append(builder.register(
+        name="deliberation-argue",
+        handler=_deliberation_argue,
+        version="1.0.0",
+        description="Submit a structured argument for/against a proposal with quality scoring",
+        inputs=["proposal_id", "argument"],
+        outputs=["ok", "argument_id", "position", "quality_score"],
+        tags=["deliberation", "argument", "debate"],
+    ))
+
+    specs.append(builder.register(
+        name="deliberation-vote",
+        handler=_deliberation_vote,
+        version="1.0.0",
+        description="Cast a weighted vote on a proposal",
+        inputs=["proposal_id", "vote"],
+        outputs=["ok", "vote", "tally"],
+        tags=["deliberation", "voting", "governance"],
+    ))
+
+    specs.append(builder.register(
+        name="deliberation-consensus",
+        handler=_deliberation_consensus,
+        version="1.0.0",
+        description="Evaluate consensus level from agent positions with entropy scoring",
+        inputs=["positions"],
+        outputs=["ok", "consensus", "agreement", "dominant", "entropy"],
+        tags=["deliberation", "consensus", "agreement"],
+    ))
+
+    specs.append(builder.register(
+        name="deliberation-quorum",
+        handler=_deliberation_quorum,
+        version="1.0.0",
+        description="Check if quorum of agents have participated",
+        inputs=["participants"],
+        outputs=["ok", "quorum_met", "participants", "participation_rate"],
+        tags=["deliberation", "quorum", "governance"],
+    ))
+
+    specs.append(builder.register(
+        name="deliberation-synthesize",
+        handler=_deliberation_synthesize,
+        version="1.0.0",
+        description="Synthesize diverse agent arguments into a collective weighted position",
+        inputs=["arguments"],
+        outputs=["ok", "collective_position", "weighted_positions", "strongest_arguments"],
+        tags=["deliberation", "synthesis", "collective"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -3490,6 +3783,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_trust_pack(builder))
     specs.extend(load_research_pack(builder))
     specs.extend(load_audit_pack(builder))
+    specs.extend(load_deliberation_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
