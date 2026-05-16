@@ -41,6 +41,11 @@ from .semantic import *
 from .store import PersistentStore
 from .persist import *
 from .trust import TrustLedger, Claim, Grade, Stake
+from .exchange import CapabilityExchange, CatalogEntry, ExchangeStats
+from .negotiation import (
+    Negotiator, CapabilityRequest, Contract, NegotiationTerms,
+    NegotiationPolicy, NegotiationStatus, RejectionReason,
+)
 
 # Re-export visualization for backward compatibility
 from visualization import (
@@ -59,5 +64,8 @@ __all__ = [
     "GlossolaliaReading", "GlossolaliaProbe",
     "MRISnapshot", "capture", "generate_html",
     "PersistentStore",
+    "CapabilityExchange", "CatalogEntry", "ExchangeStats",
+    "Negotiator", "CapabilityRequest", "Contract", "NegotiationTerms",
+    "NegotiationPolicy", "NegotiationStatus", "RejectionReason",
 ]
 __version__ = "0.11.0"
