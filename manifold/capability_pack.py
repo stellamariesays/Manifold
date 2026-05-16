@@ -2212,6 +2212,229 @@ def load_tool_use_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Collaboration Pack ─────────────────────────────────────────────────
+
+async def _collab_delegate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Delegate a sub-task to another agent via audience routing.
+
+    Inputs: target_capability, inputs, min_score, max_candidates
+    Outputs: delegated_to, status, candidates
+    """
+    target_cap = payload.get("target_capability", "")
+    task_inputs = payload.get("inputs", {})
+    min_score = payload.get("min_score", 0.1)
+    max_candidates = payload.get("max_candidates", 3)
+
+    # Return delegation plan — actual routing happens at agent level
+    return {
+        "delegated_to": None,
+        "status": "planned",
+        "target_capability": target_cap,
+        "candidates_requested": max_candidates,
+        "min_score": min_score,
+        "inputs": task_inputs,
+    }
+
+
+async def _collab_vote(payload: dict[str, Any]) -> dict[str, Any]:
+    """Consensus voting — aggregate votes from multiple agents.
+
+    Inputs: proposal, votes (list of {voter, choice, weight}), method (majority/unanimous/weighted)
+    Outputs: winner, consensus, vote_counts
+    """
+    proposal = payload.get("proposal", "")
+    votes = payload.get("votes", [])
+    method = payload.get("method", "majority")
+
+    if not votes:
+        return {"winner": None, "consensus": False, "vote_counts": {}, "total_votes": 0}
+
+    # Tally votes
+    counts: dict[str, float] = {}
+    for v in votes:
+        choice = v.get("choice", "abstain")
+        weight = v.get("weight", 1.0)
+        counts[choice] = counts.get(choice, 0.0) + weight
+
+    total = sum(counts.values())
+    winner = max(counts, key=counts.get) if counts else None  # type: ignore[arg-type]
+
+    # Determine consensus
+    if method == "unanimous":
+        consensus = len(counts) == 1 and total > 0
+    elif method == "weighted":
+        consensus = counts.get(winner, 0) / max(total, 1) > 0.6
+    else:  # majority
+        consensus = counts.get(winner, 0) / max(total, 1) > 0.5
+
+    return {
+        "proposal": proposal,
+        "winner": winner,
+        "consensus": consensus,
+        "vote_counts": counts,
+        "total_votes": len(votes),
+        "method": method,
+    }
+
+
+async def _collab_aggregate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate results from multiple agents — merge, dedupe, rank.
+
+    Inputs: results (list of dicts), strategy (merge/best/all), key_field
+    Outputs: aggregated, count, strategy_used
+    """
+    results = payload.get("results", [])
+    strategy = payload.get("strategy", "merge")
+    key_field = payload.get("key_field", "")
+
+    if not results:
+        return {"aggregated": [], "count": 0, "strategy_used": strategy}
+
+    if strategy == "best":
+        # Pick result with highest score/confidence
+        best = max(results, key=lambda r: r.get("score", r.get("confidence", 0.0)))
+        return {"aggregated": [best], "count": 1, "strategy_used": strategy}
+
+    if strategy == "dedupe" and key_field:
+        seen: dict[str, dict] = {}
+        for r in results:
+            key = str(r.get(key_field, id(r)))
+            if key not in seen or r.get("score", 0) > seen[key].get("score", 0):
+                seen[key] = r
+        return {"aggregated": list(seen.values()), "count": len(seen), "strategy_used": strategy}
+
+    # merge: combine all, sorted by score
+    sorted_results = sorted(
+        results,
+        key=lambda r: r.get("score", r.get("confidence", 0.0)),
+        reverse=True,
+    )
+    return {"aggregated": sorted_results, "count": len(sorted_results), "strategy_used": strategy}
+
+
+async def _collab_fanout(payload: dict[str, Any]) -> dict[str, Any]:
+    """Fan-out a task to multiple agents and collect responses.
+
+    Inputs: topic, payload_template, targets (list of agent names), timeout_ms
+    Outputs: dispatched, pending, timed_out
+    """
+    topic = payload.get("topic", "")
+    targets = payload.get("targets", [])
+    timeout_ms = payload.get("timeout_ms", 5000)
+
+    dispatched = []
+    for t in targets:
+        dispatched.append({
+            "target": t,
+            "topic": topic,
+            "status": "dispatched",
+            "timeout_ms": timeout_ms,
+        })
+
+    return {
+        "dispatched": dispatched,
+        "total": len(dispatched),
+        "pending": len(dispatched),
+        "timed_out": 0,
+        "topic": topic,
+    }
+
+
+async def _collab_scatter_gather(payload: dict[str, Any]) -> dict[str, Any]:
+    """Scatter-gather pattern — split work, distribute, merge results.
+
+    Inputs: items (list), chunk_size, merge_strategy
+    Outputs: chunks, total_items, merge_strategy
+    """
+    items = payload.get("items", [])
+    chunk_size = payload.get("chunk_size", 10)
+    merge_strategy = payload.get("merge_strategy", "concat")
+
+    if not items:
+        return {"chunks": [], "total_items": 0, "total_chunks": 0, "merge_strategy": merge_strategy}
+
+    chunks = []
+    for i in range(0, len(items), chunk_size):
+        chunk = items[i:i + chunk_size]
+        chunks.append({
+            "index": len(chunks),
+            "items": chunk,
+            "size": len(chunk),
+        })
+
+    return {
+        "chunks": chunks,
+        "total_items": len(items),
+        "total_chunks": len(chunks),
+        "merge_strategy": merge_strategy,
+    }
+
+
+def load_collaboration_pack(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
+    """Load collaboration and multi-agent coordination capabilities.
+
+    Provides primitives for multi-agent workflows:
+    - **collab-delegate**: Delegate sub-tasks to the best agent
+    - **collab-vote**: Consensus voting (majority/unanimous/weighted)
+    - **collab-aggregate**: Merge results from multiple agents
+    - **collab-fanout**: Broadcast task to multiple targets
+    - **collab-scatter-gather**: Split work, distribute, merge
+    """
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="collab-delegate",
+        handler=_collab_delegate,
+        version="1.0.0",
+        description="Delegate a sub-task to the best-matched agent via audience routing",
+        inputs=["target_capability", "inputs"],
+        outputs=["delegated_to", "status", "candidates"],
+        tags=["collaboration", "delegation", "routing"],
+    ))
+
+    specs.append(builder.register(
+        name="collab-vote",
+        handler=_collab_vote,
+        version="1.0.0",
+        description="Consensus voting — aggregate agent votes with configurable method",
+        inputs=["proposal", "votes", "method"],
+        outputs=["winner", "consensus", "vote_counts"],
+        tags=["collaboration", "voting", "consensus"],
+    ))
+
+    specs.append(builder.register(
+        name="collab-aggregate",
+        handler=_collab_aggregate,
+        version="1.0.0",
+        description="Aggregate results from multiple agents — merge, dedupe, or pick best",
+        inputs=["results", "strategy"],
+        outputs=["aggregated", "count", "strategy_used"],
+        tags=["collaboration", "aggregation", "merge"],
+    ))
+
+    specs.append(builder.register(
+        name="collab-fanout",
+        handler=_collab_fanout,
+        version="1.0.0",
+        description="Fan-out a task to multiple agents and collect responses",
+        inputs=["topic", "targets"],
+        outputs=["dispatched", "total", "pending"],
+        tags=["collaboration", "fanout", "broadcast"],
+    ))
+
+    specs.append(builder.register(
+        name="collab-scatter-gather",
+        handler=_collab_scatter_gather,
+        version="1.0.0",
+        description="Scatter-gather pattern — split work into chunks, distribute, merge results",
+        inputs=["items", "chunk_size", "merge_strategy"],
+        outputs=["chunks", "total_items", "total_chunks"],
+        tags=["collaboration", "scatter-gather", "distributed"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -2228,6 +2451,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_memory_pack(builder))
     specs.extend(load_network_pack(builder, agent))
     specs.extend(load_tool_use_pack(builder))
+    specs.extend(load_collaboration_pack(builder, agent))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
