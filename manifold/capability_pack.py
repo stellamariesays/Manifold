@@ -3175,6 +3175,300 @@ def load_research_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Audit & Compliance Pack ────────────────────────────────────────────
+
+
+class _AuditLog:
+    """In-memory structured audit log backed by the agent's store."""
+
+    def __init__(self) -> None:
+        self._entries: list[dict[str, Any]] = []
+        self._spans: dict[str, dict[str, Any]] = {}
+
+    def record(
+        self,
+        action: str,
+        actor: str = "system",
+        target: str = "",
+        outcome: str = "success",
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "audit_id": uuid.uuid4().hex[:12],
+            "action": action,
+            "actor": actor,
+            "target": target,
+            "outcome": outcome,
+            "metadata": metadata or {},
+            "tags": tags or [],
+            "timestamp": time.time(),
+        }
+        self._entries.append(entry)
+        return entry
+
+    def start_span(
+        self,
+        operation: str,
+        actor: str = "system",
+        parent_span_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        span_id = uuid.uuid4().hex[:10]
+        span: dict[str, Any] = {
+            "span_id": span_id,
+            "operation": operation,
+            "actor": actor,
+            "parent_span_id": parent_span_id,
+            "status": "running",
+            "started_at": time.time(),
+            "finished_at": None,
+            "duration_ms": None,
+            "children": [],
+            "events": [],
+            "metadata": metadata or {},
+        }
+        self._spans[span_id] = span
+        if parent_span_id and parent_span_id in self._spans:
+            self._spans[parent_span_id]["children"].append(span_id)
+        return span
+
+    def finish_span(self, span_id: str, status: str = "ok", result: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        span = self._spans.get(span_id)
+        if span is None:
+            return None
+        now = time.time()
+        span["status"] = status
+        span["finished_at"] = now
+        span["duration_ms"] = round((now - span["started_at"]) * 1000, 2)
+        if result:
+            span["result"] = result
+        return span
+
+    def add_event(self, span_id: str, event: str, metadata: dict[str, Any] | None = None) -> bool:
+        span = self._spans.get(span_id)
+        if span is None:
+            return False
+        span["events"].append({
+            "event": event,
+            "metadata": metadata or {},
+            "timestamp": time.time(),
+        })
+        return True
+
+    def query(
+        self,
+        actor: str | None = None,
+        action: str | None = None,
+        outcome: str | None = None,
+        tag: str | None = None,
+        since: float | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        results = self._entries
+        if actor:
+            results = [e for e in results if e["actor"] == actor]
+        if action:
+            results = [e for e in results if action in e["action"]]
+        if outcome:
+            results = [e for e in results if e["outcome"] == outcome]
+        if tag:
+            results = [e for e in results if tag in e.get("tags", [])]
+        if since:
+            results = [e for e in results if e["timestamp"] >= since]
+        return results[-limit:]
+
+    def get_span(self, span_id: str) -> dict[str, Any] | None:
+        return self._spans.get(span_id)
+
+    def active_spans(self) -> list[dict[str, Any]]:
+        return [s for s in self._spans.values() if s["status"] == "running"]
+
+    def stats(self) -> dict[str, Any]:
+        outcomes = {}
+        for e in self._entries:
+            o = e["outcome"]
+            outcomes[o] = outcomes.get(o, 0) + 1
+        return {
+            "total_events": len(self._entries),
+            "total_spans": len(self._spans),
+            "active_spans": len(self.active_spans()),
+            "outcomes": outcomes,
+        }
+
+
+async def _audit_record(payload: dict[str, Any]) -> dict[str, Any]:
+    """Record a structured audit event."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    entry = log.record(
+        action=payload.get("action", ""),
+        actor=payload.get("actor", "system"),
+        target=payload.get("target", ""),
+        outcome=payload.get("outcome", "success"),
+        metadata=payload.get("metadata"),
+        tags=payload.get("tags"),
+    )
+    return {"ok": True, "audit_id": entry["audit_id"], "timestamp": entry["timestamp"]}
+
+
+async def _audit_query(payload: dict[str, Any]) -> dict[str, Any]:
+    """Query audit log entries with filters."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    entries = log.query(
+        actor=payload.get("actor"),
+        action=payload.get("action"),
+        outcome=payload.get("outcome"),
+        tag=payload.get("tag"),
+        since=payload.get("since"),
+        limit=payload.get("limit", 50),
+    )
+    return {"ok": True, "entries": entries, "count": len(entries)}
+
+
+async def _audit_span_start(payload: dict[str, Any]) -> dict[str, Any]:
+    """Start a trace span for an operation."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    span = log.start_span(
+        operation=payload.get("operation", ""),
+        actor=payload.get("actor", "system"),
+        parent_span_id=payload.get("parent_span_id"),
+        metadata=payload.get("metadata"),
+    )
+    return {"ok": True, "span_id": span["span_id"], "operation": span["operation"]}
+
+
+async def _audit_span_finish(payload: dict[str, Any]) -> dict[str, Any]:
+    """Finish a trace span and record duration."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    span_id = payload.get("span_id", "")
+    status = payload.get("status", "ok")
+    result = payload.get("result")
+    span = log.finish_span(span_id, status=status, result=result)
+    if span is None:
+        return {"ok": False, "error": f"Span {span_id!r} not found"}
+    return {
+        "ok": True,
+        "span_id": span_id,
+        "status": span["status"],
+        "duration_ms": span["duration_ms"],
+    }
+
+
+async def _audit_span_event(payload: dict[str, Any]) -> dict[str, Any]:
+    """Add a named event to a running span."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    span_id = payload.get("span_id", "")
+    event = payload.get("event", "")
+    added = log.add_event(span_id, event, metadata=payload.get("metadata"))
+    if not added:
+        return {"ok": False, "error": f"Span {span_id!r} not found"}
+    return {"ok": True, "span_id": span_id, "event": event}
+
+
+async def _audit_stats(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get audit log statistics."""
+    log: _AuditLog | None = payload.get("__audit_log__")
+    if log is None:
+        return {"error": "No audit log attached", "ok": False}
+    return {"ok": True, **log.stats()}
+
+
+def load_audit_pack(
+    builder: CapabilityBuilder,
+    audit_log: _AuditLog | None = None,
+) -> list[CapSpec]:
+    """Load audit, tracing, and compliance capabilities.
+
+    Provides structured event logging and distributed-trace spans:
+    - **audit-record**: Record a structured audit event with actor, action, target, outcome
+    - **audit-query**: Query audit log entries with filters (actor, action, outcome, tag, since)
+    - **audit-span-start**: Start a trace span (optional parent for nesting)
+    - **audit-span-finish**: Finish a span, recording duration and status
+    - **audit-span-event**: Add a named event to a running span
+    - **audit-stats**: Get audit log statistics (event counts, active spans, outcomes)
+
+    Args:
+        builder:   The capability builder to register with.
+        audit_log: An _AuditLog instance. Created in-memory if not provided.
+    """
+    if audit_log is None:
+        audit_log = _AuditLog()
+
+    def _wrap(handler):
+        async def _wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+            return await handler({**payload, "__audit_log__": audit_log})
+        return _wrapped
+
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="audit-record",
+        handler=_wrap(_audit_record),
+        version="1.0.0",
+        description="Record a structured audit event with actor, action, target, and outcome",
+        inputs=["action"],
+        outputs=["ok", "audit_id", "timestamp"],
+        tags=["audit", "logging", "compliance"],
+    ))
+    specs.append(builder.register(
+        name="audit-query",
+        handler=_wrap(_audit_query),
+        version="1.0.0",
+        description="Query audit log entries with filters for actor, action, outcome, tag, or time range",
+        inputs=[],
+        outputs=["ok", "entries", "count"],
+        tags=["audit", "query", "compliance"],
+    ))
+    specs.append(builder.register(
+        name="audit-span-start",
+        handler=_wrap(_audit_span_start),
+        version="1.0.0",
+        description="Start a trace span for an operation, optionally nested under a parent span",
+        inputs=["operation"],
+        outputs=["ok", "span_id", "operation"],
+        tags=["audit", "tracing", "spans"],
+    ))
+    specs.append(builder.register(
+        name="audit-span-finish",
+        handler=_wrap(_audit_span_finish),
+        version="1.0.0",
+        description="Finish a trace span, recording duration and final status",
+        inputs=["span_id"],
+        outputs=["ok", "span_id", "duration_ms"],
+        tags=["audit", "tracing", "spans"],
+    ))
+    specs.append(builder.register(
+        name="audit-span-event",
+        handler=_wrap(_audit_span_event),
+        version="1.0.0",
+        description="Add a named event annotation to a running trace span",
+        inputs=["span_id", "event"],
+        outputs=["ok", "span_id", "event"],
+        tags=["audit", "tracing", "events"],
+    ))
+    specs.append(builder.register(
+        name="audit-stats",
+        handler=_wrap(_audit_stats),
+        version="1.0.0",
+        description="Get audit log statistics — event counts, active spans, outcome breakdown",
+        inputs=[],
+        outputs=["ok", "total_events", "total_spans", "active_spans", "outcomes"],
+        tags=["audit", "stats", "monitoring"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -3195,6 +3489,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_subscription_pack(builder))
     specs.extend(load_trust_pack(builder))
     specs.extend(load_research_pack(builder))
+    specs.extend(load_audit_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
