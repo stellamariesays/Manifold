@@ -27,6 +27,7 @@ Available packs:
 - **network_pack**: message compose, relay chains, broadcast, request-response, acknowledgements
 - **memory_pack**: key-value store, retrieval, search, summarization, TTL expiry, tag-based forget
 - **subscription_pack**: pub/sub notifications — subscribe, publish, poll, status
+- **research_pack**: web research — plan queries, extract facts, synthesize findings, score sources
 """
 
 from __future__ import annotations
@@ -2872,6 +2873,308 @@ def load_trust_pack(
     return specs
 
 
+# ─── Web Research Pack ─────────────────────────────────────────────────
+
+async def _research_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    """Decompose a research question into searchable sub-queries."""
+    question = payload.get("question", "")
+    max_subqueries = payload.get("max_subqueries", 5)
+    depth = payload.get("depth", "standard")  # quick / standard / deep
+
+    if not question:
+        return {"error": "question is required", "ok": False}
+
+    # Simple heuristic decomposition based on keywords and structure
+    words = question.split()
+    subqueries: list[str] = []
+
+    # The question itself is always a sub-query
+    subqueries.append(question)
+
+    # Extract quoted phrases as dedicated sub-queries
+    import re as _re
+    quotes = _re.findall(r'"([^"]+)"', question)
+    subqueries.extend(quotes)
+
+    # Generate aspect-based sub-queries
+    aspects = ["what is", "how does", "why", "benefits", "risks", "examples", "comparison"]
+    topic_words = [w for w in words if len(w) > 3 and w.lower() not in {
+        "what", "how", "why", "does", "the", "are", "can", "with", "from",
+        "that", "this", "about", "there", "their", "been", "have", "will",
+    }]
+    core_topic = " ".join(topic_words[:4])
+
+    for aspect in aspects:
+        if aspect not in question.lower() and len(subqueries) < max_subqueries:
+            subqueries.append(f"{aspect} {core_topic}")
+
+    # For deep research, add alternative phrasings
+    if depth == "deep" and len(subqueries) < max_subqueries:
+        subqueries.append(f"{core_topic} overview")
+        subqueries.append(f"{core_topic} recent developments")
+
+    subqueries = subqueries[:max_subqueries]
+
+    # Estimate scope
+    scope = "quick" if depth == "quick" else ("deep" if depth == "deep" else "standard")
+    estimated_sources = {"quick": 3, "standard": 8, "deep": 15}.get(scope, 8)
+
+    return {
+        "ok": True,
+        "question": question,
+        "subqueries": subqueries,
+        "depth": scope,
+        "estimated_sources": estimated_sources,
+        "plan_id": uuid.uuid4().hex[:12],
+    }
+
+
+async def _research_extract(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract key facts, entities, and claims from text content."""
+    text = payload.get("text", "")
+    source = payload.get("source", "unknown")
+    max_facts = payload.get("max_facts", 20)
+
+    if not text:
+        return {"error": "text is required", "ok": False}
+
+    import re as _re
+
+    # Extract sentences that look like factual claims
+    sentences = _re.split(r'(?<=[.!?])\s+', text)
+    facts: list[dict[str, Any]] = []
+
+    # Indicators of factual claims
+    claim_patterns = [
+        r'\d+(?:\.\d+)?%?',  # numbers/percentages
+        r'\b(?:found|showed|reported|published|announced|revealed|estimated)\b',
+        r'\b(?:according to|based on|compared to|resulted in)\b',
+    ]
+
+    for sent in sentences:
+        if len(facts) >= max_facts:
+            break
+        if len(sent) < 15:
+            continue
+        score = sum(1 for p in claim_patterns if _re.search(p, sent, _re.IGNORECASE))
+        if score > 0:
+            facts.append({
+                "claim": sent.strip(),
+                "confidence": min(score / 3.0, 1.0),
+                "source": source,
+            })
+
+    # Extract named entities (simple heuristic)
+    entities: dict[str, list[str]] = {"people": [], "organizations": [], "locations": []}
+    capitalized = _re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+    for name in capitalized:
+        if len(name) > 2 and name not in {"The", "This", "That", "These", "Those"}:
+            if any(kw in name.lower() for kw in ["inc", "corp", "ltd", "university", "institute", "foundation"]):
+                entities["organizations"].append(name)
+            elif any(kw in name.lower() for kw in ["city", "country", "state", "region", "river", "mountain"]):
+                entities["locations"].append(name)
+            else:
+                entities["people"].append(name)
+
+    # Deduplicate
+    for key in entities:
+        entities[key] = list(dict.fromkeys(entities[key]))[:10]
+
+    return {
+        "ok": True,
+        "facts": facts,
+        "fact_count": len(facts),
+        "entities": entities,
+        "source": source,
+        "word_count": len(text.split()),
+    }
+
+
+async def _research_synthesize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Synthesize findings from multiple sources into a coherent summary."""
+    findings = payload.get("findings", [])
+    question = payload.get("question", "")
+    format_type = payload.get("format", "summary")  # summary / briefing / bullet
+
+    if not findings:
+        return {"error": "findings list is required", "ok": False}
+
+    # Collect all facts
+    all_facts: list[dict[str, Any]] = []
+    sources: set[str] = set()
+    for finding in findings:
+        facts = finding.get("facts", [])
+        all_facts.extend(facts)
+        src = finding.get("source", "")
+        if src:
+            sources.add(src)
+
+    # Sort by confidence
+    all_facts.sort(key=lambda f: f.get("confidence", 0), reverse=True)
+
+    # Deduplicate similar claims (simple)
+    seen_claims: set[str] = set()
+    unique_facts: list[dict[str, Any]] = []
+    for fact in all_facts:
+        claim_lower = fact["claim"].lower()[:60]
+        if claim_lower not in seen_claims:
+            seen_claims.add(claim_lower)
+            unique_facts.append(fact)
+
+    top_facts = unique_facts[:15]
+
+    # Format output
+    if format_type == "bullet":
+        bullets = [f"• {f['claim']} ({f['source']})" for f in top_facts]
+        content = "\n".join(bullets)
+    elif format_type == "briefing":
+        lines = [f"# Research Briefing: {question}", ""]
+        lines.append(f"Sources consulted: {len(sources)}")
+        lines.append(f"Key findings: {len(top_facts)}")
+        lines.append("")
+        for i, f in enumerate(top_facts, 1):
+            lines.append(f"{i}. {f['claim']}")
+        content = "\n".join(lines)
+    else:
+        # Default summary
+        if question:
+            content = f"Research summary for: {question}\n\n"
+        else:
+            content = "Research summary:\n\n"
+        for f in top_facts:
+            content += f"{f['claim']}\n"
+        content += f"\nBased on {len(sources)} source(s)."
+
+    # Collect all entities
+    all_entities: dict[str, list[str]] = {"people": [], "organizations": [], "locations": []}
+    for finding in findings:
+        for key in all_entities:
+            all_entities[key].extend(finding.get("entities", {}).get(key, []))
+    for key in all_entities:
+        all_entities[key] = list(dict.fromkeys(all_entities[key]))[:10]
+
+    return {
+        "ok": True,
+        "content": content,
+        "format": format_type,
+        "source_count": len(sources),
+        "sources": list(sources),
+        "fact_count": len(unique_facts),
+        "top_facts": len(top_facts),
+        "entities": all_entities,
+    }
+
+
+async def _research_source_score(payload: dict[str, Any]) -> dict[str, Any]:
+    """Score and rank sources by reliability indicators."""
+    sources = payload.get("sources", [])
+
+    if not sources:
+        return {"error": "sources list is required", "ok": False}
+
+    # Reliability indicators
+    high_reliability_domains = {
+        "wikipedia.org", "nature.com", "science.org", "arxiv.org",
+        "ieee.org", "acm.org", "github.com", "docs.python.org",
+        "mozilla.org", "w3.org", "ietf.org", "nist.gov",
+        "reuters.com", "apnews.com", "bbc.com", "nytimes.com",
+    }
+    medium_reliability = {
+        "medium.com", "dev.to", "stackoverflow.com", "stackexchange.com",
+        "reddit.com", "hackernews", "news.ycombinator.com",
+    }
+
+    scored: list[dict[str, Any]] = []
+    for source in sources:
+        url = source.get("url", "")
+        name = source.get("name", url)
+        fact_count = source.get("fact_count", 0)
+        avg_confidence = source.get("avg_confidence", 0.5)
+
+        # Base score from domain
+        domain_score = 0.5
+        domain = ""
+        if url:
+            import re as _re
+            domain_match = _re.search(r'://([^/]+)', url)
+            domain = domain_match.group(1).replace("www.", "") if domain_match else ""
+            for hrd in high_reliability_domains:
+                if domain.endswith(hrd):
+                    domain_score = 0.9
+                    break
+            else:
+                for mrd in medium_reliability:
+                    if domain.endswith(mrd):
+                        domain_score = 0.7
+                        break
+
+        # Combined score
+        recency = min(source.get("recency_score", 1.0), 1.0)
+        final_score = (domain_score * 0.4 + avg_confidence * 0.35 + recency * 0.15 + min(fact_count / 10, 1.0) * 0.1)
+
+        scored.append({
+            "name": name,
+            "url": url,
+            "domain": domain,
+            "score": round(final_score, 3),
+            "domain_reliability": round(domain_score, 2),
+            "fact_count": fact_count,
+            "avg_confidence": round(avg_confidence, 3),
+        })
+
+    scored.sort(key=lambda s: s["score"], reverse=True)
+
+    return {
+        "ok": True,
+        "ranked_sources": scored,
+        "total": len(scored),
+        "high_reliability": len([s for s in scored if s["domain_reliability"] >= 0.9]),
+        "medium_reliability": len([s for s in scored if 0.6 <= s["domain_reliability"] < 0.9]),
+    }
+
+
+def load_research_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register web research capabilities: planning, extraction, synthesis, source scoring."""
+    specs = []
+    specs.append(builder.register(
+        name="research-plan",
+        handler=_research_plan,
+        version="1.0.0",
+        description="Decompose a research question into searchable sub-queries with depth control",
+        inputs=["question"],
+        outputs=["subqueries", "depth", "estimated_sources", "plan_id"],
+        tags=["research", "planning", "web"],
+    ))
+    specs.append(builder.register(
+        name="research-extract",
+        handler=_research_extract,
+        version="1.0.0",
+        description="Extract key facts, entities, and claims from text content",
+        inputs=["text"],
+        outputs=["facts", "entities", "word_count"],
+        tags=["research", "extraction", "nlp"],
+    ))
+    specs.append(builder.register(
+        name="research-synthesize",
+        handler=_research_synthesize,
+        version="1.0.0",
+        description="Synthesize findings from multiple sources into summary, briefing, or bullet format",
+        inputs=["findings"],
+        outputs=["content", "source_count", "fact_count", "entities"],
+        tags=["research", "synthesis", "summarization"],
+    ))
+    specs.append(builder.register(
+        name="research-source-score",
+        handler=_research_source_score,
+        version="1.0.0",
+        description="Score and rank sources by reliability, confidence, and recency indicators",
+        inputs=["sources"],
+        outputs=["ranked_sources", "total", "high_reliability"],
+        tags=["research", "scoring", "reliability"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -2891,6 +3194,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_collaboration_pack(builder, agent))
     specs.extend(load_subscription_pack(builder))
     specs.extend(load_trust_pack(builder))
+    specs.extend(load_research_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
