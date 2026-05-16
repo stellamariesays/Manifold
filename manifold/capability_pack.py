@@ -3762,6 +3762,242 @@ def load_deliberation_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Orchestration Pack ─────────────────────────────────────────────────
+
+async def _orch_sequence(payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute a sequence of capability calls, piping outputs forward."""
+    builder = payload.get("__orch_builder__")
+    steps = payload.get("steps", [])
+    if not steps:
+        return {"ok": False, "error": "No steps provided"}
+    if builder is None:
+        return {"ok": False, "error": "No builder attached"}
+
+    results = []
+    context: dict[str, Any] = dict(payload.get("initial_context", {}))
+
+    for i, step in enumerate(steps):
+        cap_name = step.get("capability", "")
+        step_input = {**context, **step.get("input", {})}
+        try:
+            inv = await builder.invoke(cap_name, step_input)
+            result = inv.output if inv.ok else {"ok": False, "error": inv.error}
+        except Exception as exc:
+            result = {"ok": False, "error": str(exc)}
+
+        results.append({"step": i, "capability": cap_name, "result": result})
+        if result.get("ok", False) or "error" not in result:
+            context.update(result)
+        else:
+            if step.get("halt_on_error", True):
+                return {"ok": False, "failed_step": i, "results": results}
+
+    return {"ok": True, "results": results, "steps_completed": len(results)}
+
+
+async def _orch_parallel(payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute multiple capability calls concurrently and merge results."""
+    import asyncio
+
+    builder = payload.get("__orch_builder__")
+    branches = payload.get("branches", [])
+    if not branches:
+        return {"ok": False, "error": "No branches provided"}
+    if builder is None:
+        return {"ok": False, "error": "No builder attached"}
+
+    async def run_branch(idx: int, branch: dict) -> dict:
+        cap_name = branch.get("capability", "")
+        branch_input = dict(branch.get("input", {}))
+        try:
+            inv = await builder.invoke(cap_name, branch_input)
+            result = inv.output if inv.ok else {"ok": False, "error": inv.error}
+        except Exception as exc:
+            result = {"ok": False, "error": str(exc)}
+        return {"branch": idx, "capability": cap_name, "result": result}
+
+    tasks = [run_branch(i, b) for i, b in enumerate(branches)]
+    branch_results = await asyncio.gather(*tasks)
+
+    errors = [r for r in branch_results if "error" in r.get("result", {})]
+    merged = {}
+    for br in branch_results:
+        merged.update(br.get("result", {}))
+
+    return {
+        "ok": len(errors) == 0,
+        "results": branch_results,
+        "branches_completed": len(branch_results),
+        "errors": len(errors),
+        "merged": merged,
+    }
+
+
+async def _orch_retry(payload: dict[str, Any]) -> dict[str, Any]:
+    """Retry a capability call with exponential backoff."""
+    import asyncio
+
+    builder = payload.get("__orch_builder__")
+    cap_name = payload.get("capability", "")
+    cap_input = dict(payload.get("input", {}))
+    max_retries = payload.get("max_retries", 3)
+    base_delay = payload.get("base_delay", 0.1)
+
+    if builder is None:
+        return {"ok": False, "error": "No builder attached"}
+
+    last_result = {}
+    for attempt in range(max_retries + 1):
+        try:
+            inv = await builder.invoke(cap_name, cap_input)
+            if inv.ok:
+                return {"ok": True, "result": inv.output, "attempts": attempt + 1}
+            last_result = {"ok": False, "error": inv.error}
+        except Exception as exc:
+            last_result = {"ok": False, "error": str(exc)}
+
+        if attempt < max_retries:
+            delay = base_delay * (2 ** attempt)
+            await asyncio.sleep(delay)
+
+    return {"ok": False, "result": last_result, "attempts": max_retries + 1}
+
+
+async def _orch_conditional(payload: dict[str, Any]) -> dict[str, Any]:
+    """Branch execution based on a condition evaluation."""
+    builder = payload.get("__orch_builder__")
+    condition = payload.get("condition", {})
+    field = condition.get("field", "")
+    op = condition.get("op", "eq")
+    value = condition.get("value")
+    context = dict(payload.get("context", {}))
+
+    actual = context.get(field)
+    passed = False
+    if op == "eq":
+        passed = actual == value
+    elif op == "neq":
+        passed = actual != value
+    elif op == "gt":
+        passed = actual is not None and actual > value
+    elif op == "lt":
+        passed = actual is not None and actual < value
+    elif op == "gte":
+        passed = actual is not None and actual >= value
+    elif op == "lte":
+        passed = actual is not None and actual <= value
+    elif op == "contains":
+        passed = value in actual if actual else False
+    elif op == "exists":
+        passed = actual is not None
+
+    branch = "then" if passed else "else"
+    step = payload.get(branch, {})
+    if not step:
+        return {"ok": True, "condition_met": passed, "branch": branch, "result": None}
+    if builder is None:
+        return {"ok": True, "condition_met": passed, "branch": branch, "result": None}
+
+    cap_name = step.get("capability", "")
+    step_input = {**context, **step.get("input", {})}
+    try:
+        inv = await builder.invoke(cap_name, step_input)
+        result = inv.output if inv.ok else {"ok": False, "error": inv.error}
+    except Exception as exc:
+        result = {"ok": False, "error": str(exc)}
+    return {"ok": True, "condition_met": passed, "branch": branch, "result": result}
+
+
+async def _orch_pipeline(payload: dict[str, Any]) -> dict[str, Any]:
+    """Chain capabilities where each step's output feeds the next step's input."""
+    builder = payload.get("__orch_builder__")
+    steps = payload.get("steps", [])
+    if not steps:
+        return {"ok": False, "error": "No steps provided"}
+    if builder is None:
+        return {"ok": False, "error": "No builder attached"}
+
+    current = dict(payload.get("initial_input", {}))
+    results = []
+
+    for i, step in enumerate(steps):
+        cap_name = step.get("capability", "")
+        step_input = {**current, **step.get("input", {})}
+
+        try:
+            inv = await builder.invoke(cap_name, step_input)
+            if not inv.ok:
+                return {"ok": False, "failed_step": i, "error": inv.error, "results": results}
+            current = inv.output
+        except Exception as exc:
+            return {"ok": False, "failed_step": i, "error": str(exc), "results": results}
+
+        results.append({"step": i, "capability": cap_name})
+
+    return {"ok": True, "results": results, "output": current, "steps_completed": len(results)}
+
+
+
+def load_orchestration_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load orchestration capabilities — sequence, parallel, retry, conditional, pipeline."""
+    specs: list[CapSpec] = []
+
+    # Wrap handlers to inject builder reference
+    def _wrap(fn):
+        async def _w(payload):
+            payload["__orch_builder__"] = builder
+            return await fn(payload)
+        return _w
+
+    specs.append(builder.register(
+        name="orch-sequence",
+        handler=_wrap(_orch_sequence),
+        version="1.0.0",
+        description="Execute capability calls in sequence, accumulating context",
+        inputs=["steps"],
+        outputs=["ok", "results", "steps_completed"],
+        tags=["orchestration", "sequence", "workflow"],
+    ))
+    specs.append(builder.register(
+        name="orch-parallel",
+        handler=_wrap(_orch_parallel),
+        version="1.0.0",
+        description="Execute multiple capability calls concurrently",
+        inputs=["branches"],
+        outputs=["ok", "results", "branches_completed", "merged"],
+        tags=["orchestration", "parallel", "fan-out"],
+    ))
+    specs.append(builder.register(
+        name="orch-retry",
+        handler=_wrap(_orch_retry),
+        version="1.0.0",
+        description="Retry a capability call with exponential backoff",
+        inputs=["capability", "input", "max_retries"],
+        outputs=["ok", "result", "attempts"],
+        tags=["orchestration", "retry", "resilience"],
+    ))
+    specs.append(builder.register(
+        name="orch-conditional",
+        handler=_wrap(_orch_conditional),
+        version="1.0.0",
+        description="Branch execution based on a condition evaluation",
+        inputs=["condition"],
+        outputs=["ok", "condition_met", "branch", "result"],
+        tags=["orchestration", "conditional", "branching"],
+    ))
+    specs.append(builder.register(
+        name="orch-pipeline",
+        handler=_wrap(_orch_pipeline),
+        version="1.0.0",
+        description="Chain capabilities with strict output-to-input piping",
+        inputs=["steps"],
+        outputs=["ok", "results", "output", "steps_completed"],
+        tags=["orchestration", "pipeline", "chain"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -3784,6 +4020,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_research_pack(builder))
     specs.extend(load_audit_pack(builder))
     specs.extend(load_deliberation_pack(builder))
+    specs.extend(load_orchestration_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
