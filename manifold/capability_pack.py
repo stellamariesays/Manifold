@@ -25,6 +25,7 @@ Available packs:
 - **encoding_pack**: base64, JSON, CSV, URL encoding/decoding
 - **fog_pack**: blind spots, fog map, seam measure, atlas holes, fog discovery
 - **network_pack**: message compose, relay chains, broadcast, request-response, acknowledgements
+- **memory_pack**: key-value store, retrieval, search, summarization, TTL expiry, tag-based forget
 """
 
 from __future__ import annotations
@@ -1832,6 +1833,207 @@ def load_network_pack(builder: CapabilityBuilder, agent: Any | None = None) -> l
     return specs
 
 
+# ─── Memory Pack ────────────────────────────────────────────────────────
+
+# In-process memory store shared across all memory-pack instances.
+_memory_kv_store: dict[str, dict[str, Any]] = {}
+
+
+async def _memory_store(payload: dict[str, Any]) -> dict[str, Any]:
+    """Store a key-value entry with optional tags and TTL."""
+    key = payload.get("key", "")
+    value = payload.get("value")
+    tags = payload.get("tags", [])
+    ttl = payload.get("ttl", 0)  # seconds; 0 = no expiry
+
+    if not key:
+        return {"ok": False, "error": "key is required"}
+
+    entry: dict[str, Any] = {
+        "key": key,
+        "value": value,
+        "tags": list(tags),
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "ttl": ttl,
+        "expires_at": time.time() + ttl if ttl > 0 else None,
+    }
+
+    _memory_kv_store[key] = entry
+    return {"ok": True, "key": key, "created_at": entry["created_at"]}
+
+
+async def _memory_retrieve(payload: dict[str, Any]) -> dict[str, Any]:
+    """Retrieve a stored entry by key, respecting TTL expiry."""
+    key = payload.get("key", "")
+    if not key:
+        return {"ok": False, "error": "key is required"}
+
+    entry = _memory_kv_store.get(key)
+    if entry is None:
+        return {"ok": False, "error": "not_found", "key": key}
+
+    # Check expiry
+    expires_at = entry.get("expires_at")
+    if expires_at is not None and time.time() > expires_at:
+        del _memory_kv_store[key]
+        return {"ok": False, "error": "expired", "key": key}
+
+    return {
+        "ok": True,
+        "key": key,
+        "value": entry["value"],
+        "tags": entry["tags"],
+        "created_at": entry["created_at"],
+        "updated_at": entry["updated_at"],
+    }
+
+
+async def _memory_search(payload: dict[str, Any]) -> dict[str, Any]:
+    """Search entries by tag, prefix, or text match."""
+    tag = payload.get("tag")
+    prefix = payload.get("prefix")
+    query = payload.get("query", "")
+    limit = min(payload.get("limit", 20), 100)
+
+    now = time.time()
+    results: list[dict[str, Any]] = []
+
+    for entry in _memory_kv_store.values():
+        # Skip expired
+        exp = entry.get("expires_at")
+        if exp is not None and now > exp:
+            continue
+
+        match = False
+        if tag and tag in entry["tags"]:
+            match = True
+        if prefix and entry["key"].startswith(prefix):
+            match = True
+        if query and query.lower() in str(entry["value"]).lower():
+            match = True
+        if not tag and not prefix and not query:
+            match = True  # list all
+
+        if match:
+            results.append({
+                "key": entry["key"],
+                "value": entry["value"],
+                "tags": entry["tags"],
+                "created_at": entry["created_at"],
+            })
+            if len(results) >= limit:
+                break
+
+    return {"ok": True, "results": results, "count": len(results)}
+
+
+async def _memory_summarize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Summarize stored entries — count, tag distribution, oldest/newest."""
+    now = time.time()
+    tag_counts: dict[str, int] = {}
+    total = 0
+    oldest = None
+    newest = None
+
+    for entry in _memory_kv_store.values():
+        exp = entry.get("expires_at")
+        if exp is not None and now > exp:
+            continue
+        total += 1
+        for t in entry["tags"]:
+            tag_counts[t] = tag_counts.get(t, 0) + 1
+        created = entry["created_at"]
+        if oldest is None or created < oldest:
+            oldest = created
+        if newest is None or created > newest:
+            newest = created
+
+    return {
+        "ok": True,
+        "total_entries": total,
+        "tag_distribution": tag_counts,
+        "oldest_created_at": oldest,
+        "newest_created_at": newest,
+    }
+
+
+async def _memory_forget(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove entries by key or tag. Returns count of removed entries."""
+    key = payload.get("key")
+    tag = payload.get("tag")
+
+    if key:
+        if key in _memory_kv_store:
+            del _memory_kv_store[key]
+            return {"ok": True, "removed": 1}
+        return {"ok": True, "removed": 0}
+
+    if tag:
+        to_remove = [k for k, v in _memory_kv_store.items() if tag in v.get("tags", [])]
+        for k in to_remove:
+            del _memory_kv_store[k]
+        return {"ok": True, "removed": len(to_remove)}
+
+    return {"ok": False, "error": "key or tag required"}
+
+
+def load_memory_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register memory and knowledge management capabilities.
+
+    Caps: store, retrieve, search, summarize, forget.
+    Provides an in-process key-value store with tags, TTL expiry,
+    prefix/tag/text search, and entry statistics.
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="memory-store",
+        handler=_memory_store,
+        version="1.0.0",
+        description="Store a key-value entry with optional tags and TTL expiry",
+        inputs=["key", "value"],
+        outputs=["ok", "key", "created_at"],
+        tags=["memory", "storage", "kv"],
+    ))
+    specs.append(builder.register(
+        name="memory-retrieve",
+        handler=_memory_retrieve,
+        version="1.0.0",
+        description="Retrieve a stored entry by key, respecting TTL expiry",
+        inputs=["key"],
+        outputs=["ok", "key", "value", "tags"],
+        tags=["memory", "retrieval"],
+    ))
+    specs.append(builder.register(
+        name="memory-search",
+        handler=_memory_search,
+        version="1.0.0",
+        description="Search entries by tag, key prefix, or text content match",
+        inputs=[],
+        outputs=["ok", "results", "count"],
+        tags=["memory", "search"],
+    ))
+    specs.append(builder.register(
+        name="memory-summarize",
+        handler=_memory_summarize,
+        version="1.0.0",
+        description="Summarize stored entries — count, tag distribution, time range",
+        inputs=[],
+        outputs=["ok", "total_entries", "tag_distribution"],
+        tags=["memory", "statistics"],
+    ))
+    specs.append(builder.register(
+        name="memory-forget",
+        handler=_memory_forget,
+        version="1.0.0",
+        description="Remove entries by key or tag, returns count removed",
+        inputs=[],
+        outputs=["ok", "removed"],
+        tags=["memory", "deletion"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -1845,6 +2047,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_encoding_pack(builder))
     specs.extend(load_planning_pack(builder))
     specs.extend(load_reasoning_pack(builder))
+    specs.extend(load_memory_pack(builder))
     specs.extend(load_network_pack(builder, agent))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
