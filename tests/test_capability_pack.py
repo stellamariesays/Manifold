@@ -10,6 +10,7 @@ from manifold.capability_pack import (
     load_math_pack,
     load_meta_pack,
     load_routing_pack,
+    load_fog_pack,
     load_all_packs,
 )
 
@@ -196,8 +197,8 @@ class TestRoutingPack:
 class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
-        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing = 24
-        assert len(specs) == 24
+        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog = 29
+        assert len(specs) == 29
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
@@ -212,5 +213,61 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 24
-        assert stats["active"] == 24
+        assert stats["total_capabilities"] == 29
+        assert stats["active"] == 29
+
+
+# ─── Fog Awareness Pack ──────────────────────────────────────────────────
+
+class TestFogPack:
+    def test_load_registers_all(self, builder, agent):
+        specs = load_fog_pack(builder, agent)
+        assert len(specs) == 5
+        names = [s.name for s in specs]
+        assert "fog-blind-spots" in names
+        assert "fog-map" in names
+        assert "fog-seam-measure" in names
+        assert "fog-atlas-holes" in names
+        assert "fog-discover" in names
+
+    def test_fog_map(self, builder, agent):
+        load_fog_pack(builder, agent)
+        cap = builder.get("fog-map")
+        assert cap is not None
+        result = _run(cap.handler({}))
+        assert result["ok"] is True
+        assert result["agent"] == "test-pack-agent"
+        assert "gap_count" in result
+
+    def test_fog_discover_requires_topic(self, builder, agent):
+        load_fog_pack(builder, agent)
+        cap = builder.get("fog-discover")
+        assert cap is not None
+        result = _run(cap.handler({}))
+        assert result["ok"] is False
+        assert "topic" in result["error"]
+
+    def test_fog_discover_local(self, builder, agent):
+        load_fog_pack(builder, agent)
+        cap = builder.get("fog-discover")
+        result = _run(cap.handler({"topic": "existing-cap"}))
+        assert result["ok"] is True
+        assert result["query"] == "existing-cap"
+
+    def test_fog_seam_measure_requires_target(self, builder, agent):
+        load_fog_pack(builder, agent)
+        cap = builder.get("fog-seam-measure")
+        result = _run(cap.handler({}))
+        assert result["ok"] is False
+
+    def test_fog_seam_measure(self, builder, agent):
+        load_fog_pack(builder, agent)
+        cap = builder.get("fog-seam-measure")
+        result = _run(cap.handler({"target_agent": "nonexistent"}))
+        assert result["ok"] is True
+        assert "tension" in result
+
+    def test_fog_pack_tags(self, builder, agent):
+        specs = load_fog_pack(builder, agent)
+        for spec in specs:
+            assert "fog" in spec.tags

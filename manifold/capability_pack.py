@@ -23,6 +23,7 @@ Available packs:
 - **data_pack**: validation, transform, aggregation, merge
 - **monitor_pack**: threshold alerts, heartbeat checks, anomaly detection
 - **encoding_pack**: base64, JSON, CSV, URL encoding/decoding
+- **fog_pack**: blind spots, fog map, seam measure, atlas holes, fog discovery
 """
 
 from __future__ import annotations
@@ -1103,6 +1104,196 @@ def load_planning_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Fog Awareness Pack ─────────────────────────────────────────────────
+
+async def _fog_blind_spots(payload: dict[str, Any]) -> dict[str, Any]:
+    """Detect blind spots — topics with no complementary peer on mesh."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        return {"error": "No agent attached", "ok": False}
+
+    spots = agent.blind_spot()
+    results = []
+    for s in spots:
+        results.append({
+            "topic": s.topic,
+            "kind": s.kind,
+            "depth": s.depth,
+            "recurrence": s.recurrence,
+        })
+    return {"blind_spots": results, "count": len(results), "ok": True}
+
+
+async def _fog_map_snapshot(payload: dict[str, Any]) -> dict[str, Any]:
+    """Snapshot of the agent's epistemic fog map."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        return {"error": "No agent attached", "ok": False}
+
+    fog = agent.fog()
+    gaps = []
+    for g in fog.gaps.values():
+        gaps.append({
+            "key": g.key,
+            "kind": g.kind.value,
+            "domain": g.domain,
+            "confidence": g.confidence,
+        })
+    return {
+        "agent": fog.agent_id,
+        "gap_count": len(gaps),
+        "gaps": gaps,
+        "ok": True,
+    }
+
+
+async def _fog_seam_measure(payload: dict[str, Any]) -> dict[str, Any]:
+    """Measure fog seam tension between this agent and another agent's fog map."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        return {"error": "No agent attached", "ok": False}
+
+    target_name = payload.get("target_agent", "")
+    if not target_name:
+        return {"error": "target_agent is required", "ok": False}
+
+    my_fog = agent.fog()
+
+    # Build target fog from registry if possible
+    from .fog import FogMap, GapKind
+    target_fog = FogMap(agent_id=target_name)
+    rec = agent._registry._records.get(target_name)
+    if rec:
+        for cap in rec.capabilities:
+            target_fog.add(key=cap, kind=GapKind.KNOWN_UNKNOWN, domain="capability")
+
+    seam = agent.fog_seam(target_fog)
+    return {
+        "agents": f"{my_fog.agent_id}↔{target_name}",
+        "tension": round(seam.tension, 3),
+        "a_only": list(seam.only_in_a),
+        "b_only": list(seam.only_in_b),
+        "shared": list(seam.shared),
+        "high_potential": seam.tension > 0.5,
+        "ok": True,
+    }
+
+
+async def _fog_atlas_holes(payload: dict[str, Any]) -> dict[str, Any]:
+    """Find atlas holes — regions of the mesh no agent covers."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        return {"error": "No agent attached", "ok": False}
+
+    atlas = agent.atlas()
+    holes = atlas.holes()
+    return {
+        "holes": holes,
+        "count": len(holes),
+        "total_charts": len(atlas.charts),
+        "ok": True,
+    }
+
+
+async def _fog_discovery(payload: dict[str, Any]) -> dict[str, Any]:
+    """Discover agents that can fill fog gaps for a given topic."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        return {"error": "No agent attached", "ok": False}
+
+    from .discovery import Discovery
+    disco = Discovery(agent)
+    topic = payload.get("topic", "")
+    if not topic:
+        return {"error": "topic is required", "ok": False}
+
+    result = disco.search_local(topic)
+    return {
+        "query": topic,
+        "hits": [
+            {
+                "agent": h.agent_name,
+                "capability": h.capability,
+                "relevance": round(h.relevance, 3),
+            }
+            for h in result.top(10)
+        ],
+        "total": len(result.hits),
+        "ok": True,
+    }
+
+
+def load_fog_pack(builder: CapabilityBuilder, agent: Any) -> list[CapSpec]:
+    """Register fog awareness capabilities (requires agent reference).
+
+    Caps:lind_spots, fog_map, seam_measure, atlas_holes, fog_discover.
+    Each cap integrates with the fog subsystem for epistemic awareness.
+    """
+
+    async def _blind_wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+        return await _fog_blind_spots({**payload, "__agent__": agent})
+
+    async def _map_wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+        return await _fog_map_snapshot({**payload, "__agent__": agent})
+
+    async def _seam_wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+        return await _fog_seam_measure({**payload, "__agent__": agent})
+
+    async def _atlas_wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+        return await _fog_atlas_holes({**payload, "__agent__": agent})
+
+    async def _disco_wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+        return await _fog_discovery({**payload, "__agent__": agent})
+
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="fog-blind-spots",
+        handler=_blind_wrapped,
+        version="1.0.0",
+        description="Detect blind spots — topics with no complementary peer on mesh",
+        inputs=[],
+        outputs=["blind_spots", "count", "ok"],
+        tags=["fog", "awareness", "blind-spots"],
+    ))
+    specs.append(builder.register(
+        name="fog-map",
+        handler=_map_wrapped,
+        version="1.0.0",
+        description="Snapshot of agent's epistemic fog map — gaps and unknowns",
+        inputs=[],
+        outputs=["agent", "gap_count", "gaps", "ok"],
+        tags=["fog", "awareness", "map"],
+    ))
+    specs.append(builder.register(
+        name="fog-seam-measure",
+        handler=_seam_wrapped,
+        version="1.0.0",
+        description="Measure fog seam tension between this agent and another",
+        inputs=["target_agent"],
+        outputs=["agents", "tension", "a_only", "b_only", "shared", "ok"],
+        tags=["fog", "awareness", "seam"],
+    ))
+    specs.append(builder.register(
+        name="fog-atlas-holes",
+        handler=_atlas_wrapped,
+        version="1.0.0",
+        description="Find atlas holes — mesh regions no agent covers",
+        inputs=[],
+        outputs=["holes", "count", "total_charts", "ok"],
+        tags=["fog", "awareness", "atlas", "holes"],
+    ))
+    specs.append(builder.register(
+        name="fog-discover",
+        handler=_disco_wrapped,
+        version="1.0.0",
+        description="Discover agents that can fill fog gaps for a given topic",
+        inputs=["topic"],
+        outputs=["query", "hits", "total", "ok"],
+        tags=["fog", "awareness", "discovery"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -1117,4 +1308,5 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_planning_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
+        specs.extend(load_fog_pack(builder, agent))
     return specs
