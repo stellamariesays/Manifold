@@ -24,6 +24,7 @@ Available packs:
 - **monitor_pack**: threshold alerts, heartbeat checks, anomaly detection
 - **encoding_pack**: base64, JSON, CSV, URL encoding/decoding
 - **fog_pack**: blind spots, fog map, seam measure, atlas holes, fog discovery
+- **network_pack**: message compose, relay chains, broadcast, request-response, acknowledgements
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import math
 import re
 import statistics
 import time
+import uuid
 from typing import Any
 
 from .capability_builder import CapSpec, CapabilityBuilder
@@ -1602,6 +1604,234 @@ def load_reasoning_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Network Communication Pack ─────────────────────────────────────────
+
+async def _net_compose(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compose a structured inter-agent message with envelope metadata."""
+    to = payload.get("to", [])
+    subject = payload.get("subject", "")
+    body = payload.get("body", {})
+    priority = payload.get("priority", 0.5)  # 0=low, 1=critical
+    ttl_seconds = payload.get("ttl_seconds", 300)
+    msg_type = payload.get("type", "inform")  # inform | request | command | alert
+    reply_to = payload.get("reply_to")
+    correlation_id = payload.get("correlation_id") or f"msg-{uuid.uuid4().hex[:12]}"
+    trace_id = payload.get("trace_id") or f"trace-{uuid.uuid4().hex[:8]}"
+
+    if isinstance(to, str):
+        to = [to]
+
+    now = time.time()
+    envelope = {
+        "message_id": f"msg-{uuid.uuid4().hex[:12]}",
+        "correlation_id": correlation_id,
+        "trace_id": trace_id,
+        "from": payload.get("from", "unknown"),
+        "to": to,
+        "subject": subject,
+        "type": msg_type,
+        "priority": round(min(max(priority, 0.0), 1.0), 2),
+        "ttl_seconds": ttl_seconds,
+        "expires_at": round(now + ttl_seconds, 1),
+        "created_at": round(now, 1),
+        "reply_to": reply_to,
+        "body": body,
+        "hops": 0,
+    }
+
+    return {"envelope": envelope, "ok": True}
+
+
+async def _net_relay(payload: dict[str, Any]) -> dict[str, Any]:
+    """Relay a message through a chain of agents, tracking the route."""
+    chain = payload.get("chain", [])  # ordered list of agent names
+    envelope = payload.get("envelope", {})
+    current_hop = payload.get("current_hop", 0)
+
+    if not chain:
+        return {"error": "chain is empty", "ok": False}
+
+    if not envelope:
+        envelope = (await _net_compose(payload)).get("envelope", {})
+
+    hops = envelope.get("hops", 0) + 1
+    envelope["hops"] = hops
+    visited = envelope.get("visited", [])
+    current_agent = chain[current_hop] if current_hop < len(chain) else None
+
+    if current_agent:
+        visited.append({"agent": current_agent, "at": round(time.time(), 1), "hop": hops})
+
+    envelope["visited"] = visited
+
+    next_hop = current_hop + 1
+    remaining = chain[next_hop:] if next_hop < len(chain) else []
+    is_final = next_hop >= len(chain)
+
+    return {
+        "envelope": envelope,
+        "current_agent": current_agent,
+        "next_hop": next_hop if not is_final else None,
+        "remaining": remaining,
+        "is_final": is_final,
+        "total_hops": hops,
+        "ok": True,
+    }
+
+
+async def _net_broadcast(payload: dict[str, Any]) -> dict[str, Any]:
+    """Fan-out a message to multiple recipients with acknowledgement tracking."""
+    recipients = payload.get("recipients", [])
+    subject = payload.get("subject", "")
+    body = payload.get("body", {})
+    require_ack = payload.get("require_ack", True)
+    ack_timeout = payload.get("ack_timeout_seconds", 30)
+
+    if isinstance(recipients, str):
+        recipients = [recipients]
+
+    if not recipients:
+        return {"error": "no recipients", "ok": False}
+
+    envelope = (await _net_compose({
+        "to": recipients,
+        "subject": subject,
+        "body": body,
+        "type": "inform",
+        "from": payload.get("from", "unknown"),
+    })).get("envelope", {})
+
+    acks: dict[str, str] = {}
+    if require_ack:
+        now = time.time()
+        for r in recipients:
+            acks[r] = "pending"
+
+    return {
+        "envelope": envelope,
+        "recipients": recipients,
+        "recipient_count": len(recipients),
+        "acks": acks,
+        "ack_timeout_seconds": ack_timeout,
+        "delivered_at": round(time.time(), 1),
+        "ok": True,
+    }
+
+
+async def _net_request(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a request-response contract with timeout and retry policy."""
+    target = payload.get("target", "")
+    capability = payload.get("capability", "")
+    request_body = payload.get("body", {})
+    timeout_seconds = payload.get("timeout_seconds", 60)
+    max_retries = payload.get("max_retries", 2)
+    priority = payload.get("priority", 0.5)
+
+    if not target or not capability:
+        return {"error": "target and capability required", "ok": False}
+
+    request_id = f"req-{uuid.uuid4().hex[:12]}"
+    now = time.time()
+
+    contract = {
+        "request_id": request_id,
+        "target": target,
+        "capability": capability,
+        "body": request_body,
+        "timeout_seconds": timeout_seconds,
+        "max_retries": max_retries,
+        "priority": round(min(max(priority, 0.0), 1.0), 2),
+        "created_at": round(now, 1),
+        "expires_at": round(now + timeout_seconds, 1),
+        "attempts": 0,
+        "status": "pending",  # pending | sent | completed | failed | timeout
+    }
+
+    return {
+        "contract": contract,
+        "request_id": request_id,
+        "ok": True,
+    }
+
+
+async def _net_ack(payload: dict[str, Any]) -> dict[str, Any]:
+    """Acknowledge receipt of a message, optionally with a response."""
+    message_id = payload.get("message_id", "")
+    status = payload.get("status", "received")  # received | processing | completed | rejected
+    response = payload.get("response", {})
+    latency_ms = payload.get("latency_ms", 0.0)
+
+    if not message_id:
+        return {"error": "message_id required", "ok": False}
+
+    ack = {
+        "message_id": message_id,
+        "status": status,
+        "response": response,
+        "latency_ms": latency_ms,
+        "acked_at": round(time.time(), 1),
+    }
+
+    return {"ack": ack, "ok": True}
+
+
+def load_network_pack(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
+    """Register network communication capabilities.
+
+    Caps: compose, relay, broadcast, request, ack.
+    Enables structured inter-agent messaging with envelope metadata,
+    relay chains, fan-out with acknowledgement tracking, and
+    request-response contracts with timeout/retry policies.
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="net-compose",
+        handler=_net_compose,
+        version="1.0.0",
+        description="Compose a structured inter-agent message with envelope, priority, and TTL",
+        inputs=["to", "subject", "body"],
+        outputs=["envelope", "ok"],
+        tags=["network", "messaging", "compose"],
+    ))
+    specs.append(builder.register(
+        name="net-relay",
+        handler=_net_relay,
+        version="1.0.0",
+        description="Relay a message through an ordered chain of agents with hop tracking",
+        inputs=["chain"],
+        outputs=["envelope", "current_agent", "is_final", "ok"],
+        tags=["network", "messaging", "relay"],
+    ))
+    specs.append(builder.register(
+        name="net-broadcast",
+        handler=_net_broadcast,
+        version="1.0.0",
+        description="Fan-out a message to multiple recipients with acknowledgement tracking",
+        inputs=["recipients", "subject", "body"],
+        outputs=["envelope", "recipients", "acks", "ok"],
+        tags=["network", "messaging", "broadcast"],
+    ))
+    specs.append(builder.register(
+        name="net-request",
+        handler=_net_request,
+        version="1.0.0",
+        description="Create a request-response contract with timeout and retry policy",
+        inputs=["target", "capability"],
+        outputs=["contract", "request_id", "ok"],
+        tags=["network", "messaging", "request-response"],
+    ))
+    specs.append(builder.register(
+        name="net-ack",
+        handler=_net_ack,
+        version="1.0.0",
+        description="Acknowledge receipt of a message with optional response payload",
+        inputs=["message_id"],
+        outputs=["ack", "ok"],
+        tags=["network", "messaging", "acknowledgement"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -1615,6 +1845,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_encoding_pack(builder))
     specs.extend(load_planning_pack(builder))
     specs.extend(load_reasoning_pack(builder))
+    specs.extend(load_network_pack(builder, agent))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
