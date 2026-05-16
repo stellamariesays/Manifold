@@ -78,3 +78,17 @@ scripts/deploy-manifold-mri.sh
 # Private project copies / build artifacts
 projects/manifold-federation/start-*.sh
 projects/numinous/
+
+# More private/internal files
+projects/manifold-federation/DEPLOYMENT.md
+docs/federation-design-proposal.md
+scripts/manifold-pr-monitor.py
+federation/scripts/export-codes.py
+federation/gate-standalone.cjs
+federation/standalone.cjs
+federation/start-runner.cjs
+federation/runner.cjs
+federation/echo-agent.cjs
+federation/public/nexal/desktop/
+federation/public/nexal/admin.html
+federation/examples/runner-config.hog.json
