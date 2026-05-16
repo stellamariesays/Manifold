@@ -32,3 +32,19 @@ Thumbs.db
 *.pyo
 *.pyd
 .Python
+
+# Private operational files — never commit
+memory/
+data/soul-live.md
+data/bootstrap-live.md
+SOUL.md
+TOOLS.md
+USER.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+AGENTS.md
+.openclaw/
+tardis/
+data/*.json
+data/*.jsonl
