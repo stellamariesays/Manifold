@@ -393,6 +393,219 @@ def load_routing_pack(builder: CapabilityBuilder, agent: Any) -> list[CapSpec]:
     return specs
 
 
+# ─── Data Pipeline Pack ────────────────────────────────────────────────
+
+async def _data_validate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate a data record against required fields and type rules."""
+    record = payload.get("record", {})
+    rules = payload.get("rules", {})
+    # rules: {"field": {"type": "int", "required": true, "min": 0, "max": 100}}
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for field_name, rule in rules.items():
+        value = record.get(field_name)
+        if rule.get("required") and value is None:
+            errors.append(f"{field_name}: required but missing")
+            continue
+        if value is None:
+            continue
+        expected_type = rule.get("type")
+        type_map = {"str": str, "int": int, "float": (int, float), "bool": bool, "list": list, "dict": dict}
+        if expected_type and expected_type in type_map:
+            if not isinstance(value, type_map[expected_type]):
+                errors.append(f"{field_name}: expected {expected_type}, got {type(value).__name__}")
+                continue
+        if "min" in rule and isinstance(value, (int, float)) and value < rule["min"]:
+            errors.append(f"{field_name}: {value} below minimum {rule['min']}")
+        if "max" in rule and isinstance(value, (int, float)) and value > rule["max"]:
+            errors.append(f"{field_name}: {value} above maximum {rule['max']}")
+        if "pattern" in rule and isinstance(value, str):
+            if not re.match(rule["pattern"], value):
+                errors.append(f"{field_name}: does not match pattern {rule['pattern']}")
+        if "enum" in rule and value not in rule["enum"]:
+            errors.append(f"{field_name}: {value!r} not in {rule['enum']}")
+
+    # Check for unexpected fields
+    allowed = set(rules.keys())
+    if rule.get("strict"):
+        for key in record:
+            if key not in allowed:
+                warnings.append(f"{key}: unexpected field")
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "warnings": warnings,
+        "checked_fields": len(rules),
+    }
+
+
+async def _data_transform(payload: dict[str, Any]) -> dict[str, Any]:
+    """Transform records with map/rename/filter operations."""
+    records = payload.get("records", [])
+    ops = payload.get("operations", [])
+
+    if isinstance(records, dict):
+        records = [records]
+
+    result = list(records)
+
+    for op in ops:
+        op_type = op.get("type")
+        if op_type == "rename":
+            old, new = op["from"], op["to"]
+            for rec in result:
+                if old in rec:
+                    rec[new] = rec.pop(old)
+        elif op_type == "select":
+            fields = op.get("fields", [])
+            result = [{k: rec.get(k) for k in fields if k in rec} for rec in result]
+        elif op_type == "filter":
+            field = op.get("field")
+            value = op.get("value")
+            op_val = op.get("op", "eq")
+            if op_val == "eq":
+                result = [r for r in result if r.get(field) == value]
+            elif op_val == "neq":
+                result = [r for r in result if r.get(field) != value]
+            elif op_val == "gt":
+                result = [r for r in result if r.get(field, value) > value]
+            elif op_val == "lt":
+                result = [r for r in result if r.get(field, value) < value]
+            elif op_val == "gte":
+                result = [r for r in result if r.get(field, value) >= value]
+            elif op_val == "lte":
+                result = [r for r in result if r.get(field, value) <= value]
+        elif op_type == "add_field":
+            name = op.get("name")
+            val = op.get("value")
+            for rec in result:
+                rec[name] = val
+        elif op_type == "sort":
+            field = op.get("field")
+            reverse = op.get("reverse", False)
+            result.sort(key=lambda r: r.get(field, ""), reverse=reverse)
+
+    return {"records": result, "count": len(result)}
+
+
+async def _data_aggregate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate numeric data: sum, mean, min, max, count, group-by."""
+    records = payload.get("records", [])
+    field = payload.get("field")
+    group_by = payload.get("group_by")
+
+    if not records or not field:
+        return {"error": "records and field required", "ok": False}
+
+    values = [rec.get(field) for rec in records if isinstance(rec.get(field), (int, float))]
+
+    if not values:
+        return {"error": f"no numeric values for field '{field}'", "ok": False}
+
+    base = {
+        "count": len(values),
+        "sum": sum(values),
+        "mean": statistics.mean(values),
+        "min": min(values),
+        "max": max(values),
+    }
+    if len(values) > 1:
+        base["stdev"] = statistics.stdev(values)
+        base["median"] = statistics.median(values)
+
+    # Group-by support
+    groups: dict[str, list[float]] = {}
+    if group_by:
+        for rec in records:
+            key = str(rec.get(group_by, "__none__"))
+            val = rec.get(field)
+            if isinstance(val, (int, float)):
+                groups.setdefault(key, []).append(val)
+        base["groups"] = {}
+        for gk, gvals in groups.items():
+            base["groups"][gk] = {
+                "count": len(gvals),
+                "sum": sum(gvals),
+                "mean": statistics.mean(gvals),
+            }
+
+    base["ok"] = True
+    return base
+
+
+async def _data_merge(payload: dict[str, Any]) -> dict[str, Any]:
+    """Merge two datasets on a key field (inner/left join)."""
+    left = payload.get("left", [])
+    right = payload.get("right", [])
+    key = payload.get("key")
+    how = payload.get("how", "inner")  # inner or left
+
+    if not key:
+        return {"error": "key field required", "ok": False}
+
+    right_index: dict[str, dict] = {}
+    for rec in right:
+        k = rec.get(key)
+        if k is not None:
+            right_index[str(k)] = rec
+
+    merged = []
+    for rec in left:
+        k = str(rec.get(key, ""))
+        right_rec = right_index.get(k)
+        if right_rec:
+            combined = {**rec, **{f"{rk}": rv for rk, rv in right_rec.items() if rk != key}}
+            merged.append(combined)
+        elif how == "left":
+            merged.append(dict(rec))
+
+    return {"records": merged, "count": len(merged), "ok": True}
+
+
+def load_data_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register data pipeline capabilities: validate, transform, aggregate, merge."""
+    specs = []
+    specs.append(builder.register(
+        name="data-validate",
+        handler=_data_validate,
+        version="1.0.0",
+        description="Validate records against field rules (type, range, enum, pattern)",
+        inputs=["record", "rules"],
+        outputs=["valid", "errors", "warnings"],
+        tags=["data", "validation", "pipeline"],
+    ))
+    specs.append(builder.register(
+        name="data-transform",
+        handler=_data_transform,
+        version="1.0.0",
+        description="Transform records: rename, select, filter, sort, add fields",
+        inputs=["records", "operations"],
+        outputs=["records", "count"],
+        tags=["data", "transform", "pipeline"],
+    ))
+    specs.append(builder.register(
+        name="data-aggregate",
+        handler=_data_aggregate,
+        version="1.0.0",
+        description="Aggregate numeric fields: sum, mean, min, max, group-by stats",
+        inputs=["records", "field"],
+        outputs=["count", "sum", "mean", "min", "max", "groups"],
+        tags=["data", "aggregation", "statistics", "pipeline"],
+    ))
+    specs.append(builder.register(
+        name="data-merge",
+        handler=_data_merge,
+        version="1.0.0",
+        description="Merge two datasets on a key field (inner/left join)",
+        inputs=["left", "right", "key"],
+        outputs=["records", "count"],
+        tags=["data", "merge", "join", "pipeline"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -401,6 +614,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_text_pack(builder))
     specs.extend(load_math_pack(builder))
     specs.extend(load_meta_pack(builder))
+    specs.extend(load_data_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
     return specs

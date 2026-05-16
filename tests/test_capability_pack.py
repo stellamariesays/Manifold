@@ -196,13 +196,13 @@ class TestRoutingPack:
 class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
-        # 3 text + 3 math + 2 meta + 2 routing = 10
-        assert len(specs) == 10
+        # 3 text + 3 math + 2 meta + 4 data + 2 routing = 14
+        assert len(specs) == 14
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
-        # 3 text + 3 math + 2 meta = 8
-        assert len(specs) == 8
+        # 3 text + 3 math + 2 meta + 4 data = 12
+        assert len(specs) == 12
 
     def test_search_finds_packs(self, builder, agent):
         load_all_packs(builder, agent)
@@ -212,5 +212,5 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 10
-        assert stats["active"] == 10
+        assert stats["total_capabilities"] == 14
+        assert stats["active"] == 14
