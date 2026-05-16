@@ -48,3 +48,33 @@ AGENTS.md
 tardis/
 data/*.json
 data/*.jsonl
+
+# Private config files with real IPs/tokens
+federation/config-hog.json
+federation/config-satelliteA.json
+federation/runner-config.json
+federation/runner-config-satelliteA.json
+federation/start-hog.sh
+federation/start-satelitea.sh
+federation/start-trillian.sh
+federation/data/access-codes.json
+federation/data/capability-cache.json
+federation/data/echo-agent.json
+
+# Debug/diagnostic one-offs
+federation/diag-relay-body.cjs
+federation/nexal-relay-patch.js
+
+# Runtime state / databases
+data/manifold.db
+data/manifold/
+data/*.db
+
+# Internal deployment scripts with hardcoded paths/tokens
+scripts/soul-gen.py
+scripts/manifold-heartbeat.sh
+scripts/deploy-manifold-mri.sh
+
+# Private project copies / build artifacts
+projects/manifold-federation/start-*.sh
+projects/numinous/
