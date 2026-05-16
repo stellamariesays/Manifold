@@ -20,6 +20,9 @@ Available packs:
 - **math_pack**: basic arithmetic, statistics over lists
 - **routing_pack**: audience-based message routing, topic broadcast
 - **meta_pack**: self-inspection, capability catalog query
+- **data_pack**: validation, transform, aggregation, merge
+- **monitor_pack**: threshold alerts, heartbeat checks, anomaly detection
+- **encoding_pack**: base64, JSON, CSV, URL encoding/decoding
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from __future__ import annotations
 import math
 import re
 import statistics
+import time
 from typing import Any
 
 from .capability_builder import CapSpec, CapabilityBuilder
@@ -606,6 +610,262 @@ def load_data_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Monitor Pack ───────────────────────────────────────────────────────
+
+async def _monitor_threshold(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check values against thresholds and return alert status."""
+    metrics = payload.get("metrics", {})
+    rules = payload.get("rules", {})
+    # rules: {"metric_name": {"min": float, "max": float, "warn_min": float, "warn_max": float}}
+
+    alerts: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    ok = True
+
+    for name, rule in rules.items():
+        value = metrics.get(name)
+        if value is None:
+            continue
+        lo = rule.get("min", float("-inf"))
+        hi = rule.get("max", float("inf"))
+        warn_lo = rule.get("warn_min", lo)
+        warn_hi = rule.get("warn_max", hi)
+
+        if value < lo or value > hi:
+            alerts.append({"metric": name, "value": value, "rule": rule, "severity": "critical"})
+            ok = False
+        elif value < warn_lo or value > warn_hi:
+            warnings.append({"metric": name, "value": value, "rule": rule, "severity": "warning"})
+
+    return {"ok": ok, "alerts": alerts, "warnings": warnings, "checked": len(rules)}
+
+
+async def _monitor_heartbeat(payload: dict[str, Any]) -> dict[str, Any]:
+    """Track periodic heartbeats and detect stale agents."""
+    agents = payload.get("agents", {})
+    now = payload.get("now") or time.time()
+    stale_threshold = payload.get("stale_seconds", 300)
+    dead_threshold = payload.get("dead_seconds", 900)
+
+    stale: list[dict[str, Any]] = []
+    dead: list[dict[str, Any]] = []
+    healthy: list[str] = []
+
+    for name, info in agents.items():
+        last_seen = info.get("last_seen", 0)
+        age = now - last_seen
+        entry = {"name": name, "age_seconds": round(age, 1), "last_seen": last_seen}
+        if age > dead_threshold:
+            dead.append(entry)
+        elif age > stale_threshold:
+            stale.append(entry)
+        else:
+            healthy.append(name)
+
+    return {
+        "healthy": healthy,
+        "stale": stale,
+        "dead": dead,
+        "healthy_count": len(healthy),
+        "stale_count": len(stale),
+        "dead_count": len(dead),
+        "ok": len(dead) == 0,
+    }
+
+
+async def _monitor_anomaly(payload: dict[str, Any]) -> dict[str, Any]:
+    """Detect anomalies in a time series using z-score."""
+    values = payload.get("values", [])
+    window = payload.get("window", 20)
+    z_threshold = payload.get("z_threshold", 2.0)
+
+    if len(values) < 3:
+        return {"anomalies": [], "anomaly_count": 0, "mean": None, "std": None, "ok": True}
+
+    # Use last `window` values as baseline, or all if fewer
+    baseline = values[-window:] if len(values) > window else values
+    mean_val = statistics.mean(baseline)
+    std_val = statistics.stdev(baseline) if len(baseline) > 1 else 0.0
+
+    anomalies: list[dict[str, Any]] = []
+    if std_val > 0:
+        for i, v in enumerate(values):
+            z = abs(v - mean_val) / std_val
+            if z > z_threshold:
+                anomalies.append({"index": i, "value": v, "z_score": round(z, 2)})
+
+    return {
+        "anomalies": anomalies,
+        "anomaly_count": len(anomalies),
+        "mean": round(mean_val, 4),
+        "std": round(std_val, 4) if std_val else 0.0,
+        "ok": len(anomalies) == 0,
+    }
+
+
+# ─── Encoding Pack ──────────────────────────────────────────────────────
+
+async def _encode_base64(payload: dict[str, Any]) -> dict[str, Any]:
+    """Encode or decode base64."""
+    import base64 as b64mod
+
+    data = payload.get("data", "")
+    direction = payload.get("direction", "encode")
+
+    if direction == "decode":
+        try:
+            decoded = b64mod.b64decode(data).decode("utf-8", errors="replace")
+            return {"result": decoded, "direction": "decode", "ok": True}
+        except Exception as e:
+            return {"result": "", "direction": "decode", "ok": False, "error": str(e)}
+    else:
+        encoded = b64mod.b64encode(data.encode("utf-8")).decode("ascii")
+        return {"result": encoded, "direction": "encode", "ok": True}
+
+
+async def _encode_json(payload: dict[str, Any]) -> dict[str, Any]:
+    """Parse or serialize JSON."""
+    import json as json_mod
+
+    direction = payload.get("direction", "parse")
+
+    if direction == "parse":
+        text = payload.get("text", "")
+        try:
+            parsed = json_mod.loads(text)
+            return {"result": parsed, "direction": "parse", "ok": True}
+        except json_mod.JSONDecodeError as e:
+            return {"result": None, "direction": "parse", "ok": False, "error": str(e)}
+    else:
+        obj = payload.get("object", {})
+        indent = payload.get("indent", 2)
+        try:
+            text = json_mod.dumps(obj, indent=indent, sort_keys=True, default=str)
+            return {"result": text, "direction": "serialize", "ok": True}
+        except (TypeError, ValueError) as e:
+            return {"result": "", "direction": "serialize", "ok": False, "error": str(e)}
+
+
+async def _encode_csv(payload: dict[str, Any]) -> dict[str, Any]:
+    """Parse records from CSV text or serialize records to CSV."""
+    import csv as csv_mod
+    import io
+
+    direction = payload.get("direction", "parse")
+
+    if direction == "parse":
+        text = payload.get("text", "")
+        reader = csv_mod.DictReader(io.StringIO(text))
+        records = [dict(row) for row in reader]
+        return {"records": records, "count": len(records), "direction": "parse", "ok": True}
+    else:
+        records = payload.get("records", [])
+        if not records:
+            return {"text": "", "direction": "serialize", "ok": True}
+        output = io.StringIO()
+        writer = csv_mod.DictWriter(output, fieldnames=records[0].keys())
+        writer.writeheader()
+        writer.writerows(records)
+        return {"text": output.getvalue(), "direction": "serialize", "ok": True}
+
+
+async def _encode_url(payload: dict[str, Any]) -> dict[str, Any]:
+    """Encode or decode URL components."""
+    import urllib.parse as urlparse
+
+    text = payload.get("text", "")
+    direction = payload.get("direction", "encode")
+    component = payload.get("component", "query")
+
+    if direction == "decode":
+        if component == "path":
+            result = urlparse.unquote(text)
+        else:
+            result = urlparse.unquote_plus(text)
+    else:
+        if component == "path":
+            result = urlparse.quote(text, safe="/")
+        else:
+            result = urlparse.quote_plus(text)
+
+    return {"result": result, "direction": direction, "component": component, "ok": True}
+
+
+def load_monitor_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register monitoring and alerting capabilities."""
+    specs = []
+    specs.append(builder.register(
+        name="monitor-threshold",
+        handler=_monitor_threshold,
+        version="1.0.0",
+        description="Check metrics against threshold rules, return alerts and warnings",
+        inputs=["metrics", "rules"],
+        outputs=["ok", "alerts", "warnings"],
+        tags=["monitoring", "alerting", "threshold"],
+    ))
+    specs.append(builder.register(
+        name="monitor-heartbeat",
+        handler=_monitor_heartbeat,
+        version="1.0.0",
+        description="Track agent heartbeats, detect stale and dead agents",
+        inputs=["agents", "now"],
+        outputs=["healthy", "stale", "dead", "ok"],
+        tags=["monitoring", "heartbeat", "health"],
+    ))
+    specs.append(builder.register(
+        name="monitor-anomaly",
+        handler=_monitor_anomaly,
+        version="1.0.0",
+        description="Detect anomalies in numeric time series using z-score analysis",
+        inputs=["values"],
+        outputs=["anomalies", "anomaly_count", "mean", "std", "ok"],
+        tags=["monitoring", "anomaly", "statistics"],
+    ))
+    return specs
+
+
+def load_encoding_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register encoding and serialization capabilities."""
+    specs = []
+    specs.append(builder.register(
+        name="encode-base64",
+        handler=_encode_base64,
+        version="1.0.0",
+        description="Encode or decode base64 strings",
+        inputs=["data"],
+        outputs=["result", "ok"],
+        tags=["encoding", "base64"],
+    ))
+    specs.append(builder.register(
+        name="encode-json",
+        handler=_encode_json,
+        version="1.0.0",
+        description="Parse JSON text to object or serialize object to JSON",
+        inputs=[],
+        outputs=["result", "ok"],
+        tags=["encoding", "json"],
+    ))
+    specs.append(builder.register(
+        name="encode-csv",
+        handler=_encode_csv,
+        version="1.0.0",
+        description="Parse CSV text to records or serialize records to CSV",
+        inputs=[],
+        outputs=["records", "text", "ok"],
+        tags=["encoding", "csv"],
+    ))
+    specs.append(builder.register(
+        name="encode-url",
+        handler=_encode_url,
+        version="1.0.0",
+        description="Encode or decode URL components (query or path)",
+        inputs=["text"],
+        outputs=["result", "ok"],
+        tags=["encoding", "url"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -615,6 +875,8 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_math_pack(builder))
     specs.extend(load_meta_pack(builder))
     specs.extend(load_data_pack(builder))
+    specs.extend(load_monitor_pack(builder))
+    specs.extend(load_encoding_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
     return specs
