@@ -197,13 +197,13 @@ class TestRoutingPack:
 class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
-        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog = 29
-        assert len(specs) == 29
+        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog + 4 reasoning = 33
+        assert len(specs) == 33
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
-        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning = 22
-        assert len(specs) == 22
+        # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 4 reasoning = 26
+        assert len(specs) == 26
 
     def test_search_finds_packs(self, builder, agent):
         load_all_packs(builder, agent)
@@ -213,8 +213,8 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 29
-        assert stats["active"] == 29
+        assert stats["total_capabilities"] == 33
+        assert stats["active"] == 33
 
 
 # ─── Fog Awareness Pack ──────────────────────────────────────────────────

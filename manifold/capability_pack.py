@@ -1294,6 +1294,314 @@ def load_fog_pack(builder: CapabilityBuilder, agent: Any) -> list[CapSpec]:
     return specs
 
 
+# ─── Reasoning Pack ──────────────────────────────────────────────────────
+
+async def _reasoning_decompose(payload: dict[str, Any]) -> dict[str, Any]:
+    """Break a complex problem into ordered sub-problems."""
+    problem = payload.get("problem", "")
+    if not problem:
+        raise ValueError("problem is required")
+    max_steps = min(payload.get("max_steps", 6), 20)
+    
+    # Heuristic decomposition: split on common delimiters and structures
+    steps: list[dict[str, Any]] = []
+    
+    # Detect compound questions
+    connectors = [" and ", " but ", " then ", " also ", " as well as ", " while "]
+    parts = [problem]
+    for conn in connectors:
+        new_parts: list[str] = []
+        for part in parts:
+            new_parts.extend(part.split(conn))
+        parts = new_parts
+    
+    # If compound, each part is a sub-problem
+    if len(parts) > 1:
+        for i, part in enumerate(parts):
+            part = part.strip().rstrip(".?,!")
+            if part:
+                steps.append({
+                    "step": i + 1,
+                    "description": part,
+                    "type": "sub_problem",
+                    "depends_on": [i] if i > 0 else [],
+                })
+    else:
+        # Single problem — decompose by analysis phases
+        phases = [
+            ("understand", "Identify key concepts and constraints"),
+            ("gather", "Collect relevant information and data"),
+            ("analyze", "Apply reasoning to the gathered information"),
+            ("conclude", "Synthesize findings into an answer"),
+        ]
+        for i, (phase_name, desc) in enumerate(phases[:max_steps]):
+            steps.append({
+                "step": i + 1,
+                "description": f"{desc} for: {problem}",
+                "type": phase_name,
+                "depends_on": [i] if i > 0 else [],
+            })
+    
+    steps = steps[:max_steps]
+    return {
+        "problem": problem,
+        "steps": steps,
+        "total": len(steps),
+        "is_compound": len(parts) > 1,
+        "ok": True,
+    }
+
+
+async def _reasoning_synthesize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Synthesize multiple inputs into a unified conclusion."""
+    inputs = payload.get("inputs", [])
+    if not inputs:
+        raise ValueError("inputs list is required")
+    
+    goal = payload.get("goal", "synthesize")
+    
+    # Structural analysis
+    str_items = [str(i) for i in inputs]
+    total_items = len(str_items)
+    avg_len = sum(len(s) for s in str_items) / max(total_items, 1)
+    
+    # Find common themes via trigram overlap
+    all_trigrams: list[set[str]] = []
+    for item in str_items:
+        t = f"  {item.lower()}  "
+        trigrams = {t[j:j+3] for j in range(len(t) - 2)}
+        all_trigrams.append(trigrams)
+    
+    # Pairwise similarity
+    similarities: list[float] = []
+    for i in range(len(all_trigrams)):
+        for j in range(i + 1, len(all_trigrams)):
+            a, b = all_trigrams[i], all_trigrams[j]
+            if a and b:
+                sim = len(a & b) / len(a | b)
+                similarities.append(sim)
+    
+    coherence = statistics.mean(similarities) if similarities else 0.0
+    
+    # Identify consensus vs divergence
+    consensus: list[str] = []
+    divergence: list[str] = []
+    if all_trigrams and len(all_trigrams) > 1:
+        common = all_trigrams[0]
+        for t in all_trigrams[1:]:
+            common = common & t
+        # Extract fragments that appear in all inputs
+        for trig in list(common)[:10]:
+            for item in str_items:
+                if trig in item.lower():
+                    # Find the word containing this trigram
+                    words = item.split()
+                    for w in words:
+                        if trig.strip() in w.lower():
+                            if w not in consensus:
+                                consensus.append(w)
+                            break
+                    break
+    
+    return {
+        "goal": goal,
+        "input_count": total_items,
+        "coherence": round(coherence, 3),
+        "consensus_terms": consensus[:10],
+        "divergence_detected": coherence < 0.3,
+        "summary": (
+            f"{total_items} inputs analyzed, "
+            f"coherence={coherence:.2f}. "
+            f"{'High agreement' if coherence > 0.6 else 'Mixed signals' if coherence > 0.3 else 'Low agreement'}"
+        ),
+        "ok": True,
+    }
+
+
+async def _reasoning_decide(payload: dict[str, Any]) -> dict[str, Any]:
+    """Multi-criteria decision analysis across options."""
+    options = payload.get("options", [])
+    if len(options) < 2:
+        raise ValueError("At least 2 options required")
+    
+    criteria = payload.get("criteria", [])
+    if not criteria:
+        # Default criteria
+        criteria = ["feasibility", "impact", "cost"]
+    
+    weights = payload.get("weights", {})
+    
+    # Score each option against each criterion
+    results: list[dict[str, Any]] = []
+    for opt in options:
+        opt_str = str(opt)
+        scores: dict[str, float] = {}
+        reasons: list[str] = []
+        
+        for criterion in criteria:
+            w = weights.get(criterion, 1.0)
+            # Heuristic scoring based on option properties
+            score = 0.5  # neutral baseline
+            opt_lower = opt_str.lower()
+            
+            if criterion == "feasibility":
+                if any(w in opt_lower for w in ["simple", "easy", "direct", "existing"]):
+                    score = 0.8
+                elif any(w in opt_lower for w in ["complex", "hard", "rewrite"]):
+                    score = 0.3
+            elif criterion == "impact":
+                if any(w in opt_lower for w in ["high", "critical", "essential", "key"]):
+                    score = 0.85
+                elif any(w in opt_lower for w in ["low", "minor", "nice-to-have"]):
+                    score = 0.2
+            elif criterion == "cost":
+                if any(w in opt_lower for w in ["cheap", "free", "minimal", "low"]):
+                    score = 0.8
+                elif any(w in opt_lower for w in ["expensive", "high", "significant"]):
+                    score = 0.25
+            else:
+                # Generic: use string length as proxy for specificity
+                score = min(len(opt_str) / 100.0, 1.0) * 0.5 + 0.25
+            
+            scores[criterion] = round(score * w, 3)
+            if score > 0.6:
+                reasons.append(f"{criterion}: strong ({score:.1f})")
+        
+        weighted_total = sum(scores.values()) / sum(
+            weights.get(c, 1.0) for c in criteria
+        )
+        results.append({
+            "option": opt_str,
+            "scores": scores,
+            "weighted_total": round(weighted_total, 3),
+            "strengths": reasons,
+        })
+    
+    # Rank by weighted total
+    results.sort(key=lambda r: r["weighted_total"], reverse=True)
+    
+    return {
+        "criteria": criteria,
+        "weights": weights or {c: 1.0 for c in criteria},
+        "ranked_options": results,
+        "recommended": results[0]["option"] if results else None,
+        "ok": True,
+    }
+
+
+async def _reasoning_chain(payload: dict[str, Any]) -> dict[str, Any]:
+    """Execute a chain-of-thought reasoning trace."""
+    premise = payload.get("premise", "")
+    if not premise:
+        raise ValueError("premise is required")
+    
+    max_hops = min(payload.get("max_hops", 5), 15)
+    
+    # Build reasoning chain
+    chain: list[dict[str, Any]] = []
+    current = premise
+    
+    for hop in range(max_hops):
+        # Analyze current state
+        words = current.split()
+        key_terms = [w for w in words if len(w) > 4][:5]
+        
+        # Deductive step: extract implications
+        implications: list[str] = []
+        if " because " in current.lower():
+            implications.append("causal link detected — verify both sides")
+        if " therefore " in current.lower() or " so " in current.lower():
+            implications.append("conclusion step — check for logical leaps")
+        if any(w in current.lower() for w in ["all", "every", "always", "never"]):
+            implications.append("universal claim — look for counterexamples")
+        if " implies " in current.lower() or " leads to " in current.lower():
+            implications.append("implication chain — trace dependency")
+        
+        if not implications:
+            # Generate next reasoning step
+            if hop == 0:
+                implications.append(f"premise accepted: identify key claims")
+            else:
+                implications.append("no further logical structure detected")
+        
+        confidence = max(0.0, 1.0 - hop * 0.15)
+        chain.append({
+            "hop": hop + 1,
+            "state": current[:200],
+            "key_terms": key_terms,
+            "implications": implications,
+            "confidence": round(confidence, 2),
+        })
+        
+        # Advance: shorten to key terms for next hop
+        if key_terms:
+            current = " ".join(key_terms)
+        else:
+            break
+        
+        # Stop if confidence drops too low
+        if confidence < 0.3:
+            break
+    
+    final_confidence = chain[-1]["confidence"] if chain else 0.0
+    
+    return {
+        "premise": premise[:200],
+        "chain": chain,
+        "hops": len(chain),
+        "final_confidence": final_confidence,
+        "reasoning_depth": "deep" if len(chain) >= 4 else "moderate" if len(chain) >= 2 else "shallow",
+        "ok": True,
+    }
+
+
+def load_reasoning_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register reasoning and analysis capabilities.
+
+    Caps: decompose, synthesize, decide, chain.
+    Enables structured reasoning: problem decomposition, multi-source
+    synthesis, multi-criteria decision making, and chain-of-thought tracing.
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="reasoning-decompose",
+        handler=_reasoning_decompose,
+        version="1.0.0",
+        description="Break a complex problem into ordered sub-problems",
+        inputs=["problem"],
+        outputs=["steps", "total", "is_compound", "ok"],
+        tags=["reasoning", "planning", "decomposition"],
+    ))
+    specs.append(builder.register(
+        name="reasoning-synthesize",
+        handler=_reasoning_synthesize,
+        version="1.0.0",
+        description="Synthesize multiple inputs into a unified conclusion with coherence scoring",
+        inputs=["inputs"],
+        outputs=["coherence", "consensus_terms", "summary", "ok"],
+        tags=["reasoning", "synthesis", "analysis"],
+    ))
+    specs.append(builder.register(
+        name="reasoning-decide",
+        handler=_reasoning_decide,
+        version="1.0.0",
+        description="Multi-criteria decision analysis across options",
+        inputs=["options"],
+        outputs=["ranked_options", "recommended", "ok"],
+        tags=["reasoning", "decision", "analysis"],
+    ))
+    specs.append(builder.register(
+        name="reasoning-chain",
+        handler=_reasoning_chain,
+        version="1.0.0",
+        description="Execute a chain-of-thought reasoning trace from a premise",
+        inputs=["premise"],
+        outputs=["chain", "hops", "final_confidence", "ok"],
+        tags=["reasoning", "chain-of-thought", "analysis"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -1306,6 +1614,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_monitor_pack(builder))
     specs.extend(load_encoding_pack(builder))
     specs.extend(load_planning_pack(builder))
+    specs.extend(load_reasoning_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
