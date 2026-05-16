@@ -92,3 +92,4 @@ federation/echo-agent.cjs
 federation/public/nexal/desktop/
 federation/public/nexal/admin.html
 federation/examples/runner-config.hog.json
+projects/manifold-federation/
