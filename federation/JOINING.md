@@ -66,8 +66,8 @@ const server = new ManifoldServer({
   localPort: 8768,                // Agent runner connects here
   restPort: 8777,                 // REST API
   peers: [
-    "ws://100.70.172.34:8766",    // HOG
-    "ws://100.86.105.39:8766",    // satelliteA
+    "ws://YOUR-HOG-IP:8766",    // HOG
+    "ws://YOUR-SATELLITEA-IP:8766",    // satelliteA
     // Add more peers as you discover them
   ],
   debug: true,
@@ -291,7 +291,7 @@ setsid python3 ~/Manifold/federation/src/runtime/agent-runner.py \
 Add to crontab (`crontab -e`):
 
 ```cron
-@reboot sleep 30 && cd /home/YOURUSER/Manifold/federation && setsid npm exec tsx -- -e 'import{ManifoldServer as S}from"./dist/server/index.js";(async()=>{await new S({name:"your-hub-name",federationPort:8766,localPort:8768,restPort:8777,peers:["ws://100.70.172.34:8766","ws://100.86.105.39:8766"],debug:true}).start()})()' > /tmp/federation.log 2>&1 &
+@reboot sleep 30 && cd /home/YOURUSER/Manifold/federation && setsid npm exec tsx -- -e 'import{ManifoldServer as S}from"./dist/server/index.js";(async()=>{await new S({name:"your-hub-name",federationPort:8766,localPort:8768,restPort:8777,peers:["ws://YOUR-HOG-IP:8766","ws://YOUR-SATELLITEA-IP:8766"],debug:true}).start()})()' > /tmp/federation.log 2>&1 &
 @reboot sleep 35 && setsid python3 /home/YOURUSER/Manifold/federation/src/runtime/agent-runner.py --config /home/YOURUSER/Manifold/federation/runner-config.json > /tmp/agent-runner.log 2>&1 &
 ```
 

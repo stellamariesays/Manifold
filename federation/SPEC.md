@@ -32,7 +32,7 @@ Implement the foundation for federating Manifold mesh topologies across multiple
 - **Server**: Python manifold.server on ws://127.0.0.1:8765 (pid 88704)
 - **Agents**: Unknown (needs audit)
 - **Atlas**: Unknown location
-- **Workspace**: `/home/marvin/.openclaw/workspace`
+- **Workspace**: `/path/to/your/workspace`
 
 ### Problem
 Both servers are localhost-only and isolated. No federation, no cross-mesh discovery.
@@ -120,7 +120,7 @@ const server = new ManifoldServer({
     pubkey: 'ed25519:...'
   },
   peers: [
-    'ws://100.70.172.34:8766'  // HOG's Tailscale IP
+    'ws://YOUR-HOG-IP:8766'  // HOG's Tailscale IP
   ]
 })
 
@@ -138,7 +138,7 @@ await server.start()
 {
   "type": "peer_announce",
   "hub": "trillian",
-  "address": "ws://100.64.230.118:8766",
+  "address": "ws://YOUR-HUB-IP:8766",
   "pubkey": "ed25519:ABC123...",
   "timestamp": "2026-04-14T21:30:00Z",
   "signature": "XYZ789..."

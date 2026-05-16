@@ -18,7 +18,7 @@ Config format (JSON):
                 "name": "cron-monitor",
                 "type": "script",
                 "script": "projects/cron-monitor-void/cron-monitor-agent.py",
-                "cwd": "/home/marvin/.openclaw/workspace",
+                "cwd": "/path/to/your/workspace",
                 "timeout_ms": 60000,
                 "maxConcurrency": 1
             },

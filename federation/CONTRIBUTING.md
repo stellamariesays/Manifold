@@ -161,8 +161,8 @@ All JS is now in `public/nexal/*.js` as ES modules. The server serves the
 **Deploying to relay VPS** (for live nexal.network):
 ```bash
 scp -o StrictHostKeyChecking=no \
-  /home/marvin/projects/manifold/federation/public/nexal/index.html \
-  root@100.126.234.73:/opt/Manifold/federation/public/nexal/index.html
+  /path/to/manifold/federation/public/nexal/index.html \
+  root@YOUR-VPS-IP:/opt/Manifold/federation/public/nexal/index.html
 ```
 *(Note: the relay reads index.html on each request. The JS module files are
 served statically from the same public/nexal/ dir. When you add new .js files,
@@ -206,7 +206,7 @@ and covered by `.gitignore`. Start fresh from `index.html`.
 **Detection ledger files** live in `data/detection-ledger-*.jsonl` (gitignored).
 Don't commit them.
 
-**The relay VPS** at `100.126.234.73` runs a separate install at `/opt/Manifold/`.
+**The relay VPS** at `YOUR-VPS-IP` runs a separate install at `/opt/Manifold/`.
 Do not touch server code there. Only push `public/nexal/` HTML/JS files.
 
 ---

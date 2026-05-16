@@ -69,7 +69,7 @@ openssl rand -hex 32
   "restPort": 8777,
   "advertiseAddress": "ws://100.x.x.x:8766",
   "peers": [
-    "ws://100.70.172.34:8766"
+    "ws://YOUR-HOG-IP:8766"
   ],
   "security": {
     "apiKey": "YOUR_GENERATED_API_KEY"
@@ -80,7 +80,7 @@ openssl rand -hex 32
 ```
 
 - `advertiseAddress` — use the VPS's **Tailscale IP**
-- `peers` — Tailscale IPs of private hubs (HOG = 100.70.172.34)
+- `peers` — Tailscale IPs of private hubs (HOG = YOUR-HOG-IP)
 - `security.apiKey` — the key from step 3. Required for REST API access.
 
 ### 5. TLS with Caddy (reverse proxy)
@@ -139,7 +139,7 @@ On HOG (and other private hubs), add the relay as a peer:
 // config-hog.json — add to peers array
 "peers": [
   "ws://100.x.x.x:8766",
-  "ws://100.86.105.39:8766",
+  "ws://YOUR-SATELLITEA-IP:8766",
   ...
 ]
 ```
