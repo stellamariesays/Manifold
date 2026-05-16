@@ -26,6 +26,7 @@ Available packs:
 - **fog_pack**: blind spots, fog map, seam measure, atlas holes, fog discovery
 - **network_pack**: message compose, relay chains, broadcast, request-response, acknowledgements
 - **memory_pack**: key-value store, retrieval, search, summarization, TTL expiry, tag-based forget
+- **subscription_pack**: pub/sub notifications — subscribe, publish, poll, status
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from typing import Any
 
 from .capability_builder import CapSpec, CapabilityBuilder
 from .audience import _trigram_similarity
+from .subscription import SubscriptionBus
 
 
 # ─── Text Pack ──────────────────────────────────────────────────────────
@@ -2435,6 +2437,200 @@ def load_collaboration_pack(builder: CapabilityBuilder, agent: Any | None = None
     return specs
 
 
+# ─── Subscription Pack ────────────────────────────────────────────────────
+
+async def _sub_subscribe(payload: dict[str, Any]) -> dict[str, Any]:
+    """Subscribe an agent to a topic on the bus."""
+    bus: SubscriptionBus | None = payload.get("__bus__")
+    if bus is None:
+        return {"error": "No subscription bus attached", "ok": False}
+
+    agent_name = payload.get("agent_name", "")
+    topic = payload.get("topic", "")
+    min_score = payload.get("min_score")
+    filter_tags = payload.get("filter_tags", [])
+    max_buffer = payload.get("max_buffer", 100)
+
+    if not agent_name or not topic:
+        return {"error": "agent_name and topic required", "ok": False}
+
+    sub = bus.subscribe(
+        agent_name=agent_name,
+        topic=topic,
+        min_score=min_score,
+        filter_tags=filter_tags,
+        max_buffer=max_buffer,
+    )
+    return {
+        "ok": True,
+        "subscription_id": sub.sub_id,
+        "agent": agent_name,
+        "topic": topic,
+    }
+
+
+async def _sub_unsubscribe(payload: dict[str, Any]) -> dict[str, Any]:
+    bus: SubscriptionBus | None = payload.get("__bus__")
+    if bus is None:
+        return {"error": "No subscription bus attached", "ok": False}
+
+    sub_id = payload.get("subscription_id", "")
+    if bus.unsubscribe(sub_id):
+        return {"ok": True, "subscription_id": sub_id, "status": "cancelled"}
+    return {"ok": False, "error": f"Subscription {sub_id!r} not found"}
+
+
+async def _sub_publish(payload: dict[str, Any]) -> dict[str, Any]:
+    bus: SubscriptionBus | None = payload.get("__bus__")
+    if bus is None:
+        return {"error": "No subscription bus attached", "ok": False}
+
+    message = payload.get("message", "")
+    topic = payload.get("topic", "")
+    metadata = payload.get("metadata", {})
+    exclude_agent = payload.get("exclude_agent")
+
+    if not message or not topic:
+        return {"error": "message and topic required", "ok": False}
+
+    result = bus.publish(
+        message=message,
+        topic=topic,
+        metadata=metadata,
+        exclude_agent=exclude_agent,
+    )
+    return {
+        "ok": True,
+        "matched": result.matched_subscriptions,
+        "notifications": result.notifications_created,
+        "dropped": result.notifications_dropped,
+    }
+
+
+async def _sub_poll(payload: dict[str, Any]) -> dict[str, Any]:
+    bus: SubscriptionBus | None = payload.get("__bus__")
+    if bus is None:
+        return {"error": "No subscription bus attached", "ok": False}
+
+    agent_name = payload.get("agent_name", "")
+    limit = payload.get("limit")
+
+    if not agent_name:
+        return {"error": "agent_name required", "ok": False}
+
+    notifs = bus.poll(agent_name, limit=limit)
+    return {
+        "ok": True,
+        "notifications": [
+            {
+                "id": n.notif_id,
+                "topic": n.topic,
+                "message": n.message,
+                "score": round(n.score, 3),
+                "metadata": n.metadata,
+            }
+            for n in notifs
+        ],
+        "count": len(notifs),
+    }
+
+
+async def _sub_status(payload: dict[str, Any]) -> dict[str, Any]:
+    bus: SubscriptionBus | None = payload.get("__bus__")
+    if bus is None:
+        return {"error": "No subscription bus attached", "ok": False}
+
+    stats = bus.stats()
+    return {
+        "ok": True,
+        "total_subscriptions": stats.total_subscriptions,
+        "active_subscriptions": stats.active_subscriptions,
+        "pending_notifications": stats.pending_notifications,
+        "delivered_notifications": stats.delivered_notifications,
+        "dropped_notifications": stats.dropped_notifications,
+        "topics": stats.topics,
+    }
+
+
+def load_subscription_pack(
+    builder: CapabilityBuilder, bus: SubscriptionBus | None = None
+) -> list[CapSpec]:
+    """Load subscription and notification capabilities.
+
+    Provides pub/sub primitives for topic-based agent notification:
+    - **sub-subscribe**: Subscribe an agent to a topic with optional filters
+    - **sub-unsubscribe**: Cancel a subscription
+    - **sub-publish**: Publish a message to matching subscribers
+    - **sub-poll**: Retrieve pending notifications for an agent
+    - **sub-status**: Get subscription bus statistics
+
+    Args:
+        builder: The capability builder to register with.
+        bus:     A SubscriptionBus instance. Created if not provided.
+    """
+    if bus is None:
+        bus = SubscriptionBus()
+
+    def _wrap(handler):
+        async def _wrapped(payload: dict[str, Any]) -> dict[str, Any]:
+            return await handler({**payload, "__bus__": bus})
+        return _wrapped
+
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="sub-subscribe",
+        handler=_wrap(_sub_subscribe),
+        version="1.0.0",
+        description="Subscribe an agent to a topic with optional tag filters",
+        inputs=["agent_name", "topic", "min_score", "filter_tags"],
+        outputs=["subscription_id", "agent", "topic", "ok"],
+        tags=["subscription", "notification", "pubsub"],
+    ))
+
+    specs.append(builder.register(
+        name="sub-unsubscribe",
+        handler=_wrap(_sub_unsubscribe),
+        version="1.0.0",
+        description="Cancel a subscription by ID",
+        inputs=["subscription_id"],
+        outputs=["status", "ok"],
+        tags=["subscription", "notification"],
+    ))
+
+    specs.append(builder.register(
+        name="sub-publish",
+        handler=_wrap(_sub_publish),
+        version="1.0.0",
+        description="Publish a message to all matching topic subscribers",
+        inputs=["message", "topic", "metadata", "exclude_agent"],
+        outputs=["matched", "notifications", "dropped", "ok"],
+        tags=["subscription", "notification", "publish"],
+    ))
+
+    specs.append(builder.register(
+        name="sub-poll",
+        handler=_wrap(_sub_poll),
+        version="1.0.0",
+        description="Poll pending notifications for an agent",
+        inputs=["agent_name", "limit"],
+        outputs=["notifications", "count", "ok"],
+        tags=["subscription", "notification", "poll"],
+    ))
+
+    specs.append(builder.register(
+        name="sub-status",
+        handler=_wrap(_sub_status),
+        version="1.0.0",
+        description="Get subscription bus statistics",
+        inputs=[],
+        outputs=["total_subscriptions", "active_subscriptions", "pending", "ok"],
+        tags=["subscription", "notification", "status"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -2452,6 +2648,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_network_pack(builder, agent))
     specs.extend(load_tool_use_pack(builder))
     specs.extend(load_collaboration_pack(builder, agent))
+    specs.extend(load_subscription_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
