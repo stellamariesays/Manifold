@@ -866,6 +866,243 @@ def load_encoding_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Scheduling Pack ────────────────────────────────────────────────────
+
+async def _schedule_task(payload: dict[str, Any]) -> dict[str, Any]:
+    """Schedule a one-shot or recurring task."""
+    topic = payload.get("topic", "")
+    if not topic:
+        return {"ok": False, "error": "topic is required"}
+    delay = payload.get("delay_seconds", 0)
+    interval = payload.get("interval_seconds", 0)
+    priority = payload.get("priority", 0.5)
+    job_payload = payload.get("payload", {})
+    scheduler = payload.get("_scheduler")
+    if scheduler is None:
+        return {"ok": False, "error": "no scheduler available"}
+    if interval > 0:
+        job = scheduler.every(topic, interval_seconds=interval, payload=job_payload)
+        job.priority = priority
+    else:
+        job = scheduler.once(topic, delay_seconds=delay, payload=job_payload)
+        job.priority = priority
+    return {"ok": True, "job_id": job.job_id, "topic": topic, "kind": job.kind.value}
+
+
+async def _schedule_cancel(payload: dict[str, Any]) -> dict[str, Any]:
+    """Cancel a scheduled job by ID."""
+    job_id = payload.get("job_id", "")
+    scheduler = payload.get("_scheduler")
+    if scheduler is None:
+        return {"ok": False, "error": "no scheduler available"}
+    for job in scheduler.pending():
+        if job.job_id == job_id:
+            job.status = "cancelled"
+            return {"ok": True, "job_id": job_id}
+    return {"ok": False, "error": f"job {job_id!r} not found"}
+
+
+async def _schedule_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List pending/running scheduled jobs."""
+    scheduler = payload.get("_scheduler")
+    if scheduler is None:
+        return {"ok": False, "error": "no scheduler available"}
+    jobs = []
+    for job in scheduler.pending():
+        jobs.append({
+            "job_id": job.job_id,
+            "topic": job.topic,
+            "kind": job.kind.value,
+            "status": job.status.value if hasattr(job.status, 'value') else str(job.status),
+            "priority": job.priority,
+            "run_count": job.run_count,
+            "next_run_at": job.next_run_at,
+        })
+    return {"ok": True, "jobs": jobs, "count": len(jobs)}
+
+
+def load_schedule_pack(builder: CapabilityBuilder, scheduler: Any) -> list[CapSpec]:
+    """Load scheduling capabilities backed by an AgentScheduler."""
+    # Wrap handlers to inject scheduler reference
+    async def _sched_task(p: dict[str, Any]) -> dict[str, Any]:
+        p["_scheduler"] = scheduler
+        return await _schedule_task(p)
+
+    async def _sched_cancel(p: dict[str, Any]) -> dict[str, Any]:
+        p["_scheduler"] = scheduler
+        return await _schedule_cancel(p)
+
+    async def _sched_list(p: dict[str, Any]) -> dict[str, Any]:
+        p["_scheduler"] = scheduler
+        return await _schedule_list(p)
+
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="schedule-task",
+        handler=_sched_task,
+        version="1.0.0",
+        description="Schedule a one-shot or recurring task",
+        inputs=["topic"],
+        outputs=["ok", "job_id"],
+        tags=["scheduling", "tasks"],
+    ))
+    specs.append(builder.register(
+        name="schedule-cancel",
+        handler=_sched_cancel,
+        version="1.0.0",
+        description="Cancel a scheduled job by ID",
+        inputs=["job_id"],
+        outputs=["ok"],
+        tags=["scheduling", "tasks"],
+    ))
+    specs.append(builder.register(
+        name="schedule-list",
+        handler=_sched_list,
+        version="1.0.0",
+        description="List pending and running scheduled jobs",
+        inputs=[],
+        outputs=["ok", "jobs", "count"],
+        tags=["scheduling", "tasks"],
+    ))
+    return specs
+
+
+# ─── Planning Pack ───────────────────────────────────────────────────────
+
+async def _plan_toposort(payload: dict[str, Any]) -> dict[str, Any]:
+    """Topological sort of tasks with dependency ordering."""
+    tasks = payload.get("tasks", [])
+    if not tasks:
+        return {"ok": False, "error": "no tasks provided"}
+    # Build adjacency: task_name -> set of dependency names
+    graph: dict[str, set[str]] = {}
+    task_map: dict[str, dict[str, Any]] = {}
+    for task in tasks:
+        name = task.get("name", "")
+        if not name:
+            return {"ok": False, "error": "each task needs a 'name'"}
+        deps = set(task.get("depends_on", []))
+        graph[name] = deps
+        task_map[name] = task
+    # Kahn's algorithm
+    in_degree = {n: 0 for n in graph}
+    for n, deps in graph.items():
+        for d in deps:
+            if d in in_degree:
+                in_degree[d]  # ensure exists
+    # recalc in-degree properly
+    in_degree = {n: 0 for n in graph}
+    for n, deps in graph.items():
+        for d in deps:
+            if d in in_degree:
+                pass  # d doesn't depend on n; n depends on d
+    # Correct: in_degree[x] = number of tasks x depends on that haven't been processed
+    queue: list[str] = [n for n, deps in graph.items() if not deps]
+    order: list[str] = []
+    resolved: set[str] = set()
+    while queue:
+        # Sort for deterministic output (priority-based: lower priority value = higher priority)
+        queue.sort(key=lambda n: task_map[n].get("priority", 0.5))
+        node = queue.pop(0)
+        order.append(node)
+        resolved.add(node)
+        for n, deps in graph.items():
+            if n not in resolved and n not in queue:
+                if deps <= resolved:
+                    queue.append(n)
+    # Check for cycles
+    if len(order) != len(graph):
+        missing = set(graph.keys()) - set(order)
+        return {"ok": False, "error": f"circular dependency involving: {missing}"}
+    return {
+        "ok": True,
+        "order": order,
+        "total": len(order),
+        "details": [
+            {
+                "name": name,
+                "depends_on": list(graph.get(name, set())),
+                "priority": task_map[name].get("priority", 0.5),
+            }
+            for name in order
+        ],
+    }
+
+
+async def _plan_priority_queue(payload: dict[str, Any]) -> dict[str, Any]:
+    """Sort tasks by priority (lower = more urgent) with optional grouping."""
+    tasks = payload.get("tasks", [])
+    group_by = payload.get("group_by")
+    if not tasks:
+        return {"ok": False, "error": "no tasks provided"}
+    for t in tasks:
+        if "name" not in t:
+            return {"ok": False, "error": "each task needs a 'name'"}
+        t.setdefault("priority", 0.5)
+    sorted_tasks = sorted(tasks, key=lambda t: t["priority"])
+    result: dict[str, Any] = {"ok": True, "order": [t["name"] for t in sorted_tasks], "total": len(sorted_tasks)}
+    if group_by:
+        groups: dict[str, list[str]] = {}
+        for t in sorted_tasks:
+            key = str(t.get(group_by, "ungrouped"))
+            groups.setdefault(key, []).append(t["name"])
+        result["groups"] = groups
+    return result
+
+
+async def _plan_estimate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Estimate total time for a task plan based on individual estimates."""
+    tasks = payload.get("tasks", [])
+    parallelism = payload.get("parallelism", 1)
+    if not tasks:
+        return {"ok": False, "error": "no tasks provided"}
+    total_serial = sum(t.get("estimate_seconds", 0) for t in tasks)
+    # Simple model: divide by parallelism, add 10% coordination overhead
+    estimated = (total_serial / max(parallelism, 1)) * 1.1
+    critical_path = max((t.get("estimate_seconds", 0) for t in tasks), default=0)
+    return {
+        "ok": True,
+        "total_serial_seconds": total_serial,
+        "estimated_seconds": round(estimated, 1),
+        "parallelism": parallelism,
+        "critical_path_seconds": critical_path,
+        "task_count": len(tasks),
+    }
+
+
+def load_planning_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load planning and task-orchestration capabilities."""
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="plan-toposort",
+        handler=_plan_toposort,
+        version="1.0.0",
+        description="Topological sort of tasks with dependency ordering",
+        inputs=["tasks"],
+        outputs=["ok", "order"],
+        tags=["planning", "scheduling", "dependencies"],
+    ))
+    specs.append(builder.register(
+        name="plan-priority-queue",
+        handler=_plan_priority_queue,
+        version="1.0.0",
+        description="Sort tasks by priority with optional grouping",
+        inputs=["tasks"],
+        outputs=["ok", "order"],
+        tags=["planning", "scheduling", "priority"],
+    ))
+    specs.append(builder.register(
+        name="plan-estimate",
+        handler=_plan_estimate,
+        version="1.0.0",
+        description="Estimate execution time for a task plan",
+        inputs=["tasks"],
+        outputs=["ok", "estimated_seconds"],
+        tags=["planning", "estimation"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -877,6 +1114,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_data_pack(builder))
     specs.extend(load_monitor_pack(builder))
     specs.extend(load_encoding_pack(builder))
+    specs.extend(load_planning_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
     return specs
