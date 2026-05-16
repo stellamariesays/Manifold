@@ -38,6 +38,7 @@ import uuid
 from typing import Any
 
 from .capability_builder import CapSpec, CapabilityBuilder
+from .audience import _trigram_similarity
 
 
 # ─── Text Pack ──────────────────────────────────────────────────────────
@@ -2034,6 +2035,183 @@ def load_memory_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Tool-Use Pack ──────────────────────────────────────────────────────
+
+# Lightweight tool registry for describing, selecting, and composing tools.
+# Independent of the main CapabilityBuilder so agents can reason about
+# *external* tools they don't own but can invoke.
+
+_tool_registry: dict[str, dict[str, Any]] = {}
+
+
+async def _tool_describe(payload: dict[str, Any]) -> dict[str, Any]:
+    """Register a tool description in the tool registry."""
+    name = payload.get("name")
+    if not name:
+        return {"ok": False, "error": "name required"}
+    _tool_registry[name] = {
+        "name": name,
+        "description": payload.get("description", ""),
+        "inputs": payload.get("inputs", []),
+        "outputs": payload.get("outputs", []),
+        "tags": payload.get("tags", []),
+        "examples": payload.get("examples", []),
+    }
+    return {"ok": True, "tool": name}
+
+
+async def _tool_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List all registered tools, optionally filtered by tag."""
+    tag_filter = payload.get("tag")
+    tools = []
+    for t in _tool_registry.values():
+        if tag_filter and tag_filter not in t["tags"]:
+            continue
+        tools.append(t)
+    return {"ok": True, "tools": tools, "count": len(tools)}
+
+
+async def _tool_select(payload: dict[str, Any]) -> dict[str, Any]:
+    """Select the best tool for a task description using trigram similarity."""
+    task = payload.get("task", "")
+    if not task:
+        return {"ok": False, "error": "task required"}
+    if not _tool_registry:
+        return {"ok": False, "error": "no tools registered"}
+
+    best_name = ""
+    best_score = 0.0
+    for name, t in _tool_registry.items():
+        corpus = f"{t['name']} {t['description']} {' '.join(t['tags'])}"
+        score = _trigram_similarity(task, corpus)
+        if score > best_score:
+            best_score = score
+            best_name = name
+
+    if best_score < 0.10:
+        return {"ok": False, "error": "no suitable tool", "best_score": best_score}
+
+    return {"ok": True, "tool": _tool_registry[best_name], "score": round(best_score, 3)}
+
+
+async def _tool_chain(payload: dict[str, Any]) -> dict[str, Any]:
+    """Plan a chain of tools to accomplish a multi-step task.
+
+    Given a task and available tools, returns an ordered execution plan
+    by matching output tags of one tool to input tags of the next.
+    """
+    steps = payload.get("steps", [])
+    if not steps or len(steps) < 2:
+        return {"ok": False, "error": "need at least 2 steps"}
+
+    # Validate each step references a known tool
+    chain = []
+    for i, step_name in enumerate(steps):
+        if step_name not in _tool_registry:
+            return {"ok": False, "error": f"unknown tool at step {i}: {step_name}"}
+        chain.append({"step": i, "tool": step_name, "info": _tool_registry[step_name]})
+
+    # Check output→input compatibility between consecutive steps
+    compat_issues = []
+    for i in range(len(chain) - 1):
+        out_tags = set(chain[i]["info"].get("outputs", []))
+        in_tags = set(chain[i + 1]["info"].get("inputs", []))
+        if in_tags and not (out_tags & in_tags):
+            compat_issues.append({
+                "from_step": i,
+                "to_step": i + 1,
+                "missing_inputs": list(in_tags - out_tags),
+            })
+
+    return {
+        "ok": True,
+        "chain": chain,
+        "compatibility_issues": compat_issues,
+        "valid": len(compat_issues) == 0,
+    }
+
+
+async def _tool_validate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate inputs against a tool's schema."""
+    name = payload.get("name")
+    inputs = payload.get("inputs", {})
+    if not name:
+        return {"ok": False, "error": "name required"}
+    if name not in _tool_registry:
+        return {"ok": False, "error": f"unknown tool: {name}"}
+
+    tool = _tool_registry[name]
+    expected = set(tool.get("inputs", []))
+    provided = set(inputs.keys()) if isinstance(inputs, dict) else set()
+    missing = list(expected - provided)
+    extra = list(provided - expected)
+
+    return {
+        "ok": True,
+        "valid": len(missing) == 0,
+        "missing": missing,
+        "extra": extra,
+        "tool": name,
+    }
+
+
+def load_tool_use_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register tool-use capabilities: describe, list, select, chain, validate."""
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="tool-describe",
+        handler=_tool_describe,
+        version="1.0.0",
+        description="Register a tool with name, description, inputs, outputs, tags",
+        inputs=["name"],
+        outputs=["ok", "tool"],
+        tags=["tool-use", "registry"],
+    ))
+
+    specs.append(builder.register(
+        name="tool-list",
+        handler=_tool_list,
+        version="1.0.0",
+        description="List all registered tools, optionally filtered by tag",
+        inputs=[],
+        outputs=["ok", "tools", "count"],
+        tags=["tool-use", "discovery"],
+    ))
+
+    specs.append(builder.register(
+        name="tool-select",
+        handler=_tool_select,
+        version="1.0.0",
+        description="Select the best tool for a task using fuzzy matching",
+        inputs=["task"],
+        outputs=["ok", "tool", "score"],
+        tags=["tool-use", "selection"],
+    ))
+
+    specs.append(builder.register(
+        name="tool-chain",
+        handler=_tool_chain,
+        version="1.0.0",
+        description="Plan and validate a chain of tools for multi-step tasks",
+        inputs=["steps"],
+        outputs=["ok", "chain", "valid", "compatibility_issues"],
+        tags=["tool-use", "composition"],
+    ))
+
+    specs.append(builder.register(
+        name="tool-validate",
+        handler=_tool_validate,
+        version="1.0.0",
+        description="Validate inputs against a tool's declared schema",
+        inputs=["name", "inputs"],
+        outputs=["ok", "valid", "missing", "extra"],
+        tags=["tool-use", "validation"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -2049,6 +2227,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_reasoning_pack(builder))
     specs.extend(load_memory_pack(builder))
     specs.extend(load_network_pack(builder, agent))
+    specs.extend(load_tool_use_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
