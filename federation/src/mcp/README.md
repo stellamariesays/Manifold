@@ -93,5 +93,5 @@ Once configured, your AI client can:
 To connect to a remote Manifold hub (e.g. over Tailscale):
 
 ```json
-"env": { "MANIFOLD_REST_URL": "http://100.70.172.34:8777" }
+"env": { "MANIFOLD_REST_URL": "http://YOUR-HOG-IP:8777" }
 ```

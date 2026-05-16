@@ -6,7 +6,7 @@ Federated mesh for Manifold agents across multiple machines. Discover agents, ro
 
 ```
 HOG (Eddie)               satelliteA (Stella)       Trillian          bobiverse (Bob)
-100.70.172.34             100.86.105.39             100.93.231.124    100.80.157.81
+YOUR-HOG-IP             YOUR-SATELLITEA-IP             YOUR-TRILLIAN-IP    YOUR-BOBIVERSE-IP
 15 agents                 9 agents                  9 agents          (offline)
 ─────────────             ──────────────            ────────────      ────────────
 Server + Runner ✓         Server ✓                  Server ✓          (needs setup)
@@ -57,9 +57,9 @@ const server = new ManifoldServer({
   localPort: 8768,         // Runner connects here
   restPort: 8777,          // REST API
   peers: [
-    'ws://100.86.105.39:8766',   // satelliteA
-    'ws://100.80.157.81:8766',   // bobiverse
-    'ws://100.93.231.124:8766',  // trillian
+    'ws://YOUR-SATELLITEA-IP:8766',   // satelliteA
+    'ws://YOUR-BOBIVERSE-IP:8766',   // bobiverse
+    'ws://YOUR-TRILLIAN-IP:8766',  // trillian
   ],
   atlasPath: 'data/manifold/eddie-atlas.json',
   debug: true,

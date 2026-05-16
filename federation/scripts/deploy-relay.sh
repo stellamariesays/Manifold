@@ -4,7 +4,7 @@
 # Run on a fresh Ubuntu VPS as root (or with sudo)
 #
 # Usage: curl -sL <this-script-url> | bash -s -- --apikey <key> --hog-ip <tailscale-ip>
-#   Or:  ./deploy-relay.sh --apikey abc123 --hog-ip 100.70.172.34
+#   Or:  ./deploy-relay.sh --apikey abc123 --hog-ip YOUR-HOG-IP
 #
 set -euo pipefail
 

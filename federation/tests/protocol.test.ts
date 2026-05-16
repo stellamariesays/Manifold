@@ -6,7 +6,7 @@ describe('Protocol validation', () => {
     const msg = {
       type: 'peer_announce',
       hub: 'trillian',
-      address: 'ws://100.64.230.118:8766',
+      address: 'ws://100.x.x.x:8766',
       timestamp: new Date().toISOString(),
     }
     expect(() => validateMessage(msg)).not.toThrow()

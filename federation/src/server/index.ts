@@ -47,7 +47,7 @@ export interface ManifoldServerConfig {
   /** Peer federation server addresses to connect to / bootstrap from */
   peers?: string[]
 
-  /** External address to advertise to peers (e.g. ws://100.86.105.39:8766).
+  /** External address to advertise to peers (e.g. ws://YOUR-SATELLITEA-IP:8766).
    *  If not set, defaults to ws://localhost:{federationPort}. */
   advertiseAddress?: string
 
