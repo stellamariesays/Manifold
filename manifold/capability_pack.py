@@ -3998,6 +3998,226 @@ def load_orchestration_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Localization Pack ──────────────────────────────────────────────────
+
+class LocalizationError(Exception):
+    """Base for localization pack errors."""
+
+
+async def _localize_chart(payload: dict[str, Any]) -> dict[str, Any]:
+    """Describe an agent's local chart — domain, vocabulary, coverage."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        raise LocalizationError("No agent attached")
+
+    from .chart import Chart
+    chart = Chart.from_agent(
+        name=agent.name,
+        capabilities=list(agent._capabilities) if hasattr(agent, '_capabilities') else [],
+        focus=getattr(agent._topology, '_focus', None),
+    )
+
+    return {
+        "agent": agent.name,
+        "domain": sorted(chart.domain),
+        "vocabulary": sorted(chart.vocabulary),
+        "domain_size": len(chart.domain),
+        "vocabulary_size": len(chart.vocabulary),
+        "focus": chart.focus,
+        "ok": True,
+    }
+
+
+async def _localize_overlap(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute vocabulary overlap between this agent and another."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        raise LocalizationError("No agent attached")
+    peer_name = payload.get("peer")
+    if not peer_name:
+        raise LocalizationError("'peer' field required")
+
+    from .chart import Chart
+
+    my_chart = Chart.from_agent(
+        name=agent.name,
+        capabilities=list(agent._capabilities) if hasattr(agent, '_capabilities') else [],
+        focus=getattr(agent, '_topology', None) and getattr(agent._topology, '_focus', None),
+    )
+    peers = [r for r in agent._registry.all_agents() if r.name == peer_name]
+    if not peers:
+        raise LocalizationError(f"Agent {peer_name!r} not found")
+
+    ref = peers[0]
+    peer_chart = Chart(agent_name=ref.name, domain=set(ref.capabilities), vocabulary=set())
+    for cap in ref.capabilities:
+        peer_chart.vocabulary.update(cap.lower().replace("-", " ").replace("_", " ").split())
+
+    overlap = my_chart.vocabulary & peer_chart.vocabulary
+    coverage = len(overlap) / len(my_chart.vocabulary) if my_chart.vocabulary else 0.0
+
+    return {
+        "agent_a": agent.name,
+        "agent_b": peer_name,
+        "overlap": sorted(overlap),
+        "overlap_size": len(overlap),
+        "coverage": round(coverage, 4),
+        "ok": True,
+    }
+
+
+async def _localize_blindspots(payload: dict[str, Any]) -> dict[str, Any]:
+    """Find this agent's blind spots — unmatched focus, isolated capabilities, dark topics."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        raise LocalizationError("No agent attached")
+
+    try:
+        spots = agent.blind_spot()
+    except Exception:
+        spots = []
+
+    return {
+        "agent": agent.name,
+        "blind_spots": [
+            {
+                "kind": s.kind,
+                "topic": s.topic,
+                "severity": round(s.depth, 3),
+                "description": getattr(s, 'evidence', [])[:2] or s.topic,
+            }
+            for s in spots
+        ],
+        "count": len(spots),
+        "ok": True,
+    }
+
+
+async def _localize_atlas_holes(payload: dict[str, Any]) -> dict[str, Any]:
+    """Find topics that no agent on the mesh covers — atlas holes."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        raise LocalizationError("No agent attached")
+
+    from .atlas import Atlas
+    atlas = Atlas.build(agent._registry)
+
+    holes = atlas.holes() if hasattr(atlas, 'holes') else []
+
+    return {
+        "holes": holes if isinstance(holes, list) else [],
+        "count": len(holes) if isinstance(holes, (list, tuple)) else 0,
+        "agent_count": len(atlas._charts),
+        "ok": True,
+    }
+
+
+async def _localize_knowledge_diversity(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute knowledge diversity across the mesh — how varied are agent domains."""
+    agent = payload.get("__agent__")
+    if agent is None:
+        raise LocalizationError("No agent attached")
+
+    from .chart import Chart
+
+    all_agents = agent._registry.all_agents()
+    if not all_agents:
+        return {"diversity": 0.0, "agent_count": 0, "ok": True}
+
+    all_vocab: set[str] = set()
+    per_agent: list[dict[str, Any]] = []
+
+    for ref in all_agents:
+        vocab = set()
+        for cap in ref.capabilities:
+            vocab.update(cap.lower().replace("-", " ").replace("_", " ").split())
+        all_vocab.update(vocab)
+        per_agent.append({"name": ref.name, "vocab_size": len(vocab), "unique": len(vocab - all_vocab)})
+
+    # Unique knowledge per agent
+    agent_vocabs: list[set[str]] = []
+    for ref in all_agents:
+        vocab = set()
+        for cap in ref.capabilities:
+            vocab.update(cap.lower().replace("-", " ").replace("_", " ").split())
+        agent_vocabs.append(vocab)
+
+    total_unique = 0
+    for i, vocab in enumerate(agent_vocabs):
+        others = set()
+        for j, v in enumerate(agent_vocabs):
+            if i != j:
+                others.update(v)
+        total_unique += len(vocab - others)
+
+    diversity = total_unique / len(all_vocab) if all_vocab else 0.0
+
+    return {
+        "total_vocabulary_size": len(all_vocab),
+        "agent_count": len(all_agents),
+        "diversity_index": round(diversity, 4),
+        "agents": per_agent,
+        "ok": True,
+    }
+
+
+def load_localization_pack(builder: CapabilityBuilder, agent: Any) -> list[CapSpec]:
+    """Register cognitive localization capabilities — chart, overlap, blind spots, atlas, diversity."""
+
+    def _wrap(fn):
+        async def _w(payload):
+            return await fn({**payload, "__agent__": agent})
+        return _w
+
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="localize-chart",
+        handler=_wrap(_localize_chart),
+        version="1.0.0",
+        description="Describe an agent's local chart — domain, vocabulary, coverage",
+        inputs=[],
+        outputs=["agent", "domain", "vocabulary", "ok"],
+        tags=["localization", "chart", "topology", "introspection"],
+    ))
+    specs.append(builder.register(
+        name="localize-overlap",
+        handler=_wrap(_localize_overlap),
+        version="1.0.0",
+        description="Compute vocabulary overlap between this agent and a named peer",
+        inputs=["peer"],
+        outputs=["overlap", "coverage", "ok"],
+        tags=["localization", "overlap", "topology"],
+    ))
+    specs.append(builder.register(
+        name="localize-blindspots",
+        handler=_wrap(_localize_blindspots),
+        version="1.0.0",
+        description="Find blind spots — unmatched focus, isolated capabilities, dark topics",
+        inputs=[],
+        outputs=["blind_spots", "count", "ok"],
+        tags=["localization", "blind-spots", "fog", "introspection"],
+    ))
+    specs.append(builder.register(
+        name="localize-atlas-holes",
+        handler=_wrap(_localize_atlas_holes),
+        version="1.0.0",
+        description="Find topics that no agent covers — atlas holes in the knowledge mesh",
+        inputs=[],
+        outputs=["holes", "agent_count", "ok"],
+        tags=["localization", "atlas", "topology", "fog"],
+    ))
+    specs.append(builder.register(
+        name="localize-diversity",
+        handler=_wrap(_localize_knowledge_diversity),
+        version="1.0.0",
+        description="Compute knowledge diversity across the mesh — unique vs shared vocabulary",
+        inputs=[],
+        outputs=["diversity_index", "total_vocabulary_size", "ok"],
+        tags=["localization", "diversity", "topology", "introspection"],
+    ))
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -4024,4 +4244,5 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
+        specs.extend(load_localization_pack(builder, agent))
     return specs
