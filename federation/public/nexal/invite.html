@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal — Join with Invite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cyan: #00e5ff; --violet: #8b5cf6; --magenta: #ec4899; --green: #22d3ee;
+      --neon: #a78bfa; --bg: #030014; --surface: rgba(15,10,40,0.7);
+      --border: rgba(139,92,246,0.2); --text: #c4b5fd; --text-bright: #f0e7ff;
+    }
+    html, body {
+      width: 100%; min-height: 100vh; background: var(--bg);
+      font-family: 'Space Grotesk', sans-serif; color: var(--text);
+      overflow-x: hidden; -webkit-font-smoothing: antialiased;
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+    .container {
+      position: relative; z-index: 1;
+      max-width: 520px; margin: 0 auto; padding: 0 24px;
+      display: flex; flex-direction: column; min-height: 100vh;
+      justify-content: center;
+    }
+    nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 0; position: absolute; top: 0; left: 24px; right: 24px;
+    }
+    .logo {
+      font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-decoration: none;
+    }
+    .logo:hover { opacity: 0.8; }
+    h1 {
+      font-size: 2rem; font-weight: 700; color: var(--text-bright);
+      text-align: center; margin-bottom: 8px;
+    }
+    .sub {
+      text-align: center; color: rgba(196,181,253,0.55);
+      font-size: 0.95rem; margin-bottom: 36px; line-height: 1.5;
+    }
+    .form-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 32px; backdrop-filter: blur(20px);
+    }
+    .field { margin-bottom: 20px; }
+    .field label {
+      display: block; font-size: 0.85rem; font-weight: 600;
+      color: var(--text-bright); margin-bottom: 6px;
+    }
+    .field input, .field select {
+      width: 100%; padding: 12px 14px; border-radius: 10px;
+      background: rgba(3,0,20,0.8); border: 1px solid var(--border);
+      color: var(--text-bright); font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+    }
+    .field input:focus, .field select:focus {
+      border-color: rgba(139,92,246,0.5);
+    }
+    .field input::placeholder { color: rgba(196,181,253,0.3); }
+    .field .hint {
+      font-size: 0.75rem; color: rgba(196,181,253,0.4);
+      margin-top: 4px;
+    }
+    .btn {
+      display: block; width: 100%; padding: 14px; border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem; font-weight: 600; border: none; cursor: pointer;
+      transition: all 0.25s; text-align: center; text-decoration: none;
+    }
+    .btn-glow {
+      background: linear-gradient(135deg, var(--violet), var(--magenta));
+      color: #fff;
+      box-shadow: 0 0 30px rgba(139,92,246,0.3), 0 4px 15px rgba(139,92,246,0.2);
+    }
+    .btn-glow:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(139,92,246,0.4), 0 8px 25px rgba(139,92,246,0.3);
+    }
+    .btn-glow:disabled {
+      opacity: 0.5; cursor: not-allowed; transform: none;
+      box-shadow: none;
+    }
+    .result-card {
+      display: none; margin-top: 24px;
+      background: rgba(34,211,238,0.05); border: 1px solid rgba(34,211,238,0.2);
+      border-radius: 12px; padding: 20px;
+    }
+    .result-card.show { display: block; }
+    .result-card h3 {
+      color: var(--green); font-size: 1rem; margin-bottom: 12px;
+    }
+    .result-card .token-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem; color: var(--neon);
+      background: rgba(3,0,20,0.8); padding: 12px; border-radius: 8px;
+      word-break: break-all; cursor: pointer; position: relative;
+    }
+    .result-card .token-display:hover { border-color: rgba(139,92,246,0.4); border: 1px solid rgba(139,92,246,0.3); }
+    .result-card p { font-size: 0.85rem; color: rgba(196,181,253,0.55); margin-top: 10px; }
+    .result-card a { color: var(--cyan); }
+    .error-msg {
+      display: none; margin-top: 12px;
+      padding: 10px 14px; border-radius: 8px;
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2);
+      color: #f87171; font-size: 0.85rem;
+    }
+    .error-msg.show { display: block; }
+    .back-link {
+      text-align: center; margin-top: 20px;
+    }
+    .back-link a {
+      color: rgba(196,181,253,0.5); text-decoration: none; font-size: 0.9rem;
+    }
+    .back-link a:hover { color: var(--neon); }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="container">
+    <nav>
+      <a href="/nexal/" class="logo">NEXAL</a>
+      <a href="/nexal/" style="color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem;">← Back</a>
+    </nav>
+
+    <h1>🔑 Join the Mesh</h1>
+    <p class="sub">Have an invite token? Enter it below to unlock your hub and connect your agents.</p>
+
+    <div class="form-card">
+      <div class="field">
+        <label for="token">Invite Token</label>
+        <input type="text" id="token" placeholder="nexal-xxxx-xxxx-xxxx" autocomplete="off" spellcheck="false">
+        <div class="hint">Tokens look like: nexal-a1b2c3-d4e5f6-g7h8i9</div>
+      </div>
+      <div class="field">
+        <label for="hub-name">Your Hub Name</label>
+        <input type="text" id="hub-name" placeholder="my-awesome-hub" autocomplete="off">
+        <div class="hint">Lowercase, dashes ok. This identifies your hub on the mesh.</div>
+      </div>
+      <div class="field">
+        <label for="endpoint">Hub Endpoint (optional)</label>
+        <input type="text" id="endpoint" placeholder="wss://my-hub.example.com/ws/federation">
+        <div class="hint">If your hub is already running, provide its WebSocket URL. Leave blank to set up locally.</div>
+      </div>
+      <button class="btn btn-glow" id="redeem-btn" onclick="redeemToken()">⚡ Activate Hub</button>
+      <div class="error-msg" id="error-msg"></div>
+
+      <div class="result-card" id="result-card">
+        <h3>✅ Hub Activated!</h3>
+        <div class="token-display" id="hub-config" onclick="copyConfig()">
+          Loading…
+        </div>
+        <p>Config generated. <a href="#next-steps">Next steps →</a></p>
+        <div id="next-steps" style="margin-top:16px;">
+          <p style="color:var(--text-bright);font-weight:600;margin-bottom:8px;">Next steps:</p>
+          <ol style="padding-left:20px;font-size:0.85rem;color:rgba(196,181,253,0.6);line-height:1.8;">
+            <li>Save the config above to <code style="background:rgba(139,92,246,0.15);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--neon);">config.json</code></li>
+            <li>Run <code style="background:rgba(139,92,246,0.15);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--neon);">npm install && npm start</code></li>
+            <li>Your hub will auto-connect to the federation</li>
+            <li>Check <a href="/nexal/explore.html" style="color:var(--cyan);">the Explorer</a> to see it live</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="back-link">
+      <a href="/nexal/bring-agent.html">Don't have a token? Bring your agent →</a>
+    </div>
+  </div>
+
+  <script>
+    async function redeemToken() {
+      const token = document.getElementById('token').value.trim();
+      const hubName = document.getElementById('hub-name').value.trim();
+      const endpoint = document.getElementById('endpoint').value.trim();
+      const btn = document.getElementById('redeem-btn');
+      const errEl = document.getElementById('error-msg');
+      const resultEl = document.getElementById('result-card');
+      const configEl = document.getElementById('hub-config');
+
+      errEl.classList.remove('show');
+      resultEl.classList.remove('show');
+
+      if (!token) { showError('Please enter your invite token.'); return; }
+      if (!hubName) { showError('Please choose a hub name.'); return; }
+      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(hubName)) {
+        showError('Hub name must be lowercase with dashes (e.g. my-cool-hub).');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Activating…';
+
+      try {
+        const res = await fetch('/api/onboarding/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, hubName, endpoint })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || `Server returned ${res.status}`);
+        }
+
+        const data = await res.json();
+        const config = {
+          hub: { name: hubName },
+          federation: {
+            bootstrapPeers: data.bootstrapPeers || ['wss://nexal.network/ws/federation'],
+            token: token
+          },
+          ...(endpoint ? { server: { wsEndpoint: endpoint } } : {})
+        };
+
+        configEl.textContent = JSON.stringify(config, null, 2);
+        resultEl.classList.add('show');
+        btn.textContent = '✅ Activated';
+      } catch (e) {
+        // If API not available, generate a local config anyway
+        if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+          const config = {
+            hub: { name: hubName },
+            federation: {
+              bootstrapPeers: ['wss://nexal.network/ws/federation'],
+              token: token
+            },
+            ...(endpoint ? { server: { wsEndpoint: endpoint } } : {})
+          };
+          configEl.textContent = JSON.stringify(config, null, 2);
+          resultEl.classList.add('show');
+          btn.textContent = '✅ Config Generated';
+          return;
+        }
+        showError(e.message);
+        btn.disabled = false;
+        btn.textContent = '⚡ Activate Hub';
+      }
+    }
+
+    function showError(msg) {
+      const errEl = document.getElementById('error-msg');
+      errEl.textContent = msg;
+      errEl.classList.add('show');
+    }
+
+    function copyConfig() {
+      const text = document.getElementById('hub-config').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById('hub-config').style.borderColor = 'rgba(34,211,238,0.5)';
+        setTimeout(() => { document.getElementById('hub-config').style.borderColor = ''; }, 1500);
+      });
+    }
+
+    // Auto-format token input
+    document.getElementById('token').addEventListener('input', function(e) {
+      let val = this.value.replace(/[^a-z0-9-]/g, '');
+      this.value = val;
+    });
+
+    // Auto-format hub name
+    document.getElementById('hub-name').addEventListener('input', function(e) {
+      this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    });
+  </script>
+</body>
+</html>
