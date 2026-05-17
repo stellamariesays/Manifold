@@ -42,7 +42,7 @@ async def _make_mesh():
 
 @pytest.fixture
 def mesh():
-    return asyncio.get_event_loop().run_until_complete(_make_mesh())
+    return asyncio.run(_make_mesh())
 
 
 def _make_router(mesh):

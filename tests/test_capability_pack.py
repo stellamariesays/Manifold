@@ -29,7 +29,7 @@ def builder(agent):
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ─── Text Pack ──────────────────────────────────────────────────────────
@@ -199,12 +199,12 @@ class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog + 4 reasoning + 5 network + 5 memory = 43
-        assert len(specs) == 110  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning +5 security pack
+        assert len(specs) == 119  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning +5 security +4 audience-analytics +5 resilience pack
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 4 reasoning + 5 network + 5 memory = 36
-        assert len(specs) == 98  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning +5 security pack
+        assert len(specs) == 107  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning +5 security +5 resilience pack (no fog/routing without agent)
 
     def test_search_finds_packs(self, builder, agent):
         load_all_packs(builder, agent)
@@ -214,8 +214,8 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 110
-        assert stats["active"] == 110
+        assert stats["total_capabilities"] == 119
+        assert stats["active"] == 119
 
 
 # ─── Fog Awareness Pack ──────────────────────────────────────────────────

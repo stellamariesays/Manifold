@@ -25,7 +25,7 @@ def _make_builder_with_trust():
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _invoke(builder, name, payload):

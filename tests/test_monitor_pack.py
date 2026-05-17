@@ -21,8 +21,7 @@ def builder():
 class TestThresholdAlert:
     def test_all_within_bounds(self, builder):
         load_monitor_pack(builder)
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-threshold", {
+        result = asyncio.run(builder.invoke("monitor-threshold", {
                 "metrics": {"cpu": 45, "mem": 60},
                 "rules": {"cpu": {"min": 0, "max": 100}, "mem": {"min": 0, "max": 100}},
             })
@@ -33,8 +32,7 @@ class TestThresholdAlert:
 
     def test_breach_triggers_alert(self, builder):
         load_monitor_pack(builder)
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-threshold", {
+        result = asyncio.run(builder.invoke("monitor-threshold", {
                 "metrics": {"cpu": 99},
                 "rules": {"cpu": {"min": 0, "max": 90}},
             })
@@ -46,8 +44,7 @@ class TestThresholdAlert:
 
     def test_warn_zone(self, builder):
         load_monitor_pack(builder)
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-threshold", {
+        result = asyncio.run(builder.invoke("monitor-threshold", {
                 "metrics": {"cpu": 85},
                 "rules": {"cpu": {"min": 0, "max": 100, "warn_max": 80}},
             })
@@ -60,8 +57,7 @@ class TestHeartbeat:
     def test_healthy_agents(self, builder):
         load_monitor_pack(builder)
         now = 1000.0
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-heartbeat", {
+        result = asyncio.run(builder.invoke("monitor-heartbeat", {
                 "agents": {
                     "a": {"last_seen": now - 60},
                     "b": {"last_seen": now - 120},
@@ -75,8 +71,7 @@ class TestHeartbeat:
     def test_stale_and_dead(self, builder):
         load_monitor_pack(builder)
         now = 1000.0
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-heartbeat", {
+        result = asyncio.run(builder.invoke("monitor-heartbeat", {
                 "agents": {
                     "fresh": {"last_seen": now - 60},
                     "stale": {"last_seen": now - 400},
@@ -97,8 +92,7 @@ class TestAnomaly:
     def test_no_anomalies(self, builder):
         load_monitor_pack(builder)
         values = [10.0 + (i % 5) * 0.01 for i in range(50)]
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-anomaly", {"values": values})
+        result = asyncio.run(builder.invoke("monitor-anomaly", {"values": values})
         )
         assert result.output["ok"] is True
         assert result.output["anomaly_count"] == 0
@@ -106,8 +100,7 @@ class TestAnomaly:
     def test_detects_spike(self, builder):
         load_monitor_pack(builder)
         values = [10.0] * 30 + [100.0] + [10.0] * 10
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("monitor-anomaly", {"values": values, "z_threshold": 2.0})
+        result = asyncio.run(builder.invoke("monitor-anomaly", {"values": values, "z_threshold": 2.0})
         )
         assert result.output["anomaly_count"] >= 1
 
@@ -118,12 +111,10 @@ class TestAnomaly:
 class TestBase64:
     def test_encode_decode_roundtrip(self, builder):
         load_encoding_pack(builder)
-        enc = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-base64", {"data": "hello manifold"})
+        enc = asyncio.run(builder.invoke("encode-base64", {"data": "hello manifold"})
         )
         assert enc.output["ok"] is True
-        dec = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-base64", {"data": enc.output["result"], "direction": "decode"})
+        dec = asyncio.run(builder.invoke("encode-base64", {"data": enc.output["result"], "direction": "decode"})
         )
         assert dec.output["result"] == "hello manifold"
 
@@ -131,22 +122,19 @@ class TestBase64:
 class TestJson:
     def test_parse_and_serialize(self, builder):
         load_encoding_pack(builder)
-        parsed = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-json", {"text": '{"key": "value", "num": 42}'})
+        parsed = asyncio.run(builder.invoke("encode-json", {"text": '{"key": "value", "num": 42}'})
         )
         assert parsed.output["ok"] is True
         assert parsed.output["result"]["num"] == 42
 
-        serialized = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-json", {"object": parsed.output["result"], "direction": "serialize"})
+        serialized = asyncio.run(builder.invoke("encode-json", {"object": parsed.output["result"], "direction": "serialize"})
         )
         assert serialized.output["ok"] is True
         assert "42" in serialized.output["result"]
 
     def test_invalid_json(self, builder):
         load_encoding_pack(builder)
-        result = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-json", {"text": "{invalid json"})
+        result = asyncio.run(builder.invoke("encode-json", {"text": "{invalid json"})
         )
         assert result.output["ok"] is False
 
@@ -155,14 +143,12 @@ class TestCsv:
     def test_parse_and_serialize(self, builder):
         load_encoding_pack(builder)
         csv_text = "name,age\nAlice,30\nBob,25"
-        parsed = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-csv", {"text": csv_text})
+        parsed = asyncio.run(builder.invoke("encode-csv", {"text": csv_text})
         )
         assert parsed.output["count"] == 2
         assert parsed.output["records"][0]["name"] == "Alice"
 
-        serialized = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-csv", {"records": parsed.output["records"], "direction": "serialize"})
+        serialized = asyncio.run(builder.invoke("encode-csv", {"records": parsed.output["records"], "direction": "serialize"})
         )
         assert serialized.output["ok"] is True
         assert "Alice" in serialized.output["text"]
@@ -171,11 +157,9 @@ class TestCsv:
 class TestUrlEncode:
     def test_encode_decode_roundtrip(self, builder):
         load_encoding_pack(builder)
-        enc = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-url", {"text": "hello world&foo=bar"})
+        enc = asyncio.run(builder.invoke("encode-url", {"text": "hello world&foo=bar"})
         )
         assert enc.output["ok"] is True
-        dec = asyncio.get_event_loop().run_until_complete(
-            builder.invoke("encode-url", {"text": enc.output["result"], "direction": "decode"})
+        dec = asyncio.run(builder.invoke("encode-url", {"text": enc.output["result"], "direction": "decode"})
         )
         assert dec.output["result"] == "hello world&foo=bar"

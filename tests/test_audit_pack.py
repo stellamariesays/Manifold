@@ -159,7 +159,15 @@ class TestAuditPack:
         return builder
 
     def _run(self, coro):
-        return asyncio.get_event_loop().run_until_complete(coro)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return asyncio.run(coro)
 
     def test_pack_registers_capabilities(self, builder):
         caps = builder.list_capabilities()

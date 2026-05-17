@@ -5551,6 +5551,321 @@ def load_audience_analytics_pack(builder: CapabilityBuilder) -> list[CapSpec]:
 
 # ─── Convenience ────────────────────────────────────────────────────────
 
+# ─── Resilience Pack ─────────────────────────────────────────────────────
+
+class _CircuitBreaker:
+    """Thread-safe circuit breaker state machine.
+
+    States: closed → open → half_open → closed|open
+    Tracks failure count, last failure time, and recovery attempts.
+    """
+
+    def __init__(self, name: str, failure_threshold: int = 5, reset_timeout: float = 30.0) -> None:
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.state = "closed"  # closed | open | half_open
+        self.failure_count = 0
+        self.success_count = 0
+        self.last_failure_time: float = 0.0
+        self.last_state_change: float = time.time()
+
+    def record_success(self) -> None:
+        self.success_count += 1
+        if self.state == "half_open":
+            self.state = "closed"
+            self.failure_count = 0
+            self.last_state_change = time.time()
+
+    def record_failure(self) -> None:
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = "open"
+            self.last_state_change = time.time()
+
+    def allow(self) -> bool:
+        """Check if a request should be allowed through."""
+        if self.state == "closed":
+            return True
+        if self.state == "open":
+            if time.time() - self.last_state_change >= self.reset_timeout:
+                self.state = "half_open"
+                self.last_state_change = time.time()
+                return True  # allow one probe
+            return False
+        # half_open: allow one request to test
+        return True
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "state": self.state,
+            "failure_count": self.failure_count,
+            "success_count": self.success_count,
+            "failure_threshold": self.failure_threshold,
+            "reset_timeout": self.reset_timeout,
+            "last_failure_time": self.last_failure_time,
+            "seconds_since_change": round(time.time() - self.last_state_change, 1),
+        }
+
+
+class _RateLimiter:
+    """Token bucket rate limiter.
+
+    Tracks per-key request rates with configurable burst and refill.
+    """
+
+    def __init__(self, default_rate: float = 10.0, default_burst: int = 20) -> None:
+        self.default_rate = default_rate
+        self.default_burst = default_burst
+        self._buckets: dict[str, dict[str, Any]] = {}
+
+    def configure(self, key: str, rate: float, burst: int | None = None) -> None:
+        self._buckets[key] = {
+            "rate": rate,
+            "burst": burst or int(rate * 2),
+            "tokens": float(burst or int(rate * 2)),
+            "last_refill": time.time(),
+        }
+
+    def allow(self, key: str) -> bool:
+        if key not in self._buckets:
+            self.configure(key, self.default_rate, self.default_burst)
+        bucket = self._buckets[key]
+        now = time.time()
+        elapsed = now - bucket["last_refill"]
+        bucket["tokens"] = min(
+            bucket["burst"],
+            bucket["tokens"] + elapsed * bucket["rate"],
+        )
+        bucket["last_refill"] = now
+        if bucket["tokens"] >= 1.0:
+            bucket["tokens"] -= 1.0
+            return True
+        return False
+
+    def status(self, key: str) -> dict[str, Any]:
+        if key not in self._buckets:
+            return {"key": key, "configured": False}
+        b = self._buckets[key]
+        return {
+            "key": key,
+            "configured": True,
+            "rate": b["rate"],
+            "burst": b["burst"],
+            "tokens_remaining": round(b["tokens"], 1),
+        }
+
+    def all_status(self) -> list[dict[str, Any]]:
+        return [self.status(k) for k in self._buckets]
+
+
+# Shared state for resilience pack
+_circuit_breakers: dict[str, _CircuitBreaker] = {}
+_rate_limiter = _RateLimiter()
+_bulkheads: dict[str, dict[str, Any]] = {}
+
+
+async def _resilience_circuit_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check or update circuit breaker state."""
+    name = payload.get("name", "default")
+    action = payload.get("action", "check")  # check | success | failure | reset
+
+    if name not in _circuit_breakers:
+        threshold = payload.get("failure_threshold", 5)
+        timeout = payload.get("reset_timeout", 30.0)
+        _circuit_breakers[name] = _CircuitBreaker(name, threshold, timeout)
+
+    cb = _circuit_breakers[name]
+
+    if action == "success":
+        cb.record_success()
+    elif action == "failure":
+        cb.record_failure()
+    elif action == "reset":
+        cb.state = "closed"
+        cb.failure_count = 0
+        cb.last_state_change = time.time()
+
+    return {**cb.status(), "allow": cb.allow(), "ok": True}
+
+
+async def _resilience_rate_limit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check or configure rate limiting."""
+    action = payload.get("action", "check")  # check | configure | status
+    key = payload.get("key", "default")
+
+    if action == "configure":
+        rate = payload.get("rate", 10.0)
+        burst = payload.get("burst")
+        _rate_limiter.configure(key, rate, burst)
+        return {"ok": True, "key": key, "rate": rate, "burst": burst or int(rate * 2)}
+
+    if action == "status":
+        return {"ok": True, "buckets": _rate_limiter.all_status()}
+
+    # check: consume a token
+    allowed = _rate_limiter.allow(key)
+    return {"ok": True, "key": key, "allowed": allowed}
+
+
+async def _resilience_retry(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute retry delay with exponential backoff and jitter."""
+    attempt = payload.get("attempt", 1)
+    base_delay = payload.get("base_delay", 1.0)
+    max_delay = payload.get("max_delay", 60.0)
+    jitter = payload.get("jitter", True)
+    strategy = payload.get("strategy", "exponential")  # exponential | linear | constant
+
+    if strategy == "linear":
+        delay = base_delay * attempt
+    elif strategy == "constant":
+        delay = base_delay
+    else:  # exponential
+        delay = base_delay * (2 ** (attempt - 1))
+
+    delay = min(delay, max_delay)
+
+    if jitter:
+        import random
+        delay = delay * (0.5 + random.random() * 0.5)
+
+    return {
+        "ok": True,
+        "attempt": attempt,
+        "delay_seconds": round(delay, 3),
+        "strategy": strategy,
+        "max_delay": max_delay,
+    }
+
+
+async def _resilience_bulkhead(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bulkhead isolation — limit concurrency per pool."""
+    action = payload.get("action", "check")  # check | acquire | release | configure | status
+    pool = payload.get("pool", "default")
+
+    if action == "configure":
+        max_concurrent = payload.get("max_concurrent", 10)
+        _bulkheads[pool] = {
+            "max_concurrent": max_concurrent,
+            "current": 0,
+            "total_acquired": 0,
+            "total_rejected": 0,
+        }
+        return {"ok": True, "pool": pool, "max_concurrent": max_concurrent}
+
+    if pool not in _bulkheads:
+        _bulkheads[pool] = {"max_concurrent": 10, "current": 0, "total_acquired": 0, "total_rejected": 0}
+
+    bh = _bulkheads[pool]
+
+    if action == "acquire":
+        if bh["current"] < bh["max_concurrent"]:
+            bh["current"] += 1
+            bh["total_acquired"] += 1
+            return {"ok": True, "pool": pool, "acquired": True, "current": bh["current"]}
+        else:
+            bh["total_rejected"] += 1
+            return {"ok": True, "pool": pool, "acquired": False, "current": bh["current"], "reason": "at_capacity"}
+
+    if action == "release":
+        bh["current"] = max(0, bh["current"] - 1)
+        return {"ok": True, "pool": pool, "current": bh["current"]}
+
+    if action == "status":
+        return {"ok": True, "pools": {k: dict(v) for k, v in _bulkheads.items()}}
+
+    # check
+    return {"ok": True, "pool": pool, "current": bh["current"], "max": bh["max_concurrent"], "available": bh["max_concurrent"] - bh["current"]}
+
+
+async def _resilience_health(payload: dict[str, Any]) -> dict[str, Any]:
+    """Overall resilience health — all circuit breakers, rate limiters, bulkheads."""
+    circuits = {name: cb.status() for name, cb in _circuit_breakers.items()}
+    open_circuits = [n for n, s in circuits.items() if s["state"] == "open"]
+    half_open = [n for n, s in circuits.items() if s["state"] == "half_open"]
+
+    bulkhead_status = {}
+    at_capacity = []
+    for pool, bh in _bulkheads.items():
+        bulkhead_status[pool] = bh
+        if bh["current"] >= bh["max_concurrent"]:
+            at_capacity.append(pool)
+
+    healthy = len(open_circuits) == 0 and len(at_capacity) == 0
+
+    return {
+        "ok": True,
+        "healthy": healthy,
+        "circuit_breakers": circuits,
+        "open_circuits": open_circuits,
+        "half_open_circuits": half_open,
+        "rate_limiters": _rate_limiter.all_status(),
+        "bulkheads": bulkhead_status,
+        "at_capacity_bulkheads": at_capacity,
+    }
+
+
+def load_resilience_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load resilience capabilities — circuit breaker, rate limiter, retry backoff, bulkhead.
+
+    Capabilities:
+    - resilience-circuit:    Circuit breaker check/update (closed → open → half_open)
+    - resilience-rate-limit: Token bucket rate limiting per key
+    - resilience-retry:      Compute retry delay with exponential backoff + jitter
+    - resilience-bulkhead:   Bulkhead isolation — limit concurrency per pool
+    - resilience-health:     Overall resilience subsystem health summary
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="resilience-circuit",
+        handler=_resilience_circuit_check,
+        version="1.0.0",
+        description="Circuit breaker — track failures, auto-open, probe on half-open",
+        inputs=["name", "action"],
+        outputs=["ok", "state", "allow"],
+        tags=["resilience", "circuit-breaker", "fault-tolerance"],
+    ))
+    specs.append(builder.register(
+        name="resilience-rate-limit",
+        handler=_resilience_rate_limit,
+        version="1.0.0",
+        description="Token bucket rate limiting — configure, check, consume tokens",
+        inputs=["key", "action"],
+        outputs=["ok", "allowed"],
+        tags=["resilience", "rate-limit", "throttling"],
+    ))
+    specs.append(builder.register(
+        name="resilience-retry",
+        handler=_resilience_retry,
+        version="1.0.0",
+        description="Compute retry delay with exponential/linear/constant backoff and jitter",
+        inputs=["attempt", "strategy"],
+        outputs=["ok", "delay_seconds"],
+        tags=["resilience", "retry", "backoff"],
+    ))
+    specs.append(builder.register(
+        name="resilience-bulkhead",
+        handler=_resilience_bulkhead,
+        version="1.0.0",
+        description="Bulkhead isolation — limit concurrent executions per pool",
+        inputs=["pool", "action"],
+        outputs=["ok", "acquired", "current"],
+        tags=["resilience", "bulkhead", "concurrency"],
+    ))
+    specs.append(builder.register(
+        name="resilience-health",
+        handler=_resilience_health,
+        version="1.0.0",
+        description="Overall resilience health — circuits, rate limiters, bulkheads summary",
+        inputs=[],
+        outputs=["ok", "healthy"],
+        tags=["resilience", "health", "observability"],
+    ))
+    return specs
+
+
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
     """Load all available capability packs."""
     specs = []
@@ -5577,6 +5892,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_adapter_pack(builder))
     specs.extend(load_security_pack(builder))
     specs.extend(load_audience_analytics_pack(builder))
+    specs.extend(load_resilience_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
