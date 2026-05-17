@@ -30,6 +30,7 @@ Available packs:
 - **research_pack**: web research — plan queries, extract facts, synthesize findings, score sources
 - **adapter_pack**: format conversion, schema mapping, protocol bridging, normalization, validation
 - **security_pack**: token auth, permission checks, rate limiting, input sanitization, access audit
+- **strategy_pack**: cost-benefit analysis, priority scoring, resource allocation, conflict resolution, decision logging, tradeoff matrix
 """
 
 from __future__ import annotations
@@ -6768,6 +6769,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_notification_pack(builder))
     specs.extend(load_goal_decomposition_pack(builder))
     specs.extend(load_delegation_pack(builder))
+    specs.extend(load_strategy_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
@@ -7031,5 +7033,369 @@ def load_goal_decomposition_pack(builder: CapabilityBuilder) -> list[CapSpec]:
         inputs=["goal_id_1", "goal_id_2"],
         outputs=["ok", "merged_goal_id", "total_subtasks"],
         tags=["goal", "merge", "composition"],
+    ))
+    return specs
+
+
+# ─── Strategy Pack ───────────────────────────────────────────────────────
+# Strategic decision-making: cost-benefit analysis, priority scoring,
+# resource allocation, conflict resolution, and decision logging.
+
+_strategy_decisions: dict[str, dict[str, Any]] = {}
+_strategy_resources: dict[str, dict[str, Any]] = {}
+
+
+def _new_decision_id() -> str:
+    return f"dec-{uuid.uuid4().hex[:8]}"
+
+
+async def _cost_benefit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run a cost-benefit analysis on options.
+
+    Each option should have 'costs' (list of {name, value}) and
+    'benefits' (list of {name, value}). Returns net score and ranking.
+    """
+    options = payload.get("options", [])
+    if not options:
+        return {"ok": False, "error": "no options provided"}
+
+    results = []
+    for opt in options:
+        name = opt.get("name", "unnamed")
+        costs = opt.get("costs", [])
+        benefits = opt.get("benefits", [])
+        total_cost = sum(c.get("value", 0) for c in costs)
+        total_benefit = sum(b.get("value", 0) for b in benefits)
+        net = total_benefit - total_cost
+        roi = (total_benefit / total_cost - 1.0) if total_cost > 0 else float("inf") if total_benefit > 0 else 0.0
+        results.append({
+            "name": name,
+            "total_cost": total_cost,
+            "total_benefit": total_benefit,
+            "net_value": net,
+            "roi": round(roi, 4),
+            "costs": costs,
+            "benefits": benefits,
+        })
+
+    results.sort(key=lambda r: r["net_value"], reverse=True)
+    for i, r in enumerate(results):
+        r["rank"] = i + 1
+
+    recommendation = results[0]["name"] if results else None
+    dec_id = _new_decision_id()
+    _strategy_decisions[dec_id] = {
+        "id": dec_id,
+        "type": "cost_benefit",
+        "options": results,
+        "recommendation": recommendation,
+        "created_at": time.time(),
+    }
+
+    return {
+        "ok": True,
+        "decision_id": dec_id,
+        "analysis": results,
+        "recommendation": recommendation,
+        "total_options": len(results),
+    }
+
+
+async def _priority_score(payload: dict[str, Any]) -> dict[str, Any]:
+    """Score and rank items by weighted criteria.
+
+    Each item has 'name' and numeric properties. 'criteria' maps
+    property names to weights. Returns weighted scores and ranking.
+    """
+    items = payload.get("items", [])
+    criteria = payload.get("criteria", {})
+    if not items or not criteria:
+        return {"ok": False, "error": "items and criteria required"}
+
+    total_weight = sum(criteria.values())
+    if total_weight == 0:
+        return {"ok": False, "error": "weights must sum to > 0"}
+
+    results = []
+    for item in items:
+        name = item.get("name", "unnamed")
+        score = 0.0
+        breakdown = {}
+        for prop, weight in criteria.items():
+            val = item.get(prop, 0)
+            if isinstance(val, (int, float)):
+                normalized_weight = weight / total_weight
+                contrib = val * normalized_weight
+                score += contrib
+                breakdown[prop] = {"value": val, "weight": weight, "contribution": round(contrib, 4)}
+
+        results.append({"name": name, "score": round(score, 4), "breakdown": breakdown})
+
+    results.sort(key=lambda r: r["score"], reverse=True)
+    for i, r in enumerate(results):
+        r["rank"] = i + 1
+
+    return {"ok": True, "rankings": results, "criteria": criteria, "total_items": len(results)}
+
+
+async def _resource_allocate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Allocate a finite resource budget across competing demands.
+
+    Uses proportional allocation based on priority scores. Supports
+    minimum guarantees and caps per recipient.
+    """
+    budget = payload.get("budget", 0)
+    demands = payload.get("demands", [])
+    if budget <= 0 or not demands:
+        return {"ok": False, "error": "budget > 0 and non-empty demands required"}
+
+    # Validate and normalize priorities
+    total_priority = 0.0
+    valid_demands = []
+    for d in demands:
+        name = d.get("name", "unnamed")
+        priority = max(d.get("priority", 1.0), 0.01)
+        minimum = d.get("minimum", 0.0)
+        cap = d.get("cap", budget)
+        valid_demands.append({"name": name, "priority": priority, "minimum": minimum, "cap": cap})
+        total_priority += priority
+
+    # Phase 1: guarantee minimums
+    remaining = budget
+    allocations: list[dict[str, Any]] = []
+    guaranteed = {}
+
+    for d in valid_demands:
+        guarantee = min(d["minimum"], remaining)
+        guaranteed[d["name"]] = guarantee
+        remaining -= guarantee
+
+    # Phase 2: distribute remainder proportionally
+    for d in valid_demands:
+        proportional = (d["priority"] / total_priority) * remaining if total_priority > 0 else 0
+        total_alloc = guaranteed[d["name"]] + proportional
+        # Respect cap
+        total_alloc = min(total_alloc, d["cap"])
+        allocations.append({
+            "name": d["name"],
+            "allocation": round(total_alloc, 4),
+            "priority": d["priority"],
+            "share_pct": round(total_alloc / budget * 100, 2) if budget > 0 else 0,
+        })
+
+    total_allocated = sum(a["allocation"] for a in allocations)
+
+    return {
+        "ok": True,
+        "budget": budget,
+        "allocated": round(total_allocated, 4),
+        "surplus": round(budget - total_allocated, 4),
+        "allocations": allocations,
+        "total_demands": len(allocations),
+    }
+
+
+async def _conflict_resolve(payload: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a conflict between competing proposals.
+
+    Supports strategies: 'score' (highest score wins), 'consensus'
+    (merge compatible parts), 'priority' (highest priority agent wins).
+    """
+    proposals = payload.get("proposals", [])
+    strategy = payload.get("strategy", "score")
+    context = payload.get("context", "")
+
+    if len(proposals) < 2:
+        return {"ok": False, "error": "need at least 2 proposals"}
+
+    if strategy == "score":
+        proposals.sort(key=lambda p: p.get("score", 0), reverse=True)
+        winner = proposals[0]
+        dec_id = _new_decision_id()
+        _strategy_decisions[dec_id] = {
+            "id": dec_id,
+            "type": "conflict_resolution",
+            "strategy": strategy,
+            "winner": winner.get("name", "unnamed"),
+            "proposals": proposals,
+            "context": context,
+            "created_at": time.time(),
+        }
+        return {
+            "ok": True,
+            "decision_id": dec_id,
+            "strategy": strategy,
+            "winner": winner.get("name", "unnamed"),
+            "score": winner.get("score", 0),
+            "rationale": f"Highest score ({winner.get('score', 0)}) among {len(proposals)} proposals",
+        }
+
+    elif strategy == "consensus":
+        # Merge: collect all unique key-value pairs from proposals
+        merged: dict[str, Any] = {}
+        conflicts_list: list[str] = []
+        for p in proposals:
+            for k, v in p.items():
+                if k in ("name", "score"):
+                    continue
+                if k in merged and merged[k] != v:
+                    conflicts_list.append(f"{k}: {merged[k]} vs {v}")
+                merged[k] = v
+
+        dec_id = _new_decision_id()
+        _strategy_decisions[dec_id] = {
+            "id": dec_id,
+            "type": "conflict_resolution",
+            "strategy": strategy,
+            "merged": merged,
+            "conflicts": conflicts_list,
+            "context": context,
+            "created_at": time.time(),
+        }
+        return {
+            "ok": True,
+            "decision_id": dec_id,
+            "strategy": strategy,
+            "merged": merged,
+            "conflicts": conflicts_list,
+            "total_proposals": len(proposals),
+        }
+
+    elif strategy == "priority":
+        proposals.sort(key=lambda p: p.get("priority", 0), reverse=True)
+        winner = proposals[0]
+        dec_id = _new_decision_id()
+        return {
+            "ok": True,
+            "decision_id": dec_id,
+            "strategy": strategy,
+            "winner": winner.get("name", "unnamed"),
+            "priority": winner.get("priority", 0),
+            "rationale": f"Highest priority agent ({winner.get('priority', 0)})",
+        }
+
+    return {"ok": False, "error": f"unknown strategy: {strategy}"}
+
+
+async def _decision_log(payload: dict[str, Any]) -> dict[str, Any]:
+    """Query the decision history log."""
+    decision_type = payload.get("type")
+    limit = min(payload.get("limit", 20), 100)
+
+    decisions = list(_strategy_decisions.values())
+    if decision_type:
+        decisions = [d for d in decisions if d.get("type") == decision_type]
+
+    decisions.sort(key=lambda d: d.get("created_at", 0), reverse=True)
+    decisions = decisions[:limit]
+
+    return {
+        "ok": True,
+        "decisions": decisions,
+        "total": len(decisions),
+    }
+
+
+async def _tradeoff_matrix(payload: dict[str, Any]) -> dict[str, Any]:
+    """Build a tradeoff matrix comparing options across dimensions.
+
+    Returns a matrix showing how each option scores on each dimension,
+    with dominance analysis (Pareto front).
+    """
+    options = payload.get("options", [])
+    dimensions = payload.get("dimensions", [])  # list of dimension names
+
+    if len(options) < 2 or not dimensions:
+        return {"ok": False, "error": "need >= 2 options and dimensions"}
+
+    matrix: list[dict[str, Any]] = []
+    for opt in options:
+        name = opt.get("name", "unnamed")
+        scores = {}
+        for dim in dimensions:
+            scores[dim] = opt.get(dim, 0)
+        matrix.append({"name": name, "scores": scores})
+
+    # Pareto front: option A dominates B if >= on all dims and > on at least one
+    dominated: set[str] = set()
+    for i, a in enumerate(matrix):
+        for j, b in enumerate(matrix):
+            if i == j:
+                continue
+            a_scores = a["scores"]
+            b_scores = b["scores"]
+            all_ge = all(a_scores.get(d, 0) >= b_scores.get(d, 0) for d in dimensions)
+            any_gt = any(a_scores.get(d, 0) > b_scores.get(d, 0) for d in dimensions)
+            if all_ge and any_gt:
+                dominated.add(b["name"])
+
+    pareto_front = [m["name"] for m in matrix if m["name"] not in dominated]
+    dominated_names = list(dominated)
+
+    return {
+        "ok": True,
+        "matrix": matrix,
+        "pareto_front": pareto_front,
+        "dominated": dominated_names,
+        "dimensions": dimensions,
+    }
+
+
+def load_strategy_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load strategy capabilities — cost-benefit analysis, priority scoring, resource allocation, conflict resolution."""
+    specs = []
+    specs.append(builder.register(
+        name="cost-benefit",
+        handler=_cost_benefit,
+        version="1.0.0",
+        description="Run cost-benefit analysis across options with ROI calculation",
+        inputs=["options"],
+        outputs=["ok", "decision_id", "analysis", "recommendation"],
+        tags=["strategy", "decision", "analysis"],
+    ))
+    specs.append(builder.register(
+        name="priority-score",
+        handler=_priority_score,
+        version="1.0.0",
+        description="Score and rank items by weighted criteria",
+        inputs=["items", "criteria"],
+        outputs=["ok", "rankings", "criteria"],
+        tags=["strategy", "priority", "ranking"],
+    ))
+    specs.append(builder.register(
+        name="resource-allocate",
+        handler=_resource_allocate,
+        version="1.0.0",
+        description="Allocate finite resource budget across competing demands with guarantees and caps",
+        inputs=["budget", "demands"],
+        outputs=["ok", "allocations", "budget", "surplus"],
+        tags=["strategy", "resource", "allocation"],
+    ))
+    specs.append(builder.register(
+        name="conflict-resolve",
+        handler=_conflict_resolve,
+        version="1.0.0",
+        description="Resolve conflicts between proposals using score, consensus, or priority strategy",
+        inputs=["proposals", "strategy"],
+        outputs=["ok", "decision_id", "winner", "strategy"],
+        tags=["strategy", "conflict", "resolution"],
+    ))
+    specs.append(builder.register(
+        name="decision-log",
+        handler=_decision_log,
+        version="1.0.0",
+        description="Query the decision history log with optional type filter",
+        inputs=["type", "limit"],
+        outputs=["ok", "decisions", "total"],
+        tags=["strategy", "decision", "history"],
+    ))
+    specs.append(builder.register(
+        name="tradeoff-matrix",
+        handler=_tradeoff_matrix,
+        version="1.0.0",
+        description="Build a tradeoff matrix with Pareto front analysis across options",
+        inputs=["options", "dimensions"],
+        outputs=["ok", "matrix", "pareto_front", "dominated"],
+        tags=["strategy", "tradeoff", "pareto"],
     ))
     return specs
