@@ -5276,6 +5276,279 @@ def load_security_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Audience Analytics Pack ─────────────────────────────────────────────
+
+_routing_log: list[dict[str, Any]] = []
+_signal_weights: dict[str, float] = {
+    "capability": 0.30,
+    "focus": 0.25,
+    "trust": 0.20,
+    "fog_gap": 0.15,
+    "topology": 0.10,
+}
+
+
+async def _audience_record(payload: dict[str, Any]) -> dict[str, Any]:
+    """Record a routing decision and its outcome for later analysis.
+
+    Inputs:
+        topic      – the routed topic
+        agent      – the agent that was routed to
+        score      – the routing score
+        signals    – list of signal names that contributed
+        outcome    – "success" | "partial" | "fail" | "timeout"
+        metadata   – optional dict of extra context
+    """
+    entry = {
+        "id": str(uuid.uuid4()),
+        "topic": payload.get("topic", ""),
+        "agent": payload.get("agent", ""),
+        "score": float(payload.get("score", 0.0)),
+        "signals": payload.get("signals", []),
+        "outcome": payload.get("outcome", "unknown"),
+        "metadata": payload.get("metadata", {}),
+        "ts": time.time(),
+    }
+    _routing_log.append(entry)
+    # Keep bounded
+    if len(_routing_log) > 1000:
+        del _routing_log[:100]
+    return {"ok": True, "recorded_id": entry["id"], "total": len(_routing_log)}
+
+
+async def _audience_analyze(payload: dict[str, Any]) -> dict[str, Any]:
+    """Analyze routing history to find patterns and effectiveness.
+
+    Inputs:
+        topic     – optional filter by topic substring
+        agent     – optional filter by agent name
+        outcome   – optional filter by outcome
+        since     – optional minimum timestamp
+    """
+    topic_filter = payload.get("topic", "").lower()
+    agent_filter = payload.get("agent", "").lower()
+    outcome_filter = payload.get("outcome", "").lower()
+    since = payload.get("since", 0.0)
+
+    filtered = [
+        e for e in _routing_log
+        if (not topic_filter or topic_filter in e["topic"].lower())
+        and (not agent_filter or agent_filter in e["agent"].lower())
+        and (not outcome_filter or outcome_filter == e["outcome"].lower())
+        and e["ts"] >= since
+    ]
+
+    if not filtered:
+        return {"ok": True, "count": 0, "summary": "No matching records"}
+
+    # Outcome distribution
+    outcomes: dict[str, int] = {}
+    for e in filtered:
+        o = e["outcome"]
+        outcomes[o] = outcomes.get(o, 0) + 1
+    total = len(filtered)
+    success_rate = (outcomes.get("success", 0) + 0.5 * outcomes.get("partial", 0)) / total
+
+    # Signal effectiveness — which signals correlate with success?
+    signal_stats: dict[str, dict[str, float]] = {}
+    for e in filtered:
+        for sig in e.get("signals", []):
+            if sig not in signal_stats:
+                signal_stats[sig] = {"count": 0.0, "success": 0.0}
+            signal_stats[sig]["count"] += 1
+            if e["outcome"] in ("success", "partial"):
+                signal_stats[sig]["success"] += 1
+
+    signal_effectiveness = {
+        sig: round(stats["success"] / stats["count"], 3) if stats["count"] else 0.0
+        for sig, stats in signal_stats.items()
+    }
+
+    # Average score by outcome
+    score_by_outcome: dict[str, list[float]] = {}
+    for e in filtered:
+        score_by_outcome.setdefault(e["outcome"], []).append(e["score"])
+    avg_scores = {
+        o: round(sum(s) / len(s), 3) for o, s in score_by_outcome.items()
+    }
+
+    return {
+        "ok": True,
+        "count": total,
+        "outcomes": outcomes,
+        "success_rate": round(success_rate, 3),
+        "signal_effectiveness": signal_effectiveness,
+        "avg_score_by_outcome": avg_scores,
+    }
+
+
+async def _audience_weights(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get or update signal weights for routing.
+
+    Inputs:
+        action   – "get" | "set" | "auto_tune"
+        weights  – dict of signal→weight (for "set")
+    """
+    action = payload.get("action", "get")
+
+    if action == "get":
+        return {"ok": True, "weights": dict(_signal_weights)}
+
+    if action == "set":
+        new_weights = payload.get("weights", {})
+        for k, v in new_weights.items():
+            if k in _signal_weights:
+                _signal_weights[k] = float(v)
+        # Normalize
+        total_w = sum(_signal_weights.values()) or 1.0
+        for k in _signal_weights:
+            _signal_weights[k] = round(_signal_weights[k] / total_w, 4)
+        return {"ok": True, "weights": dict(_signal_weights)}
+
+    if action == "auto_tune":
+        # Use routing log to adjust weights toward effective signals
+        if not _routing_log:
+            return {"ok": True, "weights": dict(_signal_weights), "tuned": False, "reason": "no data"}
+
+        signal_perf: dict[str, list[bool]] = {}
+        for e in _routing_log[-200:]:
+            success = e["outcome"] in ("success", "partial")
+            for sig in e.get("signals", []):
+                signal_perf.setdefault(sig, []).append(success)
+
+        # Compute success rate per signal
+        new_w = dict(_signal_weights)
+        for sig, results in signal_perf.items():
+            if sig in new_w and len(results) >= 5:
+                rate = sum(results) / len(results)
+                # Boost effective signals, penalize ineffective
+                adjustment = (rate - 0.5) * 0.1  # ±0.05 max shift
+                new_w[sig] = max(0.01, new_w[sig] + adjustment)
+
+        # Normalize
+        total_w = sum(new_w.values()) or 1.0
+        for k in new_w:
+            new_w[k] = round(new_w[k] / total_w, 4)
+        _signal_weights.update(new_w)
+        return {"ok": True, "weights": dict(_signal_weights), "tuned": True}
+
+    return {"ok": False, "error": f"Unknown action: {action}"}
+
+
+async def _audience_suggest(payload: dict[str, Any]) -> dict[str, Any]:
+    """Suggest routing improvements based on historical data.
+
+    Inputs:
+        topic  – optional topic to get specific suggestions for
+    """
+    topic = payload.get("topic", "").lower()
+    relevant = [
+        e for e in _routing_log
+        if not topic or topic in e["topic"].lower()
+    ]
+
+    if not relevant:
+        return {"ok": True, "suggestions": ["Insufficient routing history — keep routing messages to build data"]}
+
+    suggestions = []
+
+    # Find consistently failing agents
+    agent_outcomes: dict[str, dict[str, int]] = {}
+    for e in relevant:
+        agent_outcomes.setdefault(e["agent"], {})
+        agent_outcomes[e["agent"]][e["outcome"]] = agent_outcomes[e["agent"]].get(e["outcome"], 0) + 1
+
+    for agent, outcomes in agent_outcomes.items():
+        fails = outcomes.get("fail", 0) + outcomes.get("timeout", 0)
+        total = sum(outcomes.values())
+        if total >= 3 and fails / total > 0.6:
+            suggestions.append(
+                f"Agent '{agent}' fails {fails}/{total} times — consider excluding or lowering trust"
+            )
+
+    # Find underused but effective agents
+    for agent, outcomes in agent_outcomes.items():
+        successes = outcomes.get("success", 0)
+        total = sum(outcomes.values())
+        if 1 <= total <= 3 and successes == total:
+            suggestions.append(
+                f"Agent '{agent}' is 100% successful over {total} routes — consider routing more traffic"
+            )
+
+    # Signal advice
+    sig_perf: dict[str, list[bool]] = {}
+    for e in relevant:
+        success = e["outcome"] in ("success", "partial")
+        for sig in e.get("signals", []):
+            sig_perf.setdefault(sig, []).append(success)
+    for sig, results in sig_perf.items():
+        if len(results) >= 5:
+            rate = sum(results) / len(results)
+            if rate < 0.3:
+                suggestions.append(f"Signal '{sig}' has low effectiveness ({rate:.0%}) — consider reducing weight")
+            elif rate > 0.8:
+                suggestions.append(f"Signal '{sig}' is highly effective ({rate:.0%}) — consider increasing weight")
+
+    if not suggestions:
+        suggestions.append("Routing performance looks healthy — no major improvements needed")
+
+    return {"ok": True, "suggestions": suggestions, "based_on": len(relevant)}
+
+
+def load_audience_analytics_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load audience routing analytics capabilities.
+
+    Capabilities:
+    - audience-record:  Record a routing decision + outcome
+    - audience-analyze: Analyze routing history (filter, stats, signal effectiveness)
+    - audience-weights: Get/set/auto-tune signal weights for routing
+    - audience-suggest: Get actionable suggestions for routing improvement
+    """
+    specs = []
+
+    specs.append(builder.register(
+        name="audience-record",
+        handler=_audience_record,
+        version="1.0.0",
+        description="Record a routing decision and outcome for analytics",
+        inputs=["topic", "agent", "score", "signals", "outcome"],
+        outputs=["ok", "recorded_id", "total"],
+        tags=["audience", "routing", "analytics", "feedback"],
+    ))
+
+    specs.append(builder.register(
+        name="audience-analyze",
+        handler=_audience_analyze,
+        version="1.0.0",
+        description="Analyze routing history — outcomes, signal effectiveness, score patterns",
+        inputs=["topic", "agent", "outcome", "since"],
+        outputs=["ok", "count", "outcomes", "success_rate", "signal_effectiveness"],
+        tags=["audience", "routing", "analytics", "statistics"],
+    ))
+
+    specs.append(builder.register(
+        name="audience-weights",
+        handler=_audience_weights,
+        version="1.0.0",
+        description="Get, set, or auto-tune signal weights for audience routing",
+        inputs=["action", "weights"],
+        outputs=["ok", "weights", "tuned"],
+        tags=["audience", "routing", "weights", "tuning", "optimization"],
+    ))
+
+    specs.append(builder.register(
+        name="audience-suggest",
+        handler=_audience_suggest,
+        version="1.0.0",
+        description="Suggest routing improvements based on historical performance",
+        inputs=["topic"],
+        outputs=["ok", "suggestions", "based_on"],
+        tags=["audience", "routing", "analytics", "suggestions", "optimization"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -5303,6 +5576,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_learning_pack(builder))
     specs.extend(load_adapter_pack(builder))
     specs.extend(load_security_pack(builder))
+    specs.extend(load_audience_analytics_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
