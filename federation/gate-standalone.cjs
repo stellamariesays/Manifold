@@ -4,8 +4,11 @@ const { Gate } = require('./dist/gate/index.js');
   const gate = new Gate({
     port: 8765,
     hubName: 'satelliteA',
+    // Connect to local server (8768) NOT federation peer port (8766).
+    // The local server bypasses PeerRegistry/self-peer checks.
+    // See: data/manifold/lessons-learned.md 2026-05-12
     federationHubName: 'satelliteA',
-    federationServer: 'ws://localhost:8766',
+    federationServer: 'ws://localhost:8768',
     maxConnectionsPerIP: 10,
     maxMessagesPerSecond: 50,
     sessionTimeoutMs: 30 * 60 * 1000,    // 30 min

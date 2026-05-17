@@ -9,5 +9,5 @@
     "wss://nexal.network/ws/federation"
   ],
   "atlasPath": null,
-  "debug": false
+  "debug": true
 }

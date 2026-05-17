@@ -14,6 +14,12 @@ export interface MeshRouterDeps {
   metrics: MetricsCollector
 }
 
+/** Register public (unauthenticated) mesh preview routes. */
+export function registerPublicMeshRoutes(app: { get: (path: string, handler: (req: Request, res: Response) => void) => void }, deps: MeshRouterDeps): void {
+  app.get('/public/mesh', (req, res) => _publicMesh(req, res, deps))
+  app.get('/public/status', (req, res) => _status(req, res, deps))
+}
+
 export function buildMeshRouter(router: Router, deps: MeshRouterDeps): void {
   router.get('/status', (req, res) => _status(req, res, deps))
   router.get('/peers', (req, res) => _peers(req, res, deps))
@@ -71,6 +77,37 @@ function _mesh(_req: Request, res: Response, { hub, capIndex, peerRegistry }: Me
       hubs: Array.from(stats.hubs),
     },
     timestamp: new Date().toISOString(),
+  })
+}
+
+/** Public mesh preview — read-only, no auth. Shows topology for onboarding curiosity. */
+function _publicMesh(_req: Request, res: Response, { hub, capIndex, peerRegistry }: MeshRouterDeps): void {
+  const stats = capIndex.stats()
+  const agents = capIndex.getAllAgents()
+  const peers = peerRegistry.getPeers()
+  const capabilities = capIndex.getAllCapabilities()
+
+  // Summarize agents by hub
+  const byHub: Record<string, number> = {}
+  for (const a of agents) {
+    byHub[a.hub] = (byHub[a.hub] || 0) + 1
+  }
+
+  res.json({
+    name: 'Manifold Federation',
+    hub,
+    summary: {
+      totalAgents: stats.agents,
+      totalCapabilities: stats.capabilities,
+      peerCount: peers.length,
+      hubs: Array.from(stats.hubs),
+      agentsPerHub: byHub,
+    },
+    capabilities,
+    peers: peers.map((p: any) => ({ hub: p.hub, address: p.address, connected: p.connected })),
+    agents: agents.map((a: any) => ({ name: a.name, hub: a.hub, capabilities: a.capabilities })),
+    timestamp: new Date().toISOString(),
+    joinUrl: 'https://github.com/stellamariesays/Manifold',
   })
 }
 

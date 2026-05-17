@@ -27,6 +27,7 @@ import { buildMeshRouter } from './routes/mesh.js'
 import { buildTeacupsRouter } from './routes/teacups.js'
 import { buildDashboardRouter } from './routes/dashboard.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerPublicMeshRoutes } from './routes/mesh.js'
 import { buildAdminRouter } from './routes/admin.js'
 import { buildMeshletRouter } from './routes/meshlet.js'
 import { buildChatRouter } from './routes/chat.js'
@@ -126,6 +127,15 @@ export class RestApi {
 
     // Nexal / topology UI routes (public, no auth required)
     registerNexalRoutes(this.app)
+
+    // Public mesh preview (no auth) — lets visitors see what they'd join
+    registerPublicMeshRoutes(this.app, {
+      hub: self.hub,
+      startTime: self.startTime,
+      get capIndex() { return self.capIndex },
+      get peerRegistry() { return self.peerRegistry },
+      get metrics() { return self.metrics },
+    })
 
     // Auth (access code verification — public, rate-limited)
     const publicRouter: Router = express.Router()
