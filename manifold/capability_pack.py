@@ -5866,6 +5866,253 @@ def load_resilience_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Fog Alert Pack ─────────────────────────────────────────────────────
+
+# In-memory alert rule store: name → rule dict
+_fog_alert_rules: dict[str, dict[str, Any]] = {}
+# In-memory alert history: list of fired alerts
+_fog_alert_history: list[dict[str, Any]] = []
+_FOG_ALERT_HISTORY_MAX = 200
+
+
+async def _alert_rule_create(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a fog alert rule.
+
+    Payload keys:
+        name:        unique rule name
+        event_type:  fog event type to watch (seam.shift, dark.pressure, fog.volume)
+        condition:   comparison — {"field": "data.delta", "op": "gt", "value": 0.5}
+        topic:       optional topic for audience routing when alert fires
+        severity:    info | warning | critical (default: warning)
+        cooldown:    min seconds between fires for same rule (default: 60)
+    """
+    name = payload.get("name", "")
+    if not name:
+        return {"error": "Rule name is required", "ok": False}
+    if name in _fog_alert_rules:
+        return {"error": f"Rule '{name}' already exists", "ok": False}
+
+    event_type = payload.get("event_type", "")
+    if event_type not in ("seam.shift", "dark.pressure", "fog.volume", "mesh.mutation"):
+        return {"error": f"Unsupported event_type: {event_type}", "ok": False}
+
+    condition = payload.get("condition", {})
+    if not condition.get("field") or not condition.get("op") or "value" not in condition:
+        return {"error": "condition requires field, op, value", "ok": False}
+
+    valid_ops = {"gt", "gte", "lt", "lte", "eq", "ne"}
+    if condition["op"] not in valid_ops:
+        return {"error": f"Invalid op '{condition['op']}'. Use: {', '.join(sorted(valid_ops))}", "ok": False}
+
+    rule: dict[str, Any] = {
+        "name": name,
+        "event_type": event_type,
+        "condition": condition,
+        "topic": payload.get("topic"),
+        "severity": payload.get("severity", "warning"),
+        "cooldown": payload.get("cooldown", 60),
+        "enabled": True,
+        "fire_count": 0,
+        "last_fired": None,
+        "created_at": __import__("time").time(),
+    }
+    _fog_alert_rules[name] = rule
+    return {"ok": True, "rule": {k: v for k, v in rule.items()}, "total_rules": len(_fog_alert_rules)}
+
+
+async def _alert_rule_delete(payload: dict[str, Any]) -> dict[str, Any]:
+    """Delete an alert rule by name."""
+    name = payload.get("name", "")
+    if name not in _fog_alert_rules:
+        return {"error": f"Rule '{name}' not found", "ok": False}
+    del _fog_alert_rules[name]
+    return {"ok": True, "deleted": name, "total_rules": len(_fog_alert_rules)}
+
+
+async def _alert_rule_toggle(payload: dict[str, Any]) -> dict[str, Any]:
+    """Enable or disable an alert rule."""
+    name = payload.get("name", "")
+    if name not in _fog_alert_rules:
+        return {"error": f"Rule '{name}' not found", "ok": False}
+    rule = _fog_alert_rules[name]
+    rule["enabled"] = not rule["enabled"]
+    return {"ok": True, "name": name, "enabled": rule["enabled"]}
+
+
+async def _alert_rule_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List all alert rules."""
+    rules = [
+        {k: v for k, v in r.items()}
+        for r in _fog_alert_rules.values()
+    ]
+    return {"ok": True, "rules": rules, "total": len(rules)}
+
+
+def _eval_condition(condition: dict[str, Any], event_data: dict[str, Any]) -> bool:
+    """Evaluate a condition against event data using dotted field paths."""
+    import operator as _op
+    ops = {"gt": _op.gt, "gte": _op.ge, "lt": _op.lt, "lte": _op.le, "eq": _op.eq, "ne": _op.ne}
+
+    field_path = condition["field"]
+    op_fn = ops.get(condition["op"])
+    threshold = condition["value"]
+
+    if op_fn is None:
+        return False
+
+    # Navigate dotted path into event_data
+    value = event_data
+    for part in field_path.split("."):
+        if isinstance(value, dict):
+            value = value.get(part)
+        else:
+            return False
+        if value is None:
+            return False
+
+    try:
+        return op_fn(value, threshold)
+    except (TypeError, ValueError):
+        return False
+
+
+async def _alert_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Evaluate a fog event against all active rules.
+
+    Payload:
+        event: dict with 'type', 'timestamp', 'data' (matching FogEvent format)
+
+    Returns list of matching rules and whether they fired (cooldown respected).
+    """
+    import time as _time
+
+    event = payload.get("event", {})
+    event_type = event.get("type", "")
+    event_data = event.get("data", {})
+
+    matches: list[dict[str, Any]] = []
+    now = _time.time()
+
+    for rule in _fog_alert_rules.values():
+        if not rule["enabled"]:
+            continue
+        if rule["event_type"] != event_type:
+            continue
+        if not _eval_condition(rule["condition"], event_data):
+            continue
+
+        # Cooldown check
+        last = rule.get("last_fired") or 0
+        cooldown_left = max(0, rule["cooldown"] - (now - last))
+        can_fire = cooldown_left == 0
+
+        if can_fire:
+            rule["fire_count"] += 1
+            rule["last_fired"] = now
+
+            alert_record = {
+                "rule": rule["name"],
+                "event_type": event_type,
+                "severity": rule["severity"],
+                "topic": rule.get("topic"),
+                "condition": rule["condition"],
+                "event_data": event_data,
+                "fired_at": now,
+            }
+            _fog_alert_history.append(alert_record)
+            if len(_fog_alert_history) > _FOG_ALERT_HISTORY_MAX:
+                _fog_alert_history.pop(0)
+
+        matches.append({
+            "rule": rule["name"],
+            "severity": rule["severity"],
+            "topic": rule.get("topic"),
+            "fired": can_fire,
+            "cooldown_remaining": round(cooldown_left, 1),
+        })
+
+    return {"ok": True, "matches": matches, "total_rules_checked": len(_fog_alert_rules)}
+
+
+async def _alert_history(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return recent alert fire history."""
+    limit = min(int(payload.get("limit", 50)), 200)
+    severity = payload.get("severity")
+    entries = _fog_alert_history
+    if severity:
+        entries = [e for e in entries if e.get("severity") == severity]
+    return {"ok": True, "history": entries[-limit:], "total": len(entries)}
+
+
+def load_fog_alert_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load fog alerting and escalation capabilities.
+
+    Capabilities:
+    - fog-alert-create:  Create an alert rule for fog events
+    - fog-alert-delete:  Delete an alert rule
+    - fog-alert-toggle:  Enable/disable a rule
+    - fog-alert-list:    List all rules
+    - fog-alert-eval:    Evaluate a fog event against active rules
+    - fog-alert-history: Recent alert fire history
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="fog-alert-create",
+        handler=_alert_rule_create,
+        version="1.0.0",
+        description="Create a fog alert rule with condition, severity, and optional topic for audience routing",
+        inputs=["name", "event_type", "condition"],
+        outputs=["ok", "rule"],
+        tags=["fog", "alert", "escalation", "monitoring"],
+    ))
+    specs.append(builder.register(
+        name="fog-alert-delete",
+        handler=_alert_rule_delete,
+        version="1.0.0",
+        description="Delete an alert rule by name",
+        inputs=["name"],
+        outputs=["ok", "deleted"],
+        tags=["fog", "alert"],
+    ))
+    specs.append(builder.register(
+        name="fog-alert-toggle",
+        handler=_alert_rule_toggle,
+        version="1.0.0",
+        description="Toggle an alert rule on or off",
+        inputs=["name"],
+        outputs=["ok", "enabled"],
+        tags=["fog", "alert"],
+    ))
+    specs.append(builder.register(
+        name="fog-alert-list",
+        handler=_alert_rule_list,
+        version="1.0.0",
+        description="List all configured alert rules",
+        inputs=[],
+        outputs=["ok", "rules"],
+        tags=["fog", "alert"],
+    ))
+    specs.append(builder.register(
+        name="fog-alert-eval",
+        handler=_alert_evaluate,
+        version="1.0.0",
+        description="Evaluate a fog event against all active alert rules (with cooldown)",
+        inputs=["event"],
+        outputs=["ok", "matches"],
+        tags=["fog", "alert", "evaluation"],
+    ))
+    specs.append(builder.register(
+        name="fog-alert-history",
+        handler=_alert_history,
+        version="1.0.0",
+        description="Query recent alert fire history with optional severity filter",
+        inputs=[],
+        outputs=["ok", "history"],
+        tags=["fog", "alert", "history"],
+    ))
+    return specs
+
+
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
     """Load all available capability packs."""
     specs = []
@@ -5893,6 +6140,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_security_pack(builder))
     specs.extend(load_audience_analytics_pack(builder))
     specs.extend(load_resilience_pack(builder))
+    specs.extend(load_fog_alert_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
