@@ -4218,6 +4218,246 @@ def load_localization_pack(builder: CapabilityBuilder, agent: Any) -> list[CapSp
     return specs
 
 
+# ─── Evaluation Pack ────────────────────────────────────────────────────
+
+# Tracks quality scores per capability/agent over time, computes benchmarks,
+# and supports inter-agent comparison.
+
+_eval_history: dict[str, list[dict[str, Any]]] = {}
+
+
+def _record_eval(cap_name: str, agent_name: str, score: float, metadata: dict[str, Any] | None = None) -> None:
+    key = f"{agent_name}:{cap_name}"
+    entry = {"score": score, "ts": time.time(), "metadata": metadata or {}}
+    _eval_history.setdefault(key, []).append(entry)
+
+
+async def _eval_score_output(payload: dict[str, Any]) -> dict[str, Any]:
+    """Score an output against criteria. Supports numeric, boolean, and rubric-based scoring."""
+    output = payload.get("output", "")
+    criteria = payload.get("criteria", [])
+    mode = payload.get("mode", "numeric")  # numeric | rubric | pass_fail
+    agent_name = payload.get("agent_name", "unknown")
+    cap_name = payload.get("capability", "unspecified")
+
+    if mode == "pass_fail":
+        passed = payload.get("expected_pass", False)
+        score = 1.0 if passed else 0.0
+        _record_eval(cap_name, agent_name, score, {"mode": "pass_fail"})
+        return {"score": score, "passed": passed, "ok": True}
+
+    if mode == "rubric":
+        rubric = payload.get("rubric", [])  # list of {"name": str, "weight": float, "score": float}
+        if not rubric:
+            return {"score": 0.0, "ok": False, "error": "No rubric provided"}
+        total_weight = sum(r.get("weight", 1.0) for r in rubric)
+        weighted = sum(r.get("score", 0.0) * r.get("weight", 1.0) for r in rubric)
+        score = weighted / total_weight if total_weight > 0 else 0.0
+        _record_eval(cap_name, agent_name, score, {"mode": "rubric", "rubric": rubric})
+        return {"score": round(score, 4), "rubric": rubric, "ok": True}
+
+    # Default: numeric
+    score = payload.get("score", 0.0)
+    score = max(0.0, min(1.0, float(score)))
+    _record_eval(cap_name, agent_name, score, {"mode": "numeric", "criteria": criteria})
+    return {"score": score, "ok": True}
+
+
+async def _eval_get_history(payload: dict[str, Any]) -> dict[str, Any]:
+    """Retrieve evaluation history for an agent/capability pair."""
+    agent_name = payload.get("agent_name", "")
+    cap_name = payload.get("capability", "")
+    limit = payload.get("limit", 50)
+
+    if agent_name and cap_name:
+        key = f"{agent_name}:{cap_name}"
+        entries = _eval_history.get(key, [])[-limit:]
+    elif agent_name:
+        entries = []
+        for k, v in _eval_history.items():
+            if k.startswith(f"{agent_name}:"):
+                entries.extend(v[-limit:])
+    else:
+        entries = []
+        for v in _eval_history.values():
+            entries.extend(v[-limit:])
+
+    entries.sort(key=lambda e: e["ts"], reverse=True)
+    return {"entries": entries[:limit], "count": len(entries), "ok": True}
+
+
+async def _eval_benchmark(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compute benchmark statistics across evaluations for a capability."""
+    cap_name = payload.get("capability", "")
+    agent_name = payload.get("agent_name", "")
+
+    relevant: list[dict[str, Any]] = []
+    for k, entries in _eval_history.items():
+        parts = k.split(":", 1)
+        a_name, c_name = parts[0], parts[1] if len(parts) > 1 else ""
+        if cap_name and c_name != cap_name:
+            continue
+        if agent_name and a_name != agent_name:
+            continue
+        relevant.extend(entries)
+
+    if not relevant:
+        return {"ok": True, "count": 0, "mean": 0.0, "min": 0.0, "max": 0.0, "std": 0.0, "trend": "no_data"}
+
+    scores = [e["score"] for e in relevant]
+    mean_score = statistics.mean(scores)
+    min_score = min(scores)
+    max_score = max(scores)
+    std_score = statistics.stdev(scores) if len(scores) > 1 else 0.0
+
+    # Trend: compare last 3 vs first 3
+    trend = "stable"
+    if len(scores) >= 4:
+        recent = statistics.mean(scores[-3:])
+        early = statistics.mean(scores[:3])
+        if recent > early + 0.05:
+            trend = "improving"
+        elif recent < early - 0.05:
+            trend = "declining"
+
+    return {
+        "ok": True,
+        "count": len(scores),
+        "mean": round(mean_score, 4),
+        "min": round(min_score, 4),
+        "max": round(max_score, 4),
+        "std": round(std_score, 4),
+        "trend": trend,
+    }
+
+
+async def _eval_compare(payload: dict[str, Any]) -> dict[str, Any]:
+    """Compare evaluation performance between two agents."""
+    agent_a = payload.get("agent_a", "")
+    agent_b = payload.get("agent_b", "")
+    cap_name = payload.get("capability", "")
+
+    if not agent_a or not agent_b:
+        return {"ok": False, "error": "Both agent_a and agent_b required"}
+
+    def _stats_for(agent: str) -> dict[str, Any]:
+        scores: list[float] = []
+        for k, entries in _eval_history.items():
+            parts = k.split(":", 1)
+            if parts[0] != agent:
+                continue
+            if cap_name and (len(parts) < 2 or parts[1] != cap_name):
+                continue
+            scores.extend(e["score"] for e in entries)
+        if not scores:
+            return {"count": 0, "mean": 0.0}
+        return {"count": len(scores), "mean": round(statistics.mean(scores), 4)}
+
+    stats_a = _stats_for(agent_a)
+    stats_b = _stats_for(agent_b)
+
+    if stats_a["count"] == 0 or stats_b["count"] == 0:
+        return {"ok": True, "agent_a": stats_a, "agent_b": stats_b, "winner": "insufficient_data"}
+
+    winner = agent_a if stats_a["mean"] > stats_b["mean"] else agent_b
+    delta = abs(stats_a["mean"] - stats_b["mean"])
+
+    return {
+        "ok": True,
+        "agent_a": stats_a,
+        "agent_b": stats_b,
+        "winner": winner,
+        "delta": round(delta, 4),
+    }
+
+
+async def _eval_leaderboard(payload: dict[str, Any]) -> dict[str, Any]:
+    """Generate a leaderboard of agents ranked by evaluation score."""
+    cap_name = payload.get("capability", "")
+    top_n = payload.get("top_n", 10)
+
+    agent_scores: dict[str, list[float]] = {}
+    for k, entries in _eval_history.items():
+        parts = k.split(":", 1)
+        if cap_name and (len(parts) < 2 or parts[1] != cap_name):
+            continue
+        agent = parts[0]
+        agent_scores.setdefault(agent, []).extend(e["score"] for e in entries)
+
+    board = []
+    for agent, scores in agent_scores.items():
+        board.append({
+            "agent": agent,
+            "mean_score": round(statistics.mean(scores), 4),
+            "eval_count": len(scores),
+            "latest_score": round(scores[-1], 4) if scores else 0.0,
+        })
+
+    board.sort(key=lambda x: x["mean_score"], reverse=True)
+    return {"leaderboard": board[:top_n], "total_agents": len(board), "ok": True}
+
+
+def load_evaluation_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Register evaluation and benchmarking capabilities.
+
+    Provides structured quality scoring, benchmark tracking, inter-agent
+    comparison, and leaderboard generation.
+    """
+    specs = []
+
+    specs.append(builder.register(
+        name="eval-score",
+        handler=_eval_score_output,
+        version="1.0.0",
+        description="Score an output against criteria (numeric, rubric, or pass/fail)",
+        inputs=["output", "mode", "score", "criteria", "rubric"],
+        outputs=["score", "ok"],
+        tags=["evaluation", "quality", "scoring"],
+    ))
+
+    specs.append(builder.register(
+        name="eval-history",
+        handler=_eval_get_history,
+        version="1.0.0",
+        description="Retrieve evaluation history for an agent or capability",
+        inputs=["agent_name", "capability", "limit"],
+        outputs=["entries", "count", "ok"],
+        tags=["evaluation", "history", "tracking"],
+    ))
+
+    specs.append(builder.register(
+        name="eval-benchmark",
+        handler=_eval_benchmark,
+        version="1.0.0",
+        description="Compute benchmark statistics (mean, std, trend) for evaluations",
+        inputs=["capability", "agent_name"],
+        outputs=["count", "mean", "min", "max", "std", "trend", "ok"],
+        tags=["evaluation", "benchmark", "statistics"],
+    ))
+
+    specs.append(builder.register(
+        name="eval-compare",
+        handler=_eval_compare,
+        version="1.0.0",
+        description="Compare evaluation performance between two agents",
+        inputs=["agent_a", "agent_b", "capability"],
+        outputs=["agent_a", "agent_b", "winner", "delta", "ok"],
+        tags=["evaluation", "comparison", "benchmark"],
+    ))
+
+    specs.append(builder.register(
+        name="eval-leaderboard",
+        handler=_eval_leaderboard,
+        version="1.0.0",
+        description="Generate a ranked leaderboard of agents by evaluation score",
+        inputs=["capability", "top_n"],
+        outputs=["leaderboard", "total_agents", "ok"],
+        tags=["evaluation", "leaderboard", "ranking"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -4241,6 +4481,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_audit_pack(builder))
     specs.extend(load_deliberation_pack(builder))
     specs.extend(load_orchestration_pack(builder))
+    specs.extend(load_evaluation_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
