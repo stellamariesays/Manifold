@@ -29,6 +29,7 @@ Available packs:
 - **subscription_pack**: pub/sub notifications — subscribe, publish, poll, status
 - **research_pack**: web research — plan queries, extract facts, synthesize findings, score sources
 - **adapter_pack**: format conversion, schema mapping, protocol bridging, normalization, validation
+- **security_pack**: token auth, permission checks, rate limiting, input sanitization, access audit
 """
 
 from __future__ import annotations
@@ -5002,6 +5003,279 @@ def load_adapter_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Security Pack ──────────────────────────────────────────────────────
+
+# In-memory stores for security pack (per-process)
+_security_tokens: dict[str, dict[str, Any]] = {}
+_security_rate_limits: dict[str, list[float]] = {}
+_security_audit_log: list[dict[str, Any]] = []
+
+
+async def _security_auth_token(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate or issue a simple auth token.
+
+    Modes:
+      issue  — generate a new token for an agent/role pair.
+      verify — check an existing token is valid and not expired.
+    """
+    mode = payload.get("mode", "verify")
+    agent_name = payload.get("agent", "")
+    role = payload.get("role", "agent")
+    token = payload.get("token", "")
+    ttl_seconds = payload.get("ttl", 3600)
+
+    if mode == "issue":
+        if not agent_name:
+            return {"ok": False, "error": "agent name required"}
+        new_token = f"mf_{uuid.uuid4().hex[:24]}"
+        _security_tokens[new_token] = {
+            "agent": agent_name,
+            "role": role,
+            "issued_at": time.time(),
+            "expires_at": time.time() + ttl_seconds,
+        }
+        return {
+            "ok": True,
+            "token": new_token,
+            "agent": agent_name,
+            "role": role,
+            "expires_in": ttl_seconds,
+        }
+
+    # verify mode
+    if not token:
+        return {"ok": False, "error": "token required for verification"}
+    record = _security_tokens.get(token)
+    if not record:
+        return {"ok": False, "error": "token not found", "valid": False}
+    if time.time() > record["expires_at"]:
+        del _security_tokens[token]
+        return {"ok": False, "error": "token expired", "valid": False}
+    return {
+        "ok": True,
+        "valid": True,
+        "agent": record["agent"],
+        "role": record["role"],
+    }
+
+
+async def _security_permission_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check if an agent has a specific permission.
+
+    Uses a simple role-based model with predefined role permissions.
+    """
+    ROLE_PERMISSIONS: dict[str, set[str]] = {
+        "admin": {"read", "write", "delete", "manage", "invoke", "delegate"},
+        "operator": {"read", "write", "invoke", "delegate"},
+        "agent": {"read", "invoke"},
+        "observer": {"read"},
+    }
+
+    role = payload.get("role", "agent")
+    permission = payload.get("permission", "")
+    agent_name = payload.get("agent", "unknown")
+
+    if not permission:
+        return {"ok": False, "error": "permission required"}
+
+    perms = ROLE_PERMISSIONS.get(role, set())
+    allowed = permission in perms
+
+    _security_audit_log.append({
+        "ts": time.time(),
+        "action": "permission_check",
+        "agent": agent_name,
+        "role": role,
+        "permission": permission,
+        "allowed": allowed,
+    })
+
+    return {
+        "ok": True,
+        "allowed": allowed,
+        "role": role,
+        "permission": permission,
+        "agent": agent_name,
+    }
+
+
+async def _security_rate_limit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check or enforce a sliding-window rate limit for a key.
+
+    Call with action='check' to test, action='consume' to count the request.
+    """
+    action = payload.get("action", "check")
+    key = payload.get("key", "default")
+    max_requests = payload.get("max_requests", 100)
+    window_seconds = payload.get("window_seconds", 60)
+
+    now = time.time()
+    window_start = now - window_seconds
+
+    # Clean old entries
+    if key not in _security_rate_limits:
+        _security_rate_limits[key] = []
+    _security_rate_limits[key] = [
+        t for t in _security_rate_limits[key] if t > window_start
+    ]
+
+    current_count = len(_security_rate_limits[key])
+    allowed = current_count < max_requests
+
+    if action == "consume" and allowed:
+        _security_rate_limits[key].append(now)
+        current_count += 1
+        allowed = current_count <= max_requests
+
+    return {
+        "ok": True,
+        "allowed": allowed,
+        "key": key,
+        "current": current_count,
+        "limit": max_requests,
+        "window_seconds": window_seconds,
+    }
+
+
+async def _security_sanitize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize input data — strip dangerous patterns.
+
+    Removes HTML tags, normalizes whitespace, blocks injection patterns.
+    """
+    data = payload.get("data", "")
+    mode = payload.get("mode", "text")  # text | strict
+
+    if not isinstance(data, str):
+        return {"ok": False, "error": "data must be a string"}
+
+    original_length = len(data)
+    cleaned = data
+
+    # Strip HTML tags
+    cleaned = re.sub(r'<[^>]+>', '', cleaned)
+
+    # Normalize whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+
+    threats = []
+
+    if mode == "strict":
+        # Block common injection patterns
+        injection_patterns = [
+            (r'(?:;|\|)\s*(?:rm|del|drop|shutdown|exec|eval|system)\b', 'command_injection'),
+            (r'(?:UNION|SELECT|INSERT|DROP|DELETE)\s', 'sql_injection'),
+            (r'<script', 'xss'),
+            (r'\.\.[/\\]', 'path_traversal'),
+        ]
+        for pattern, threat_name in injection_patterns:
+            if re.search(pattern, cleaned, re.IGNORECASE):
+                threats.append(threat_name)
+                cleaned = re.sub(pattern, '[BLOCKED]', cleaned, flags=re.IGNORECASE)
+
+    return {
+        "ok": True,
+        "cleaned": cleaned,
+        "original_length": original_length,
+        "cleaned_length": len(cleaned),
+        "threats": threats,
+        "safe": len(threats) == 0,
+    }
+
+
+async def _security_audit(payload: dict[str, Any]) -> dict[str, Any]:
+    """Query or append to the security audit log."""
+    action = payload.get("action", "query")
+    agent_filter = payload.get("agent", None)
+    limit = payload.get("limit", 50)
+
+    if action == "append":
+        entry = {
+            "ts": time.time(),
+            "action": payload.get("event", "custom"),
+            "agent": payload.get("agent", "unknown"),
+            "details": payload.get("details", {}),
+        }
+        _security_audit_log.append(entry)
+        return {"ok": True, "recorded": True}
+
+    # query mode
+    entries = _security_audit_log
+    if agent_filter:
+        entries = [e for e in entries if e.get("agent") == agent_filter]
+    entries = entries[-limit:]
+
+    return {
+        "ok": True,
+        "entries": entries,
+        "total": len(_security_audit_log),
+        "returned": len(entries),
+    }
+
+
+def load_security_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load the security capability pack.
+
+    Provides authentication, authorization, rate limiting, input
+    sanitization, and audit logging — essential for secure mesh
+    communication between agents.
+
+    Caps: sec-auth, sec-permission, sec-rate-limit, sec-sanitize, sec-audit.
+    """
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="sec-auth",
+        handler=_security_auth_token,
+        version="1.0.0",
+        description="Issue or verify auth tokens for agent identity",
+        inputs=["mode"],
+        outputs=["ok", "token", "valid", "agent", "role", "expires_in"],
+        tags=["security", "auth", "token", "identity"],
+    ))
+
+    specs.append(builder.register(
+        name="sec-permission",
+        handler=_security_permission_check,
+        version="1.0.0",
+        description="Check if a role has a specific permission",
+        inputs=["role", "permission"],
+        outputs=["ok", "allowed", "role", "permission"],
+        tags=["security", "permission", "rbac", "authorization"],
+    ))
+
+    specs.append(builder.register(
+        name="sec-rate-limit",
+        handler=_security_rate_limit,
+        version="1.0.0",
+        description="Sliding-window rate limiter for keys/agents",
+        inputs=["action", "key"],
+        outputs=["ok", "allowed", "current", "limit"],
+        tags=["security", "rate-limit", "throttle", "quota"],
+    ))
+
+    specs.append(builder.register(
+        name="sec-sanitize",
+        handler=_security_sanitize,
+        version="1.0.0",
+        description="Sanitize input data, strip dangerous patterns",
+        inputs=["data", "mode"],
+        outputs=["ok", "cleaned", "threats", "safe"],
+        tags=["security", "sanitize", "validation", "injection"],
+    ))
+
+    specs.append(builder.register(
+        name="sec-audit",
+        handler=_security_audit,
+        version="1.0.0",
+        description="Query or append to the security audit log",
+        inputs=["action"],
+        outputs=["ok", "entries", "total", "returned"],
+        tags=["security", "audit", "log", "compliance"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -5028,6 +5302,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_evaluation_pack(builder))
     specs.extend(load_learning_pack(builder))
     specs.extend(load_adapter_pack(builder))
+    specs.extend(load_security_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
