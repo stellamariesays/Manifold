@@ -11,6 +11,7 @@ from manifold.capability_pack import (
     load_meta_pack,
     load_routing_pack,
     load_fog_pack,
+    load_learning_pack,
     load_all_packs,
 )
 
@@ -198,12 +199,12 @@ class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog + 4 reasoning + 5 network + 5 memory = 43
-        assert len(specs) == 101  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter pack
+        assert len(specs) == 105  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning pack
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 4 reasoning + 5 network + 5 memory = 36
-        assert len(specs) == 89  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter pack
+        assert len(specs) == 93  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter +4 learning pack
 
     def test_search_finds_packs(self, builder, agent):
         load_all_packs(builder, agent)
@@ -213,8 +214,8 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 101
-        assert stats["active"] == 101
+        assert stats["total_capabilities"] == 105
+        assert stats["active"] == 105
 
 
 # ─── Fog Awareness Pack ──────────────────────────────────────────────────
@@ -271,3 +272,116 @@ class TestFogPack:
         specs = load_fog_pack(builder, agent)
         for spec in specs:
             assert "fog" in spec.tags
+
+    # ─── Learning Pack ─────────────────────────────────────────────────────
+
+    def test_learning_pack_loads(self, builder):
+        specs = load_learning_pack(builder)
+        assert len(specs) >= 4
+        names = {s.name for s in specs}
+        assert "learn-record" in names
+        assert "learn-proficiency" in names
+        assert "learn-suggest" in names
+        assert "learn-reset" in names
+
+    def test_learn_record(self, builder):
+        load_learning_pack(builder)
+        cap = builder.get("learn-record")
+        assert cap is not None
+        result = _run(cap.handler({"agent": "alice", "capability": "solar-prediction", "success": True, "grade": "A", "score": 0.95}))
+        assert result["ok"] is True
+        assert result["recorded"] is True
+        assert result["success_rate"] == 1.0
+        assert result["attempts"] == 1
+
+    def test_learn_record_multiple(self, builder):
+        load_learning_pack(builder)
+        cap = builder.get("learn-record")
+        _run(cap.handler({"agent": "bob", "capability": "math", "success": True, "grade": "B", "score": 0.8}))
+        result = _run(cap.handler({"agent": "bob", "capability": "math", "success": False, "grade": "D", "score": 0.3}))
+        assert result["ok"] is True
+        assert result["success_rate"] == 0.5
+        assert result["attempts"] == 2
+
+    def test_learn_record_requires_capability(self, builder):
+        load_learning_pack(builder)
+        cap = builder.get("learn-record")
+        with pytest.raises(ValueError, match="capability"):
+            _run(cap.handler({"agent": "alice"}))
+
+    def test_learn_proficiency(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        prof = builder.get("learn-proficiency")
+        _run(rec.handler({"agent": "carol", "capability": "nlp", "success": True, "score": 0.92}))
+        _run(rec.handler({"agent": "carol", "capability": "nlp", "success": True, "score": 0.88}))
+        result = _run(prof.handler({"agent": "carol"}))
+        assert result["ok"] is True
+        assert result["total_capabilities"] >= 1
+        nlp = next(p for p in result["proficiencies"] if p["capability"] == "nlp")
+        assert nlp["level"] == "expert"
+        assert nlp["success_rate"] == 1.0
+
+    def test_learn_proficiency_specific_cap(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        prof = builder.get("learn-proficiency")
+        _run(rec.handler({"agent": "dave", "capability": "crypto", "success": False, "score": 0.2}))
+        result = _run(prof.handler({"agent": "dave", "capability": "crypto"}))
+        assert result["ok"] is True
+        assert len(result["proficiencies"]) == 1
+        assert result["proficiencies"][0]["level"] == "developing"
+
+    def test_learn_suggest(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        sug = builder.get("learn-suggest")
+        # Record poor outcomes
+        for _ in range(3):
+            _run(rec.handler({"agent": "eve", "capability": "weak-skill", "success": False, "score": 0.3}))
+        result = _run(sug.handler({"agent": "eve", "threshold": 0.6}))
+        assert result["ok"] is True
+        assert result["count"] >= 1
+        assert any(s["capability"] == "weak-skill" for s in result["suggestions"])
+
+    def test_learn_suggest_no_weak_caps(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        sug = builder.get("learn-suggest")
+        _run(rec.handler({"agent": "frank", "capability": "strong-skill", "success": True, "score": 0.95}))
+        result = _run(sug.handler({"agent": "frank", "threshold": 0.6}))
+        assert result["ok"] is True
+        assert result["count"] == 0
+
+    def test_learn_reset_specific(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        rst = builder.get("learn-reset")
+        _run(rec.handler({"agent": "grace", "capability": "x", "success": True, "score": 1.0}))
+        result = _run(rst.handler({"agent": "grace", "capability": "x"}))
+        assert result["ok"] is True
+        assert result["removed"] == 1
+
+    def test_learn_reset_all(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        rst = builder.get("learn-reset")
+        _run(rec.handler({"agent": "heidi", "capability": "a", "success": True, "score": 1.0}))
+        _run(rec.handler({"agent": "heidi", "capability": "b", "success": True, "score": 1.0}))
+        result = _run(rst.handler({"agent": "heidi"}))
+        assert result["ok"] is True
+        assert result["removed"] == 2
+
+    def test_learn_improvement_streak(self, builder):
+        load_learning_pack(builder)
+        rec = builder.get("learn-record")
+        for grade in ["C", "B", "A"]:
+            _run(rec.handler({"agent": "ivan", "capability": "rising-star", "success": True, "grade": grade, "score": 0.7}))
+        prof = builder.get("learn-proficiency")
+        result = _run(prof.handler({"agent": "ivan", "capability": "rising-star"}))
+        assert result["proficiencies"][0]["improvement_streak"] == 2
+
+    def test_learning_pack_tags(self, builder):
+        specs = load_learning_pack(builder)
+        for spec in specs:
+            assert "learning" in spec.tags

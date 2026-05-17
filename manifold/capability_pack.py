@@ -4713,6 +4713,233 @@ async def _adapter_validate(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ─── Learning Pack ──────────────────────────────────────────────────────
+
+# Module-level learning store: maps (agent_name, capability) -> stats
+_learning_store: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def _learn_get_stats(agent: str, cap: str) -> dict[str, Any]:
+    """Get or create learning stats for an agent-capability pair."""
+    key = (agent, cap)
+    if key not in _learning_store:
+        _learning_store[key] = {
+            "attempts": 0,
+            "successes": 0,
+            "failures": 0,
+            "total_score": 0.0,
+            "recent_grades": [],  # last 20 grades
+            "improvements": 0,  # consecutive improving results
+        }
+    return _learning_store[key]
+
+
+async def _learn_record(payload: dict[str, Any]) -> dict[str, Any]:
+    """Record a task outcome for learning."""
+    agent = payload.get("agent", "unknown")
+    capability = payload.get("capability", "")
+    success = payload.get("success", False)
+    grade = payload.get("grade", "")  # A-F
+    score = payload.get("score", 0.0)  # 0-1 numeric
+
+    if not capability:
+        raise ValueError("capability is required")
+
+    stats = _learn_get_stats(agent, capability)
+    stats["attempts"] += 1
+
+    if success:
+        stats["successes"] += 1
+    else:
+        stats["failures"] += 1
+
+    if score > 0:
+        stats["total_score"] += score
+
+    if grade:
+        stats["recent_grades"].append(grade)
+        stats["recent_grades"] = stats["recent_grades"][-20:]
+        # Track improvement streak
+        grades_list = stats["recent_grades"]
+        if len(grades_list) >= 2:
+            grade_order = {"A": 5, "B": 4, "C": 3, "D": 2, "F": 1}
+            if grade_order.get(grades_list[-1], 0) > grade_order.get(grades_list[-2], 0):
+                stats["improvements"] += 1
+            else:
+                stats["improvements"] = 0
+
+    success_rate = stats["successes"] / stats["attempts"] if stats["attempts"] else 0.0
+    avg_score = stats["total_score"] / stats["attempts"] if stats["attempts"] else 0.0
+
+    return {
+        "ok": True,
+        "agent": agent,
+        "capability": capability,
+        "recorded": True,
+        "success_rate": round(success_rate, 3),
+        "avg_score": round(avg_score, 3),
+        "attempts": stats["attempts"],
+        "improvement_streak": stats["improvements"],
+    }
+
+
+async def _learn_proficiency(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get proficiency report for an agent's capabilities."""
+    agent = payload.get("agent", "unknown")
+    capability = payload.get("capability", None)  # specific or all
+
+    results: list[dict[str, Any]] = []
+    target_caps = [capability] if capability else sorted(
+        k[1] for k in _learning_store if k[0] == agent
+    )
+
+    for cap in target_caps:
+        stats = _learn_get_stats(agent, cap)
+        if stats["attempts"] == 0 and capability is None:
+            continue
+
+        success_rate = stats["successes"] / stats["attempts"] if stats["attempts"] else 0.0
+        avg_score = stats["total_score"] / stats["attempts"] if stats["attempts"] else 0.0
+
+        # Compute proficiency level
+        if avg_score >= 0.9 and success_rate >= 0.9:
+            level = "expert"
+        elif avg_score >= 0.75 and success_rate >= 0.8:
+            level = "proficient"
+        elif avg_score >= 0.5 and success_rate >= 0.6:
+            level = "competent"
+        elif stats["attempts"] > 0:
+            level = "developing"
+        else:
+            level = "untested"
+
+        results.append({
+            "capability": cap,
+            "level": level,
+            "success_rate": round(success_rate, 3),
+            "avg_score": round(avg_score, 3),
+            "attempts": stats["attempts"],
+            "improvement_streak": stats["improvements"],
+            "recent_grades": stats["recent_grades"][-5:],
+        })
+
+    return {
+        "ok": True,
+        "agent": agent,
+        "proficiencies": results,
+        "total_capabilities": len(results),
+    }
+
+
+async def _learn_suggest(payload: dict[str, Any]) -> dict[str, Any]:
+    """Suggest capabilities that need improvement."""
+    agent = payload.get("agent", "unknown")
+    threshold = payload.get("threshold", 0.6)
+
+    suggestions: list[dict[str, Any]] = []
+    for (a, cap), stats in _learning_store.items():
+        if a != agent or stats["attempts"] < 2:
+            continue
+        avg_score = stats["total_score"] / stats["attempts"]
+        success_rate = stats["successes"] / stats["attempts"]
+        if avg_score < threshold or success_rate < threshold:
+            suggestions.append({
+                "capability": cap,
+                "avg_score": round(avg_score, 3),
+                "success_rate": round(success_rate, 3),
+                "reason": "low_score" if avg_score < threshold else "low_success",
+                "attempts": stats["attempts"],
+            })
+
+    suggestions.sort(key=lambda s: s["avg_score"])
+    return {
+        "ok": True,
+        "agent": agent,
+        "suggestions": suggestions[:10],
+        "count": len(suggestions),
+    }
+
+
+async def _learn_reset(payload: dict[str, Any]) -> dict[str, Any]:
+    """Reset learning data for an agent or specific capability."""
+    agent = payload.get("agent", "unknown")
+    capability = payload.get("capability", None)
+
+    if capability:
+        key = (agent, capability)
+        if key in _learning_store:
+            del _learning_store[key]
+            removed = 1
+        else:
+            removed = 0
+    else:
+        keys = [k for k in _learning_store if k[0] == agent]
+        removed = len(keys)
+        for k in keys:
+            del _learning_store[k]
+
+    return {
+        "ok": True,
+        "agent": agent,
+        "capability": capability,
+        "removed": removed,
+    }
+
+
+def load_learning_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load the learning/feedback capability pack.
+
+    Provides agents with the ability to record task outcomes,
+    track proficiency across capabilities, get improvement
+    suggestions, and reset learning data.
+
+    Caps: learn-record, learn-proficiency, learn-suggest, learn-reset.
+    """
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="learn-record",
+        handler=_learn_record,
+        version="1.0.0",
+        description="Record a task outcome (success/failure, grade, score)",
+        inputs=["agent", "capability", "success", "grade", "score"],
+        outputs=["ok", "agent", "capability", "recorded", "success_rate", "avg_score"],
+        tags=["learning", "feedback", "outcome", "grading"],
+    ))
+
+    specs.append(builder.register(
+        name="learn-proficiency",
+        handler=_learn_proficiency,
+        version="1.0.0",
+        description="Get proficiency report for agent capabilities",
+        inputs=["agent", "capability"],
+        outputs=["ok", "agent", "proficiencies", "total_capabilities"],
+        tags=["learning", "proficiency", "skill", "assessment"],
+    ))
+
+    specs.append(builder.register(
+        name="learn-suggest",
+        handler=_learn_suggest,
+        version="1.0.0",
+        description="Suggest capabilities that need improvement",
+        inputs=["agent", "threshold"],
+        outputs=["ok", "agent", "suggestions", "count"],
+        tags=["learning", "suggestion", "improvement", "feedback"],
+    ))
+
+    specs.append(builder.register(
+        name="learn-reset",
+        handler=_learn_reset,
+        version="1.0.0",
+        description="Reset learning data for an agent or capability",
+        inputs=["agent", "capability"],
+        outputs=["ok", "agent", "capability", "removed"],
+        tags=["learning", "reset", "clear", "fresh-start"],
+    ))
+
+    return specs
+
+
 def load_adapter_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     """Load the adapter/translation capability pack.
 
@@ -4799,6 +5026,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_deliberation_pack(builder))
     specs.extend(load_orchestration_pack(builder))
     specs.extend(load_evaluation_pack(builder))
+    specs.extend(load_learning_pack(builder))
     specs.extend(load_adapter_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
