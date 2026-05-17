@@ -6113,6 +6113,334 @@ def load_fog_alert_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Notification Pack ──────────────────────────────────────────────────
+
+# In-memory notification state
+_notification_channels: dict[str, dict[str, Any]] = {}
+_notification_subs: dict[str, dict[str, Any]] = {}  # sub_id → subscription
+_notification_queue: list[dict[str, Any]] = []
+_notification_templates: dict[str, str] = {}
+_notification_rate_limits: dict[str, dict[str, Any]] = {}  # channel_id → {tokens, max, refill_rate, last_refill}
+_NOTIFICATION_QUEUE_MAX = 500
+
+
+async def _notif_channel_register(payload: dict[str, Any]) -> dict[str, Any]:
+    """Register a notification channel.
+
+    Payload:
+        channel_id: unique id (e.g. 'slack-ops', 'email-admin')
+        type:       webhook | email | in_app | telegram
+        config:     type-specific config (url, email, chat_id, etc.)
+        enabled:    default True
+    """
+    import time as _time
+    channel_id = payload.get("channel_id", "")
+    if not channel_id:
+        return {"error": "channel_id is required", "ok": False}
+    if channel_id in _notification_channels:
+        return {"error": f"Channel '{channel_id}' already exists", "ok": False}
+    valid_types = {"webhook", "email", "in_app", "telegram"}
+    ch_type = payload.get("type", "")
+    if ch_type not in valid_types:
+        return {"error": f"Invalid type '{ch_type}'. Use: {', '.join(sorted(valid_types))}", "ok": False}
+    channel: dict[str, Any] = {
+        "channel_id": channel_id,
+        "type": ch_type,
+        "config": payload.get("config", {}),
+        "enabled": payload.get("enabled", True),
+        "created_at": _time.time(),
+        "sent_count": 0,
+    }
+    _notification_channels[channel_id] = channel
+    return {"ok": True, "channel": channel}
+
+
+async def _notif_channel_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List all registered notification channels."""
+    channels = list(_notification_channels.values())
+    return {"ok": True, "channels": channels, "total": len(channels)}
+
+
+async def _notif_channel_remove(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove a notification channel."""
+    channel_id = payload.get("channel_id", "")
+    if channel_id not in _notification_channels:
+        return {"error": f"Channel '{channel_id}' not found", "ok": False}
+    del _notification_channels[channel_id]
+    # Remove subs targeting this channel
+    to_remove = [sid for sid, s in _notification_subs.items() if s["channel_id"] == channel_id]
+    for sid in to_remove:
+        del _notification_subs[sid]
+    return {"ok": True, "removed": channel_id, "subs_removed": len(to_remove)}
+
+
+async def _notif_subscribe(payload: dict[str, Any]) -> dict[str, Any]:
+    """Subscribe a channel to a topic/pattern.
+
+    Payload:
+        channel_id:  target channel
+        topic:       topic or '*' for all
+        min_severity: info | warning | critical (default: info)
+        sub_id:      optional custom id (auto-generated if omitted)
+    """
+    import uuid as _uuid
+    channel_id = payload.get("channel_id", "")
+    if channel_id not in _notification_channels:
+        return {"error": f"Channel '{channel_id}' not found", "ok": False}
+    topic = payload.get("topic", "*")
+    min_severity = payload.get("min_severity", "info")
+    sub_id = payload.get("sub_id") or f"sub-{_uuid.uuid4().hex[:8]}"
+    if sub_id in _notification_subs:
+        return {"error": f"Subscription '{sub_id}' already exists", "ok": False}
+    sub: dict[str, Any] = {
+        "sub_id": sub_id,
+        "channel_id": channel_id,
+        "topic": topic,
+        "min_severity": min_severity,
+        "created_at": __import__('time').time(),
+    }
+    _notification_subs[sub_id] = sub
+    return {"ok": True, "subscription": sub}
+
+
+async def _notif_unsubscribe(payload: dict[str, Any]) -> dict[str, Any]:
+    """Remove a subscription."""
+    sub_id = payload.get("sub_id", "")
+    if sub_id not in _notification_subs:
+        return {"error": f"Subscription '{sub_id}' not found", "ok": False}
+    del _notification_subs[sub_id]
+    return {"ok": True, "removed": sub_id}
+
+
+async def _notif_send(payload: dict[str, Any]) -> dict[str, Any]:
+    """Send a notification to matching subscribers.
+
+    Payload:
+        topic:     notification topic
+        severity:  info | warning | critical
+        title:     notification title
+        body:      notification body (or template_vars for template expansion)
+        template:  optional template name to use
+        metadata:  optional extra dict
+    """
+    import time as _time
+    topic = payload.get("topic", "")
+    severity = payload.get("severity", "info")
+    severity_order = {"info": 0, "warning": 1, "critical": 2}
+    sev_level = severity_order.get(severity, 0)
+
+    # Resolve body via template
+    body = payload.get("body", "")
+    template_name = payload.get("template")
+    if template_name and template_name in _notification_templates:
+        tmpl = _notification_templates[template_name]
+        tvars = payload.get("template_vars", {})
+        try:
+            body = tmpl.format(**tvars)
+        except (KeyError, IndexError):
+            body = tmpl  # fallback
+
+    title = payload.get("title", "")
+
+    # Find matching subscriptions
+    matched_channels: list[str] = []
+    for sub in _notification_subs.values():
+        if sub["topic"] != "*" and sub["topic"] != topic:
+            continue
+        sub_sev = severity_order.get(sub["min_severity"], 0)
+        if sev_level < sub_sev:
+            continue
+        matched_channels.append(sub["channel_id"])
+
+    # Dedupe
+    matched_channels = list(dict.fromkeys(matched_channels))
+
+    # Rate limit check per channel
+    now = _time.time()
+    delivered: list[dict[str, Any]] = []
+    for ch_id in matched_channels:
+        ch = _notification_channels.get(ch_id)
+        if not ch or not ch["enabled"]:
+            continue
+
+        # Token bucket rate limit: 60 per minute per channel
+        rl = _notification_rate_limits.setdefault(ch_id, {"tokens": 60, "max": 60, "refill_rate": 1.0, "last_refill": now})
+        elapsed = now - rl["last_refill"]
+        rl["tokens"] = min(rl["max"], rl["tokens"] + elapsed * rl["refill_rate"])
+        rl["last_refill"] = now
+        if rl["tokens"] < 1:
+            delivered.append({"channel_id": ch_id, "status": "rate_limited"})
+            continue
+        rl["tokens"] -= 1
+
+        notification: dict[str, Any] = {
+            "id": f"notif-{__import__('uuid').uuid4().hex[:8]}",
+            "channel_id": ch_id,
+            "channel_type": ch["type"],
+            "topic": topic,
+            "severity": severity,
+            "title": title,
+            "body": body,
+            "metadata": payload.get("metadata", {}),
+            "sent_at": now,
+        }
+        _notification_queue.append(notification)
+        if len(_notification_queue) > _NOTIFICATION_QUEUE_MAX:
+            _notification_queue.pop(0)
+        ch["sent_count"] += 1
+        delivered.append({"channel_id": ch_id, "status": "sent", "notification_id": notification["id"]})
+
+    return {
+        "ok": True,
+        "delivered": delivered,
+        "total_channels": len(matched_channels),
+        "topic": topic,
+        "severity": severity,
+    }
+
+
+async def _notif_history(payload: dict[str, Any]) -> dict[str, Any]:
+    """Query notification history.
+
+    Payload:
+        channel_id: optional filter
+        topic:      optional filter
+        severity:   optional filter
+        limit:      max entries (default 50)
+    """
+    limit = min(int(payload.get("limit", 50)), 200)
+    entries = _notification_queue
+    channel_id = payload.get("channel_id")
+    if channel_id:
+        entries = [e for e in entries if e["channel_id"] == channel_id]
+    topic = payload.get("topic")
+    if topic:
+        entries = [e for e in entries if e["topic"] == topic]
+    severity = payload.get("severity")
+    if severity:
+        entries = [e for e in entries if e["severity"] == severity]
+    return {"ok": True, "notifications": entries[-limit:], "total": len(entries)}
+
+
+async def _notif_template_set(payload: dict[str, Any]) -> dict[str, Any]:
+    """Register or update a notification template (Python str.format style).
+
+    Payload:
+        name:     template name
+        template: template string with {var} placeholders
+    """
+    name = payload.get("name", "")
+    template = payload.get("template", "")
+    if not name or not template:
+        return {"error": "name and template are required", "ok": False}
+    _notification_templates[name] = template
+    return {"ok": True, "name": name, "template": template}
+
+
+async def _notif_template_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List all registered templates."""
+    return {"ok": True, "templates": dict(_notification_templates), "total": len(_notification_templates)}
+
+
+def load_notification_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load multi-channel notification capabilities.
+
+    Capabilities:
+    - notif-channel-register: Register a notification channel (webhook/email/in_app/telegram)
+    - notif-channel-list:     List all channels
+    - notif-channel-remove:  Remove a channel
+    - notif-subscribe:       Subscribe a channel to a topic with min severity
+    - notif-unsubscribe:     Remove a subscription
+    - notif-send:            Send a notification to matching subscribers (rate-limited)
+    - notif-history:         Query notification history with filters
+    - notif-template-set:    Register a notification template
+    - notif-template-list:   List all templates
+    """
+    specs: list[CapSpec] = []
+    specs.append(builder.register(
+        name="notif-channel-register",
+        handler=_notif_channel_register,
+        version="1.0.0",
+        description="Register a notification channel (webhook/email/in_app/telegram)",
+        inputs=["channel_id", "type", "config"],
+        outputs=["ok", "channel"],
+        tags=["notification", "channel", "setup"],
+    ))
+    specs.append(builder.register(
+        name="notif-channel-list",
+        handler=_notif_channel_list,
+        version="1.0.0",
+        description="List all registered notification channels",
+        inputs=[],
+        outputs=["ok", "channels"],
+        tags=["notification", "channel"],
+    ))
+    specs.append(builder.register(
+        name="notif-channel-remove",
+        handler=_notif_channel_remove,
+        version="1.0.0",
+        description="Remove a notification channel and its subscriptions",
+        inputs=["channel_id"],
+        outputs=["ok", "removed"],
+        tags=["notification", "channel"],
+    ))
+    specs.append(builder.register(
+        name="notif-subscribe",
+        handler=_notif_subscribe,
+        version="1.0.0",
+        description="Subscribe a channel to a topic with minimum severity filter",
+        inputs=["channel_id", "topic"],
+        outputs=["ok", "subscription"],
+        tags=["notification", "subscription"],
+    ))
+    specs.append(builder.register(
+        name="notif-unsubscribe",
+        handler=_notif_unsubscribe,
+        version="1.0.0",
+        description="Remove a notification subscription",
+        inputs=["sub_id"],
+        outputs=["ok", "removed"],
+        tags=["notification", "subscription"],
+    ))
+    specs.append(builder.register(
+        name="notif-send",
+        handler=_notif_send,
+        version="1.0.0",
+        description="Send a notification to matching subscribers (rate-limited, template-aware)",
+        inputs=["topic", "severity", "title", "body"],
+        outputs=["ok", "delivered"],
+        tags=["notification", "send"],
+    ))
+    specs.append(builder.register(
+        name="notif-history",
+        handler=_notif_history,
+        version="1.0.0",
+        description="Query notification history with optional channel/topic/severity filters",
+        inputs=[],
+        outputs=["ok", "notifications"],
+        tags=["notification", "history"],
+    ))
+    specs.append(builder.register(
+        name="notif-template-set",
+        handler=_notif_template_set,
+        version="1.0.0",
+        description="Register or update a notification template with {var} placeholders",
+        inputs=["name", "template"],
+        outputs=["ok", "name"],
+        tags=["notification", "template"],
+    ))
+    specs.append(builder.register(
+        name="notif-template-list",
+        handler=_notif_template_list,
+        version="1.0.0",
+        description="List all registered notification templates",
+        inputs=[],
+        outputs=["ok", "templates"],
+        tags=["notification", "template"],
+    ))
+    return specs
+
+
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
     """Load all available capability packs."""
     specs = []
@@ -6141,6 +6469,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_audience_analytics_pack(builder))
     specs.extend(load_resilience_pack(builder))
     specs.extend(load_fog_alert_pack(builder))
+    specs.extend(load_notification_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
