@@ -198,12 +198,12 @@ class TestLoadAll:
     def test_load_all_with_agent(self, builder, agent):
         specs = load_all_packs(builder, agent)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 2 routing + 5 fog + 4 reasoning + 5 network + 5 memory = 43
-        assert len(specs) == 96  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation pack
+        assert len(specs) == 101  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter pack
 
     def test_load_all_without_agent(self, builder):
         specs = load_all_packs(builder)
         # 3 text + 3 math + 2 meta + 4 data + 3 monitor + 4 encoding + 3 planning + 4 reasoning + 5 network + 5 memory = 36
-        assert len(specs) == 84  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation pack
+        assert len(specs) == 89  # +5 tool-use +5 collaboration +5 subscription +7 trust +4 research +6 audit +6 deliberation +5 orchestration +5 evaluation +5 adapter pack
 
     def test_search_finds_packs(self, builder, agent):
         load_all_packs(builder, agent)
@@ -213,8 +213,8 @@ class TestLoadAll:
     def test_stats_after_loading(self, builder, agent):
         load_all_packs(builder, agent)
         stats = builder.stats()
-        assert stats["total_capabilities"] == 96
-        assert stats["active"] == 96
+        assert stats["total_capabilities"] == 101
+        assert stats["active"] == 101
 
 
 # ─── Fog Awareness Pack ──────────────────────────────────────────────────

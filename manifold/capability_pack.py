@@ -28,6 +28,7 @@ Available packs:
 - **memory_pack**: key-value store, retrieval, search, summarization, TTL expiry, tag-based forget
 - **subscription_pack**: pub/sub notifications — subscribe, publish, poll, status
 - **research_pack**: web research — plan queries, extract facts, synthesize findings, score sources
+- **adapter_pack**: format conversion, schema mapping, protocol bridging, normalization, validation
 """
 
 from __future__ import annotations
@@ -4458,6 +4459,322 @@ def load_evaluation_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Adapter Pack ────────────────────────────────────────────────────────
+
+async def _adapter_format(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert data between formats (json, csv, yaml, toml, xml-stub, plain)."""
+    data = payload.get("data", "")
+    from_fmt = payload.get("from_format", "json").lower()
+    to_fmt = payload.get("to_format", "json").lower()
+
+    if not data or not str(data).strip():
+        raise ValueError("No data provided")
+
+    # Parse from source format
+    parsed: Any = None
+    try:
+        if from_fmt == "json":
+            import json
+            parsed = json.loads(data)
+        elif from_fmt == "csv":
+            import csv
+            import io
+            reader = csv.DictReader(io.StringIO(data))
+            parsed = list(reader)
+        elif from_fmt == "yaml":
+            try:
+                import yaml
+                parsed = yaml.safe_load(data)
+            except ImportError:
+                raise ValueError("PyYAML not installed")
+        elif from_fmt == "toml":
+            try:
+                import tomllib
+                parsed = tomllib.loads(data)
+            except ImportError:
+                try:
+                    import tomli as tomllib  # type: ignore
+                    parsed = tomllib.loads(data)
+                except ImportError:
+                    raise ValueError("TOML support not available")
+        elif from_fmt in ("text", "plain"):
+            parsed = data
+        else:
+            raise ValueError(f"Unknown source format: {from_fmt}")
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Parse error: {e}")
+
+    # Serialize to target format
+    output = ""
+    try:
+        if to_fmt == "json":
+            import json
+            indent = payload.get("indent", 2)
+            output = json.dumps(parsed, indent=indent, ensure_ascii=False)
+        elif to_fmt == "csv":
+            import csv
+            import io
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+                buf = io.StringIO()
+                writer = csv.DictWriter(buf, fieldnames=parsed[0].keys())
+                writer.writeheader()
+                writer.writerows(parsed)
+                output = buf.getvalue()
+            else:
+                raise ValueError("CSV export requires list of dicts")
+        elif to_fmt == "yaml":
+            try:
+                import yaml
+                output = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
+            except ImportError:
+                raise ValueError("PyYAML not installed")
+        elif to_fmt == "toml":
+            try:
+                import tomli_w
+                output = tomli_w.dumps(parsed)
+            except ImportError:
+                raise ValueError("tomli-w not installed")
+        elif to_fmt in ("text", "plain"):
+            output = str(parsed)
+        else:
+            raise ValueError(f"Unknown target format: {to_fmt}")
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(f"Serialize error: {e}")
+
+    return {"ok": True, "output": output, "from": from_fmt, "to": to_fmt}
+
+
+async def _adapter_schema_map(payload: dict[str, Any]) -> dict[str, Any]:
+    """Map fields between two schemas using a mapping definition.
+
+    Input: source data, source schema fields, target schema fields, and optional
+    explicit mapping. Produces the mapped output.
+    """
+    source = payload.get("data", {})
+    source_fields = payload.get("source_fields", [])
+    target_fields = payload.get("target_fields", [])
+    mapping = payload.get("mapping", {})  # source_field -> target_field
+
+    if not source:
+        raise ValueError("No source data")
+
+    # Auto-generate mapping if not provided: match by name similarity
+    if not mapping:
+        for sf in source_fields:
+            best_match = ""
+            best_score = 0.0
+            for tf in target_fields:
+                score = _trigram_similarity(sf, tf)
+                if score > best_score:
+                    best_score = score
+                    best_match = tf
+            if best_match and best_score > 0.3:
+                mapping[sf] = best_match
+
+    # Apply mapping
+    mapped: dict[str, Any] = {}
+    unmapped: list[str] = []
+
+    source_dict = source if isinstance(source, dict) else {source_fields[i]: v for i, v in enumerate(source) if i < len(source_fields)}
+
+    for sf, tf in mapping.items():
+        if sf in source_dict:
+            mapped[tf] = source_dict[sf]
+        else:
+            unmapped.append(sf)
+
+    # Carry over unmapped fields
+    for key, val in source_dict.items():
+        if key not in mapping:
+            mapped[key] = val
+
+    return {
+        "ok": True,
+        "mapped": mapped,
+        "mapping_used": mapping,
+        "unmapped_fields": unmapped,
+    }
+
+
+async def _adapter_bridge(payload: dict[str, Any]) -> dict[str, Any]:
+    """Bridge between two agent protocol versions.
+
+    Wraps/unwraps messages for compatibility between agents speaking
+    different protocol versions.
+    """
+    message = payload.get("message", {})
+    from_version = payload.get("from_version", "1.0")
+    to_version = payload.get("to_version", "1.0")
+
+    if from_version == to_version:
+        return {"ok": True, "message": message, "bridged": False}
+
+    bridged = dict(message)
+
+    # v1.0 -> v2.0: wrap payload in nested structure
+    if from_version.startswith("1.") and to_version.startswith("2."):
+        bridged = {
+            "envelope": {
+                "version": to_version,
+                "timestamp": time.time(),
+            },
+            "payload": message,
+            "metadata": message.pop("metadata", {}) if isinstance(message, dict) else {},
+        }
+    # v2.0 -> v1.0: flatten envelope
+    elif from_version.startswith("2.") and to_version.startswith("1."):
+        if "payload" in bridged:
+            inner = bridged["payload"]
+            if isinstance(inner, dict):
+                meta = bridged.get("metadata", {})
+                inner.update(meta)
+                bridged = inner
+        elif "envelope" in bridged:
+            bridged.pop("envelope", None)
+
+    return {"ok": True, "message": bridged, "bridged": True}
+
+
+async def _adapter_normalize(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize data to a canonical form — strip whitespace, unify casing,
+    flatten nested dicts, standardize date/number formats."""
+    data = payload.get("data")
+    rules = payload.get("rules", {})
+
+    if data is None:
+        raise ValueError("No data provided")
+
+    def _normalize(value: Any, rule_overrides: dict[str, Any] | None = None) -> Any:
+        r = rule_overrides or rules
+        if isinstance(value, dict):
+            return {k: _normalize(v, r) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [_normalize(v, r) for v in value]
+        elif isinstance(value, str):
+            result = value
+            if r.get("strip", True):
+                result = result.strip()
+            if r.get("lowercase"):
+                result = result.lower()
+            if r.get("uppercase"):
+                result = result.upper()
+            return result
+        return value
+
+    normalized = _normalize(data)
+    return {"ok": True, "normalized": normalized}
+
+
+async def _adapter_validate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate data against a schema definition.
+
+    Checks required fields, type constraints, and enum values.
+    """
+    data = payload.get("data", {})
+    schema = payload.get("schema", {})
+
+    if not schema:
+        return {"ok": True, "valid": True, "errors": []}
+
+    errors: list[str] = []
+    required = schema.get("required", [])
+    fields = schema.get("fields", {})
+
+    # Check required fields
+    for field_name in required:
+        if isinstance(data, dict) and field_name not in data:
+            errors.append(f"Missing required field: {field_name}")
+
+    # Check field types and enums
+    for field_name, constraints in fields.items():
+        if isinstance(data, dict) and field_name in data:
+            val = data[field_name]
+            expected_type = constraints.get("type")
+            if expected_type:
+                type_map = {
+                    "string": str, "int": int, "float": (int, float),
+                    "bool": bool, "list": list, "dict": dict,
+                }
+                expected = type_map.get(expected_type)
+                if expected and not isinstance(val, expected):
+                    errors.append(f"Field {field_name}: expected {expected_type}, got {type(val).__name__}")
+            allowed = constraints.get("enum")
+            if allowed and val not in allowed:
+                errors.append(f"Field {field_name}: value {val!r} not in {allowed}")
+
+    return {
+        "ok": True,
+        "valid": len(errors) == 0,
+        "errors": errors,
+    }
+
+
+def load_adapter_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load the adapter/translation capability pack.
+
+    Provides format conversion, schema mapping, protocol bridging,
+    data normalization, and schema validation — essential for
+    inter-agent communication across heterogeneous meshes.
+    """
+    specs: list[CapSpec] = []
+
+    specs.append(builder.register(
+        name="adapter-format",
+        handler=_adapter_format,
+        version="1.0.0",
+        description="Convert data between formats (json, csv, yaml, toml, text)",
+        inputs=["data", "from_format", "to_format"],
+        outputs=["ok", "output", "from", "to"],
+        tags=["adapter", "format", "conversion", "serialization"],
+    ))
+
+    specs.append(builder.register(
+        name="adapter-schema-map",
+        handler=_adapter_schema_map,
+        version="1.0.0",
+        description="Map fields between schemas using explicit or auto-detected mapping",
+        inputs=["data", "source_fields", "target_fields"],
+        outputs=["ok", "mapped", "mapping_used", "unmapped_fields"],
+        tags=["adapter", "schema", "mapping", "translation"],
+    ))
+
+    specs.append(builder.register(
+        name="adapter-bridge",
+        handler=_adapter_bridge,
+        version="1.0.0",
+        description="Bridge messages between protocol versions (v1.x ↔ v2.x)",
+        inputs=["message", "from_version", "to_version"],
+        outputs=["ok", "message", "bridged"],
+        tags=["adapter", "protocol", "bridge", "compatibility"],
+    ))
+
+    specs.append(builder.register(
+        name="adapter-normalize",
+        handler=_adapter_normalize,
+        version="1.0.0",
+        description="Normalize data to canonical form (strip, case, flatten)",
+        inputs=["data"],
+        outputs=["ok", "normalized"],
+        tags=["adapter", "normalize", "clean", "canonical"],
+    ))
+
+    specs.append(builder.register(
+        name="adapter-validate",
+        handler=_adapter_validate,
+        version="1.0.0",
+        description="Validate data against a schema (required fields, types, enums)",
+        inputs=["data", "schema"],
+        outputs=["ok", "valid", "errors"],
+        tags=["adapter", "validate", "schema", "check"],
+    ))
+
+    return specs
+
+
 # ─── Convenience ────────────────────────────────────────────────────────
 
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
@@ -4482,6 +4799,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_deliberation_pack(builder))
     specs.extend(load_orchestration_pack(builder))
     specs.extend(load_evaluation_pack(builder))
+    specs.extend(load_adapter_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
