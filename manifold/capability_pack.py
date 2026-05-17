@@ -6441,6 +6441,302 @@ def load_notification_pack(builder: CapabilityBuilder) -> list[CapSpec]:
     return specs
 
 
+# ─── Delegation Pack ─────────────────────────────────────────────────────
+
+# In-memory delegation tracking
+_delegation_store: dict[str, dict[str, Any]] = {}
+_delegation_counter: int = 0
+
+
+def _new_delegation_id() -> str:
+    global _delegation_counter
+    _delegation_counter += 1
+    return f"deleg-{_delegation_counter:04d}"
+
+
+async def _delegation_create(payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a delegation: assign a task to a target agent with optional deadline."""
+    task = payload.get("task", "").strip()
+    target = payload.get("target_agent", "").strip()
+    if not task or not target:
+        return {"ok": False, "error": "task and target_agent are required"}
+
+    global _delegation_store
+    deadline = payload.get("deadline")  # optional epoch seconds
+    parent_id = payload.get("parent_delegation_id")
+    priority = payload.get("priority", "normal")
+    metadata = payload.get("metadata", {})
+
+    did = _new_delegation_id()
+    record = {
+        "id": did,
+        "task": task,
+        "target_agent": target,
+        "status": "pending",  # pending → accepted → in_progress → done | failed | timed_out | rejected
+        "priority": priority,
+        "deadline": deadline,
+        "parent_delegation_id": parent_id,
+        "result": None,
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "metadata": metadata,
+        "chain_depth": 0,
+    }
+
+    # Track chain depth
+    if parent_id and parent_id in _delegation_store:
+        record["chain_depth"] = _delegation_store[parent_id]["chain_depth"] + 1
+
+    _delegation_store[did] = record
+    return {
+        "ok": True,
+        "delegation_id": did,
+        "target_agent": target,
+        "status": "pending",
+        "chain_depth": record["chain_depth"],
+    }
+
+
+async def _delegation_accept(payload: dict[str, Any]) -> dict[str, Any]:
+    """Accept a pending delegation."""
+    did = payload.get("delegation_id", "")
+    record = _delegation_store.get(did)
+    if not record:
+        return {"ok": False, "error": f"delegation {did} not found"}
+    if record["status"] != "pending":
+        return {"ok": False, "error": f"delegation is {record['status']}, not pending"}
+    record["status"] = "accepted"
+    record["updated_at"] = time.time()
+    return {"ok": True, "delegation_id": did, "status": "accepted"}
+
+
+async def _delegation_reject(payload: dict[str, Any]) -> dict[str, Any]:
+    """Reject a pending delegation with an optional reason."""
+    did = payload.get("delegation_id", "")
+    reason = payload.get("reason", "")
+    record = _delegation_store.get(did)
+    if not record:
+        return {"ok": False, "error": f"delegation {did} not found"}
+    if record["status"] != "pending":
+        return {"ok": False, "error": f"delegation is {record['status']}, not pending"}
+    record["status"] = "rejected"
+    record["result"] = {"reason": reason}
+    record["updated_at"] = time.time()
+    return {"ok": True, "delegation_id": did, "status": "rejected"}
+
+
+async def _delegation_complete(payload: dict[str, Any]) -> dict[str, Any]:
+    """Mark a delegation as done with a result."""
+    did = payload.get("delegation_id", "")
+    result = payload.get("result", {})
+    record = _delegation_store.get(did)
+    if not record:
+        return {"ok": False, "error": f"delegation {did} not found"}
+    if record["status"] not in ("accepted", "in_progress"):
+        return {"ok": False, "error": f"delegation is {record['status']}, cannot complete"}
+    record["status"] = "done"
+    record["result"] = result
+    record["updated_at"] = time.time()
+    return {"ok": True, "delegation_id": did, "status": "done"}
+
+
+async def _delegation_fail(payload: dict[str, Any]) -> dict[str, Any]:
+    """Mark a delegation as failed with error details."""
+    did = payload.get("delegation_id", "")
+    error = payload.get("error", "unknown error")
+    record = _delegation_store.get(did)
+    if not record:
+        return {"ok": False, "error": f"delegation {did} not found"}
+    if record["status"] in ("done", "rejected", "timed_out"):
+        return {"ok": False, "error": f"delegation is already {record['status']}"}
+    record["status"] = "failed"
+    record["result"] = {"error": error}
+    record["updated_at"] = time.time()
+    return {"ok": True, "delegation_id": did, "status": "failed"}
+
+
+async def _delegation_timeout_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Check all delegations for timeouts, mark expired ones."""
+    global _delegation_store
+    now = time.time()
+    timed_out = []
+    for did, rec in _delegation_store.items():
+        if rec["status"] in ("pending", "accepted", "in_progress") and rec.get("deadline"):
+            if now > rec["deadline"]:
+                rec["status"] = "timed_out"
+                rec["result"] = {"error": "deadline exceeded"}
+                rec["updated_at"] = now
+                timed_out.append(did)
+    return {"ok": True, "timed_out": timed_out, "count": len(timed_out)}
+
+
+async def _delegation_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get the full status of a delegation, including its chain."""
+    did = payload.get("delegation_id", "")
+    record = _delegation_store.get(did)
+    if not record:
+        return {"ok": False, "error": f"delegation {did} not found"}
+    # Build chain
+    chain = []
+    parent = record.get("parent_delegation_id")
+    while parent and parent in _delegation_store:
+        pr = _delegation_store[parent]
+        chain.append({"id": pr["id"], "task": pr["task"][:60], "target": pr["target_agent"], "status": pr["status"]})
+        parent = pr.get("parent_delegation_id")
+    # Find children
+    children = [
+        {"id": r["id"], "task": r["task"][:60], "target": r["target_agent"], "status": r["status"]}
+        for r in _delegation_store.values()
+        if r.get("parent_delegation_id") == did
+    ]
+    return {
+        "ok": True,
+        "delegation_id": did,
+        "status": record["status"],
+        "target_agent": record["target_agent"],
+        "task": record["task"],
+        "result": record["result"],
+        "chain_depth": record["chain_depth"],
+        "parent_chain": chain,
+        "children": children,
+        "created_at": record["created_at"],
+        "updated_at": record["updated_at"],
+    }
+
+
+async def _delegation_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List delegations with optional filters."""
+    status_filter = payload.get("status")
+    target_filter = payload.get("target_agent")
+    results = []
+    for did, rec in _delegation_store.items():
+        if status_filter and rec["status"] != status_filter:
+            continue
+        if target_filter and rec["target_agent"] != target_filter:
+            continue
+        results.append({
+            "id": did,
+            "task": rec["task"][:80],
+            "target_agent": rec["target_agent"],
+            "status": rec["status"],
+            "priority": rec["priority"],
+            "chain_depth": rec["chain_depth"],
+        })
+    return {"ok": True, "delegations": results, "total": len(results)}
+
+
+async def _delegation_stats(payload: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate statistics across all delegations."""
+    global _delegation_store
+    counts: dict[str, int] = {}
+    by_target: dict[str, int] = {}
+    total_depth = 0
+    for rec in _delegation_store.values():
+        s = rec["status"]
+        counts[s] = counts.get(s, 0) + 1
+        t = rec["target_agent"]
+        by_target[t] = by_target.get(t, 0) + 1
+        total_depth += rec["chain_depth"]
+    total = len(_delegation_store)
+    avg_depth = total_depth / total if total else 0.0
+    success_rate = counts.get("done", 0) / total if total else 0.0
+    return {
+        "ok": True,
+        "total": total,
+        "by_status": counts,
+        "by_target": by_target,
+        "success_rate": round(success_rate, 3),
+        "avg_chain_depth": round(avg_depth, 2),
+    }
+
+
+def load_delegation_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load delegation capabilities — assign tasks to agents, track chains, collect results."""
+    specs = []
+    specs.append(builder.register(
+        name="delegation-create",
+        handler=_delegation_create,
+        version="1.0.0",
+        description="Create a task delegation to a target agent with optional deadline",
+        inputs=["task", "target_agent"],
+        outputs=["ok", "delegation_id", "status"],
+        tags=["delegation", "task", "routing"],
+    ))
+    specs.append(builder.register(
+        name="delegation-accept",
+        handler=_delegation_accept,
+        version="1.0.0",
+        description="Accept a pending delegation",
+        inputs=["delegation_id"],
+        outputs=["ok", "delegation_id", "status"],
+        tags=["delegation", "accept"],
+    ))
+    specs.append(builder.register(
+        name="delegation-reject",
+        handler=_delegation_reject,
+        version="1.0.0",
+        description="Reject a pending delegation with optional reason",
+        inputs=["delegation_id"],
+        outputs=["ok", "delegation_id", "status"],
+        tags=["delegation", "reject"],
+    ))
+    specs.append(builder.register(
+        name="delegation-complete",
+        handler=_delegation_complete,
+        version="1.0.0",
+        description="Mark a delegation as done with a result payload",
+        inputs=["delegation_id", "result"],
+        outputs=["ok", "delegation_id", "status"],
+        tags=["delegation", "complete"],
+    ))
+    specs.append(builder.register(
+        name="delegation-fail",
+        handler=_delegation_fail,
+        version="1.0.0",
+        description="Mark a delegation as failed with error details",
+        inputs=["delegation_id", "error"],
+        outputs=["ok", "delegation_id", "status"],
+        tags=["delegation", "fail"],
+    ))
+    specs.append(builder.register(
+        name="delegation-timeout-check",
+        handler=_delegation_timeout_check,
+        version="1.0.0",
+        description="Check all active delegations for deadline expiry",
+        inputs=[],
+        outputs=["ok", "timed_out", "count"],
+        tags=["delegation", "timeout"],
+    ))
+    specs.append(builder.register(
+        name="delegation-status",
+        handler=_delegation_status,
+        version="1.0.0",
+        description="Get delegation status including parent chain and child delegations",
+        inputs=["delegation_id"],
+        outputs=["ok", "status", "parent_chain", "children"],
+        tags=["delegation", "status"],
+    ))
+    specs.append(builder.register(
+        name="delegation-list",
+        handler=_delegation_list,
+        version="1.0.0",
+        description="List delegations with optional status/target filters",
+        inputs=[],
+        outputs=["ok", "delegations", "total"],
+        tags=["delegation", "list"],
+    ))
+    specs.append(builder.register(
+        name="delegation-stats",
+        handler=_delegation_stats,
+        version="1.0.0",
+        description="Aggregate statistics: success rate, chain depth, distribution by target",
+        inputs=[],
+        outputs=["ok", "total", "by_status", "success_rate"],
+        tags=["delegation", "stats", "analytics"],
+    ))
+    return specs
+
+
 def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list[CapSpec]:
     """Load all available capability packs."""
     specs = []
@@ -6471,6 +6767,7 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_fog_alert_pack(builder))
     specs.extend(load_notification_pack(builder))
     specs.extend(load_goal_decomposition_pack(builder))
+    specs.extend(load_delegation_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
