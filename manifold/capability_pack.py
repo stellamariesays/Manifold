@@ -6470,8 +6470,269 @@ def load_all_packs(builder: CapabilityBuilder, agent: Any | None = None) -> list
     specs.extend(load_resilience_pack(builder))
     specs.extend(load_fog_alert_pack(builder))
     specs.extend(load_notification_pack(builder))
+    specs.extend(load_goal_decomposition_pack(builder))
     if agent is not None:
         specs.extend(load_routing_pack(builder, agent))
         specs.extend(load_fog_pack(builder, agent))
         specs.extend(load_localization_pack(builder, agent))
+    return specs
+
+
+# ─── Goal Decomposition Pack ────────────────────────────────────────────
+
+# In-memory goal store for the pack
+_goal_store: dict[str, dict[str, Any]] = {}
+_goal_counter: int = 0
+
+
+def _new_goal_id() -> str:
+    global _goal_counter
+    _goal_counter += 1
+    return f"goal-{_goal_counter:04d}"
+
+
+async def _goal_decompose(payload: dict[str, Any]) -> dict[str, Any]:
+    """Decompose a goal into subtasks with optional dependency chains.
+
+    Uses simple heuristic decomposition: splits on sentence boundaries,
+    assigns sequential dependencies, estimates priority from keywords.
+    """
+    global _goal_store
+    goal_text = payload.get("goal", "").strip()
+    max_subtasks = payload.get("max_subtasks", 8)
+    parent_id = payload.get("parent_id")
+
+    if not goal_text:
+        return {"ok": False, "error": "goal is required"}
+
+    # Split into subtask-like chunks: by numbered items, then sentences
+    import re as _re
+    # Check for numbered/bulleted list
+    items = _re.split(r'\n\s*(?:\d+[.)]\s*|[-*]\s*)', goal_text)
+    items = [i.strip() for i in items if i.strip()]
+
+    if len(items) <= 1:
+        # Fall back to sentence splitting
+        items = _re.split(r'[.!?]+\s+', goal_text)
+        items = [i.strip() for i in items if i.strip()]
+
+    if len(items) > max_subtasks:
+        items = items[:max_subtasks]
+
+    if not items:
+        items = [goal_text]
+
+    gid = _new_goal_id()
+    # Priority heuristics
+    priority_keywords = {"critical", "urgent", "important", "first", "asap", "must", "key", "essential"}
+    subtasks = []
+    for idx, item in enumerate(items):
+        prio = "normal"
+        low = item.lower()
+        if any(kw in low for kw in priority_keywords):
+            prio = "high"
+        deps = [f"sub-{gid}-{idx - 1}"] if idx > 0 else []
+        sub_id = f"sub-{gid}-{idx}"
+        subtasks.append({
+            "id": sub_id,
+            "description": item,
+            "status": "pending",
+            "priority": prio,
+            "depends_on": deps,
+        })
+
+    goal_record = {
+        "id": gid,
+        "goal": goal_text,
+        "parent_id": parent_id,
+        "subtasks": subtasks,
+        "status": "planned",
+        "created_at": time.time(),
+    }
+    _goal_store[gid] = goal_record
+    return {"ok": True, "goal_id": gid, "subtasks": subtasks, "total": len(subtasks)}
+
+
+async def _goal_status(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get the status of a goal and its subtasks."""
+    gid = payload.get("goal_id", "")
+    goal = _goal_store.get(gid)
+    if not goal:
+        return {"ok": False, "error": f"goal {gid} not found"}
+    done = sum(1 for s in goal["subtasks"] if s["status"] == "done")
+    total = len(goal["subtasks"])
+    goal["status"] = "done" if done == total else ("in_progress" if done > 0 else "planned")
+    return {
+        "ok": True,
+        "goal_id": gid,
+        "goal": goal["goal"],
+        "status": goal["status"],
+        "progress": f"{done}/{total}",
+        "subtasks": goal["subtasks"],
+    }
+
+
+async def _goal_update_subtask(payload: dict[str, Any]) -> dict[str, Any]:
+    """Update a subtask's status. Checks dependency ordering."""
+    sub_id = payload.get("subtask_id", "")
+    new_status = payload.get("status", "done")
+    goal_id = payload.get("goal_id", "")
+
+    goal = _goal_store.get(goal_id)
+    if not goal:
+        return {"ok": False, "error": f"goal {goal_id} not found"}
+
+    target = None
+    for s in goal["subtasks"]:
+        if s["id"] == sub_id:
+            target = s
+            break
+    if not target:
+        return {"ok": False, "error": f"subtask {sub_id} not found in goal {goal_id}"}
+
+    # Check dependencies are done
+    if new_status == "done" and target["depends_on"]:
+        for dep_id in target["depends_on"]:
+            dep = next((s for s in goal["subtasks"] if s["id"] == dep_id), None)
+            if dep and dep["status"] != "done":
+                return {"ok": False, "error": f"dependency {dep_id} not done", "blocked_by": dep_id}
+
+    target["status"] = new_status
+    return {"ok": True, "subtask_id": sub_id, "status": new_status}
+
+
+async def _goal_next(payload: dict[str, Any]) -> dict[str, Any]:
+    """Get the next actionable subtask (dependencies met, not started)."""
+    goal_id = payload.get("goal_id", "")
+    goal = _goal_store.get(goal_id)
+    if not goal:
+        return {"ok": False, "error": f"goal {goal_id} not found"}
+
+    candidates = []
+    for s in goal["subtasks"]:
+        if s["status"] != "pending":
+            continue
+        deps_met = all(
+            next((d for d in goal["subtasks"] if d["id"] == dep), {}).get("status") == "done"
+            for dep in s["depends_on"]
+        )
+        if deps_met:
+            candidates.append(s)
+
+    if not candidates:
+        # Check if all done
+        all_done = all(s["status"] == "done" for s in goal["subtasks"])
+        if all_done:
+            return {"ok": True, "completed": True, "message": "all subtasks done"}
+        return {"ok": True, "blocked": True, "message": "no actionable subtasks — blocked"}
+
+    # Prefer high priority
+    candidates.sort(key=lambda s: 0 if s["priority"] == "high" else 1)
+    return {"ok": True, "subtask": candidates[0]}
+
+
+async def _goal_list(payload: dict[str, Any]) -> dict[str, Any]:
+    """List all goals, optionally filtered by status."""
+    status_filter = payload.get("status")
+    results = []
+    for gid, g in _goal_store.items():
+        if status_filter and g["status"] != status_filter:
+            continue
+        done = sum(1 for s in g["subtasks"] if s["status"] == "done")
+        results.append({
+            "id": gid,
+            "goal": g["goal"][:80],
+            "status": g["status"],
+            "progress": f"{done}/{len(g['subtasks'])}",
+        })
+    return {"ok": True, "goals": results, "total": len(results)}
+
+
+async def _goal_merge(payload: dict[str, Any]) -> dict[str, Any]:
+    """Merge two goals, combining their subtasks with cross-dependencies."""
+    g1_id = payload.get("goal_id_1", "")
+    g2_id = payload.get("goal_id_2", "")
+    g1 = _goal_store.get(g1_id)
+    g2 = _goal_store.get(g2_id)
+    if not g1 or not g2:
+        return {"ok": False, "error": "both goal_id_1 and goal_id_2 must exist"}
+
+    merged_id = _new_goal_id()
+    merged_subtasks = []
+    for s in g1["subtasks"]:
+        merged_subtasks.append({**s, "id": f"sub-{merged_id}-{len(merged_subtasks)}", "depends_on": []})
+    bridge_idx = len(merged_subtasks)
+    for s in g2["subtasks"]:
+        # Depend on last subtask of g1 as bridge
+        deps = [f"sub-{merged_id}-{bridge_idx - 1}"] if bridge_idx > 0 else []
+        merged_subtasks.append({**s, "id": f"sub-{merged_id}-{len(merged_subtasks)}", "depends_on": deps})
+
+    _goal_store[merged_id] = {
+        "id": merged_id,
+        "goal": f"[merged] {g1['goal'][:40]} + {g2['goal'][:40]}",
+        "parent_id": None,
+        "subtasks": merged_subtasks,
+        "status": "planned",
+        "created_at": time.time(),
+    }
+    return {"ok": True, "merged_goal_id": merged_id, "total_subtasks": len(merged_subtasks)}
+
+
+def load_goal_decomposition_pack(builder: CapabilityBuilder) -> list[CapSpec]:
+    """Load goal decomposition capabilities — break goals into subtasks, track progress, manage dependencies."""
+    specs = []
+    specs.append(builder.register(
+        name="goal-decompose",
+        handler=_goal_decompose,
+        version="1.0.0",
+        description="Decompose a goal into ordered subtasks with dependency tracking",
+        inputs=["goal"],
+        outputs=["ok", "goal_id", "subtasks", "total"],
+        tags=["goal", "decomposition", "planning"],
+    ))
+    specs.append(builder.register(
+        name="goal-status",
+        handler=_goal_status,
+        version="1.0.0",
+        description="Get goal status and subtask progress",
+        inputs=["goal_id"],
+        outputs=["ok", "goal_id", "status", "progress", "subtasks"],
+        tags=["goal", "status"],
+    ))
+    specs.append(builder.register(
+        name="goal-subtask-update",
+        handler=_goal_update_subtask,
+        version="1.0.0",
+        description="Update a subtask status; enforces dependency ordering",
+        inputs=["goal_id", "subtask_id", "status"],
+        outputs=["ok", "subtask_id", "status"],
+        tags=["goal", "subtask", "update"],
+    ))
+    specs.append(builder.register(
+        name="goal-next",
+        handler=_goal_next,
+        version="1.0.0",
+        description="Get the next actionable subtask (dependencies met, highest priority first)",
+        inputs=["goal_id"],
+        outputs=["ok", "subtask", "completed", "blocked"],
+        tags=["goal", "next", "scheduling"],
+    ))
+    specs.append(builder.register(
+        name="goal-list",
+        handler=_goal_list,
+        version="1.0.0",
+        description="List all goals with optional status filter",
+        inputs=[],
+        outputs=["ok", "goals", "total"],
+        tags=["goal", "list"],
+    ))
+    specs.append(builder.register(
+        name="goal-merge",
+        handler=_goal_merge,
+        version="1.0.0",
+        description="Merge two goals, combining subtasks with cross-dependencies",
+        inputs=["goal_id_1", "goal_id_2"],
+        outputs=["ok", "merged_goal_id", "total_subtasks"],
+        tags=["goal", "merge", "composition"],
+    ))
     return specs
