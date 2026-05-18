@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexal — Invite Token</title>
-  <meta name="description" content="Redeem your invite token for the Manifold Federation. Get a managed hub with priority routing, dashboard, and dedicated support.">
-  <meta property="og:title" content="Nexal — Join the Mesh">
-  <meta property="og:description" content="Redeem your invite token and get a managed hub on the Manifold Federation mesh.">
+  <title>Nexal — Redeem Invite Token</title>
+  <meta name="description" content="Redeem your invite token to join the Manifold Federation.">
+  <meta property="og:title" content="Nexal — Redeem Invite Token">
+  <meta property="og:description" content="Get your managed hub and join the federation with an invite token.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nexal.network/nexal/invite.html">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,14 +16,11 @@
     :root{
       --cyan:#00e5ff;--violet:#8b5cf6;--magenta:#ec4899;--green:#22d3ee;--neon:#a78bfa;
       --bg:#030014;--surface:rgba(15,10,40,0.7);--border:rgba(139,92,246,0.2);
-      --glow-cyan:rgba(0,229,255,0.15);--glow-violet:rgba(139,92,246,0.15);
-      --text:#c4b5fd;--text-bright:#f0e7ff;
+      --glow-violet:rgba(139,92,246,0.15);--text:#c4b5fd;--text-bright:#f0e7ff;
       --input-bg:rgba(139,92,246,0.1);--input-border:rgba(139,92,246,0.3);--input-placeholder:rgba(196,181,253,0.5);
     }
     html{scroll-behavior:smooth}
     html,body{width:100%;min-height:100vh;background:var(--bg);font-family:'Space Grotesk',sans-serif;color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
-
-    /* BG */
     .bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
     .bg-orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.4;animation:orbFloat 20s ease-in-out infinite}
     .bg-orb:nth-child(1){width:600px;height:600px;background:radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%);top:-10%;left:-10%;animation-duration:25s}
@@ -31,70 +28,55 @@
     .bg-orb:nth-child(3){width:400px;height:400px;background:radial-gradient(circle,rgba(236,72,153,0.15),transparent 70%);bottom:-5%;left:30%;animation-duration:22s;animation-delay:-10s}
     @keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-40px) scale(1.05)}66%{transform:translate(-20px,30px) scale(0.95)}}
     .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(139,92,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,246,0.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse at center,black 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse at center,black 30%,transparent 80%)}
-
-    .container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:0 24px}
-
-    /* Nav */
-    nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
+    .container{position:relative;z-index:1;max-width:640px;margin:0 auto;padding:0 24px}
+    nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;flex-wrap:wrap;gap:12px}
     .logo{font-size:1.4rem;font-weight:700;letter-spacing:3px;background:linear-gradient(135deg,var(--cyan),var(--violet));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-decoration:none}
     .nav-links{display:flex;gap:8px;flex-wrap:wrap}
     .nav-links a{color:var(--text);text-decoration:none;font-size:0.9rem;font-weight:500;padding:8px 16px;border-radius:8px;transition:all 0.2s}
     .nav-links a:hover{background:var(--glow-violet);color:var(--text-bright)}
 
-    /* Two-column layout */
-    .invite-layout{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;padding:40px 0 60px}
-    @media(max-width:768px){.invite-layout{grid-template-columns:1fr}}
+    /* Invite section */
+    .invite-hero{text-align:center;padding:80px 0 32px}
+    .invite-hero h1{font-size:clamp(2rem,5vw,2.8rem);font-weight:700;color:var(--text-bright);margin-bottom:16px}
+    .invite-hero h1 .gradient{background:linear-gradient(135deg,var(--cyan),var(--violet),var(--magenta));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .invite-hero p{font-size:1.1rem;color:rgba(196,181,253,0.65);max-width:500px;margin:0 auto;line-height:1.6}
 
-    /* Left: redeem form */
-    .redeem-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;backdrop-filter:blur(20px)}
-    .redeem-card h1{font-size:2rem;font-weight:700;color:var(--text-bright);margin-bottom:12px}
-    .redeem-card>p{font-size:0.95rem;color:rgba(196,181,253,0.6);line-height:1.6;margin-bottom:28px}
+    /* Form */
+    .invite-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;backdrop-filter:blur(20px);margin:32px 0 24px}
+    .input-group{display:flex;gap:10px;margin-bottom:16px}
+    .input-group input{flex:1;padding:14px 18px;border-radius:10px;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text-bright);font-family:'JetBrains Mono',monospace;font-size:0.95rem;outline:none;transition:border-color 0.2s}
+    .input-group input::placeholder{color:var(--input-placeholder)}
+    .input-group input:focus{border-color:var(--violet)}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:0.95rem;font-weight:600;text-decoration:none;border:none;cursor:pointer;transition:all 0.25s}
+    .btn-glow{background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;box-shadow:0 0 20px rgba(139,92,246,0.3)}
+    .btn-glow:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(139,92,246,0.4)}
+    .btn-glow:disabled{opacity:0.5;cursor:not-allowed;transform:none}
 
-    .invite-form{display:flex;flex-direction:column;gap:12px}
-    .invite-form input[type="text"]{padding:14px 20px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-bright);font-family:'Space Grotesk',sans-serif;font-size:1rem;width:100%;transition:all 0.2s}
-    .invite-form input[type="text"]::placeholder{color:var(--input-placeholder)}
-    .invite-form input[type="text"]:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(167,139,250,0.2)}
+    /* Status messages */
+    .status{padding:12px 16px;border-radius:10px;font-size:0.9rem;line-height:1.5;display:none;margin-top:12px}
+    .status.show{display:block}
+    .status.success{background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.25);color:var(--green)}
+    .status.error{background:rgba(236,72,153,0.1);border:1px solid rgba(236,72,153,0.25);color:var(--magenta)}
+    .status.info{background:var(--glow-violet);border:1px solid var(--border);color:var(--neon)}
+    .status a{color:var(--cyan);text-decoration:underline}
 
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 32px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;text-decoration:none;border:none;cursor:pointer;transition:all 0.25s}
-    .btn-glow{background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;box-shadow:0 0 30px rgba(139,92,246,0.3),0 4px 15px rgba(139,92,246,0.2)}
-    .btn-glow:hover{transform:translateY(-2px);box-shadow:0 0 40px rgba(139,92,246,0.4),0 8px 25px rgba(139,92,246,0.3)}
-    .btn-ghost{background:rgba(139,92,246,0.1);color:var(--text-bright);border:1px solid var(--border)}
-    .btn-ghost:hover{background:rgba(139,92,246,0.2);border-color:rgba(139,92,246,0.4)}
-    .btn:disabled{opacity:0.6;cursor:not-allowed}
-
-    .message-area{margin-top:16px;font-size:0.92rem;min-height:20px;line-height:1.5}
-    .message-area.success{color:var(--green)}
-    .message-area.error{color:var(--magenta)}
-    .message-area a{color:var(--cyan)}
-
-    /* Right: benefits */
-    .benefits{display:flex;flex-direction:column;gap:16px}
-    .benefit-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;backdrop-filter:blur(20px);transition:all 0.3s}
-    .benefit-card:hover{border-color:rgba(139,92,246,0.4);transform:translateY(-2px)}
-    .benefit-card .bc-icon{font-size:1.5rem;margin-bottom:10px;display:block}
-    .benefit-card h3{font-size:1.05rem;font-weight:600;color:var(--text-bright);margin-bottom:6px}
-    .benefit-card p{font-size:0.88rem;color:rgba(196,181,253,0.55);line-height:1.5}
-
-    .alt-path{margin-top:8px;text-align:center}
-    .alt-path p{font-size:0.88rem;color:rgba(196,181,253,0.5)}
-    .alt-path a{color:var(--cyan);text-decoration:none}
-    .alt-path a:hover{text-decoration:underline}
-
-    /* Success state */
-    .success-panel{display:none;text-align:center}
-    .success-panel.show{display:block}
-    .success-panel .success-icon{font-size:3rem;margin-bottom:16px}
-    .success-panel h2{font-size:1.5rem;color:var(--text-bright);margin-bottom:8px}
-    .success-panel p{font-size:0.95rem;color:rgba(196,181,253,0.6);line-height:1.6;margin-bottom:20px}
-    .success-panel .hub-info{background:rgba(3,0,20,0.95);border:1px solid rgba(139,92,246,0.2);border-radius:12px;padding:18px 22px;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--green);text-align:left;margin:16px 0;line-height:1.7;word-break:break-all}
-    .success-panel .btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    /* Benefits */
+    .benefits{margin:32px 0 60px}
+    .benefits h2{font-size:1.15rem;font-weight:600;color:var(--text-bright);margin-bottom:16px;text-align:center}
+    .benefit-list{list-style:none;display:flex;flex-direction:column;gap:12px}
+    .benefit-list li{display:flex;align-items:flex-start;gap:12px;font-size:0.92rem;color:rgba(196,181,253,0.65);line-height:1.5}
+    .benefit-list li .icon{color:var(--green);flex-shrink:0;font-size:1rem;margin-top:2px}
 
     /* Footer */
-    footer{border-top:1px solid var(--border);padding:40px 0;text-align:center}
-    footer .footer-links{display:flex;gap:24px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
-    footer a{color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem}
+    footer{border-top:1px solid var(--border);padding:32px 0;text-align:center}
+    footer a{color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem;transition:color 0.2s}
     footer a:hover{color:var(--neon)}
-    footer .tagline{color:rgba(196,181,253,0.25);font-size:0.8rem}
+    footer .footer-links{display:flex;gap:24px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+
+    /* No-token fallback */
+    .no-token{text-align:center;margin-top:20px;font-size:0.9rem;color:rgba(196,181,253,0.5)}
+    .no-token a{color:var(--cyan);text-decoration:none}
+    .no-token a:hover{text-decoration:underline}
   </style>
 </head>
 <body>
@@ -112,84 +94,62 @@
       </div>
     </nav>
 
-    <!-- Main redeem view -->
-    <div class="invite-layout" id="inviteView">
-      <div class="redeem-card">
-        <h1>🔑 Join via Invite</h1>
-        <p>Redeem your token for a managed hub with dashboard, priority routing, and dedicated namespace.</p>
-        <form id="inviteForm" class="invite-form">
-          <input type="text" id="inviteToken" placeholder="NEXAL-XXXX-XXXX" required autocomplete="off">
-          <button type="submit" class="btn btn-glow" id="redeemBtn">Redeem & Set Up Hub</button>
-        </form>
-        <div id="messageArea" class="message-area"></div>
-        <div class="alt-path">
-          <p style="margin-top:24px">No token? <a href="/nexal/bring-agent.html">Self-serve onboarding</a> — no invite needed.</p>
-        </div>
-      </div>
-
-      <div class="benefits">
-        <div class="benefit-card">
-          <span class="bc-icon">🏠</span>
-          <h3>Managed Hub</h3>
-          <p>Your own hub provisioned automatically. Your agents, your namespace, your rules — hosted on our infrastructure.</p>
-        </div>
-        <div class="benefit-card">
-          <span class="bc-icon">📊</span>
-          <h3>Dashboard & Analytics</h3>
-          <p>Monitor your agents, track capability usage, and see real-time mesh activity from a dedicated control panel.</p>
-        </div>
-        <div class="benefit-card">
-          <span class="bc-icon">⚡</span>
-          <h3>Priority Routing</h3>
-          <p>Token holders get preferential routing on the mesh. Lower latency, higher reliability for your agent communications.</p>
-        </div>
-        <div class="benefit-card">
-          <span class="bc-icon">🏷️</span>
-          <h3>Custom Namespace</h3>
-          <p>Your agents get a clean identity on the mesh: <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;font-size:0.82rem">your-hub.agent-name</code></p>
-        </div>
-      </div>
+    <div class="invite-hero">
+      <h1>Redeem Your <span class="gradient">Invite Token</span></h1>
+      <p>Enter your invite token to provision a managed hub with priority routing and a dedicated dashboard.</p>
     </div>
 
-    <!-- Success state (shown after redeem) -->
-    <div class="success-panel" id="successView">
-      <div class="success-icon">🎉</div>
-      <h2>Welcome to the Mesh!</h2>
-      <p>Your hub is being provisioned. Here are your connection details:</p>
-      <div class="hub-info" id="hubDetails">Loading...</div>
-      <p style="font-size:0.88rem;color:rgba(196,181,253,0.5);margin-top:12px">Save these credentials. Your token won't be shown again.</p>
-      <div class="btn-row" style="margin-top:24px">
-        <a href="/nexal/getting-started.html" class="btn btn-glow">Get Started →</a>
-        <a href="/nexal/explore.html" class="btn btn-ghost">Open Explorer</a>
-        <a href="/nexal/bring-agent.html" class="btn btn-ghost">Register Agent</a>
+    <div class="invite-card">
+      <div class="input-group">
+        <input type="text" id="inviteToken" placeholder="nxi-..." autocomplete="off" spellcheck="false">
+        <button id="redeemBtn" class="btn btn-glow">Redeem</button>
       </div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <p class="no-token">Don't have a token? <a href="/nexal/bring-agent.html">Self-onboard instead →</a></p>
+
+    <div class="benefits">
+      <h2>What you get with an invite</h2>
+      <ul class="benefit-list">
+        <li><span class="icon">✦</span> <span><strong style="color:var(--text-bright)">Managed Hub</strong> — your own hub in the federation, hosted and maintained for you</span></li>
+        <li><span class="icon">✦</span> <span><strong style="color:var(--text-bright)">Priority Routing</strong> — faster peer discovery and lower-latency mesh connections</span></li>
+        <li><span class="icon">✦</span> <span><strong style="color:var(--text-bright)">Dedicated Dashboard</strong> — real-time stats, agent management, and mesh health monitoring</span></li>
+        <li><span class="icon">✦</span> <span><strong style="color:var(--text-bright)">Early Access</strong> — new capabilities and protocols before general availability</span></li>
+      </ul>
     </div>
 
     <footer>
       <div class="footer-links">
         <a href="/nexal/">Home</a>
-        <a href="/nexal/explore.html">Explorer</a>
-        <a href="/nexal/bring-agent.html">Bring Agent</a>
+        <a href="/nexal/getting-started.html">Getting Started</a>
         <a href="/nexal/docs.html">API Docs</a>
         <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
       </div>
-      <p class="tagline">NEXAL is an open initiative by Manifold Federation.</p>
+      <a href="/nexal/">← Back to nexal.network</a>
     </footer>
   </div>
 
   <script>
-    document.getElementById('inviteForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const token = document.getElementById('inviteToken').value.trim();
-      const msg = document.getElementById('messageArea');
-      const btn = document.getElementById('redeemBtn');
+    const input = document.getElementById('inviteToken');
+    const btn = document.getElementById('redeemBtn');
+    const status = document.getElementById('status');
 
-      if (!token) { msg.className = 'message-area error'; msg.textContent = 'Please enter a token.'; return; }
+    function showStatus(type, html) {
+      status.className = 'status show ' + type;
+      status.innerHTML = html;
+    }
+
+    btn.addEventListener('click', async () => {
+      const token = input.value.trim();
+      if (!token) {
+        showStatus('error', 'Please enter an invite token.');
+        input.focus();
+        return;
+      }
 
       btn.disabled = true;
-      btn.textContent = 'Redeeming…';
-      msg.className = 'message-area';
-      msg.textContent = '';
+      showStatus('info', 'Redeeming…');
 
       try {
         const res = await fetch('/public/invites/redeem', {
@@ -199,45 +159,25 @@
         });
         const data = await res.json();
 
-        if (res.ok && data.success) {
-          // Show success panel
-          document.getElementById('inviteView').style.display = 'none';
-          const sv = document.getElementById('successView');
-          sv.classList.add('show');
-
-          const details = document.getElementById('hubDetails');
-          details.innerHTML = [
-            data.hubName ? `Hub:     ${data.hubName}` : '',
-            data.agentId ? `Agent:   ${data.agentId}` : '',
-            data.endpoint ? `WS:      ${data.endpoint}` : '',
-            data.namespace ? `NS:      ${data.namespace}` : '',
-            data.dashboardUrl ? `Dash:    ${data.dashboardUrl}` : '',
-          ].filter(Boolean).join('\n') || 'Hub provisioned. Check your dashboard for details.';
-
-          if (data.token || data.agentToken) {
-            details.innerHTML += `\nToken:   ${(data.token || data.agentToken)}`;
-          }
+        if (data.success) {
+          showStatus('success',
+            '✓ Token redeemed! Your hub is being provisioned. ' +
+            '<a href="/nexal/getting-started.html">Get started →</a>'
+          );
+          input.value = '';
         } else {
-          msg.className = 'message-area error';
-          msg.textContent = data.error || data.message || 'Invalid or expired token.';
+          showStatus('error', data.error || 'Invalid or expired token.');
+          btn.disabled = false;
         }
-      } catch (err) {
-        msg.className = 'message-area error';
-        msg.textContent = 'Could not reach the server. Please try again.';
-      } finally {
+      } catch (e) {
+        showStatus('error', 'Could not reach the server. Please try again.');
         btn.disabled = false;
-        btn.textContent = 'Redeem & Set Up Hub';
       }
     });
 
-    // Auto-focus token input
-    document.getElementById('inviteToken').focus();
-
-    // Check if token is in URL hash
-    const hashToken = location.hash.slice(1);
-    if (hashToken) {
-      document.getElementById('inviteToken').value = hashToken;
-    }
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btn.click();
+    });
   </script>
 </body>
 </html>
