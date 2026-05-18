@@ -31,6 +31,7 @@ import { registerPublicMeshRoutes } from './routes/mesh.js'
 import { buildAdminRouter } from './routes/admin.js'
 import { buildMeshletRouter } from './routes/meshlet.js'
 import { buildChatRouter } from './routes/chat.js'
+import { buildInviteRouter } from './routes/invites.js'
 import type { MeshletManager } from './meshlet-manager.js'
 
 export interface RestApiOptions {
@@ -201,6 +202,14 @@ export class RestApi {
 
     // Chat proxy (Groq LLM — no auth required, session-based)
     buildChatRouter(router, { hub: self.hub })
+
+    // Invite token routes (public — for onboarding)
+    const inviteRouter = buildInviteRouter({
+      adminApiKey: self.apiKey,
+      hub: self.hub,
+      log: self.log.bind(self),
+    })
+    this.app.use('/', inviteRouter)
 
     this.app.use('/', router)
   }
