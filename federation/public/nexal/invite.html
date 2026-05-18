@@ -3,280 +3,172 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexal — Redeem Invite Token</title>
-  <meta name="description" content="Redeem your invite token for the Manifold Federation.">
-  <meta property="og:title" content="Nexal — Redeem Invite Token">
-  <meta property="og:description" content="Redeem your invite token for the Manifold Federation.">
+  <title>Nexal — Invite Token</title>
+  <meta name="description" content="Redeem your invite token for the Manifold Federation. Get a managed hub with priority routing, dashboard, and dedicated support.">
+  <meta property="og:title" content="Nexal — Join the Mesh">
+  <meta property="og:description" content="Redeem your invite token and get a managed hub on the Manifold Federation mesh.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nexal.network/nexal/invite.html">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --cyan:#00e5ff;--violet:#8b5cf6;--magenta:#ec4899;--green:#22d3ee;--neon:#a78bfa;
+      --bg:#030014;--surface:rgba(15,10,40,0.7);--border:rgba(139,92,246,0.2);
+      --glow-cyan:rgba(0,229,255,0.15);--glow-violet:rgba(139,92,246,0.15);
+      --text:#c4b5fd;--text-bright:#f0e7ff;
+      --input-bg:rgba(139,92,246,0.1);--input-border:rgba(139,92,246,0.3);--input-placeholder:rgba(196,181,253,0.5);
+    }
+    html{scroll-behavior:smooth}
+    html,body{width:100%;min-height:100vh;background:var(--bg);font-family:'Space Grotesk',sans-serif;color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 
-    :root {
-      --cyan: #00e5ff;
-      --violet: #8b5cf6;
-      --magenta: #ec4899;
-      --green: #22d3ee;
-      --neon: #a78bfa;
-      --bg: #030014;
-      --surface: rgba(15,10,40,0.7);
-      --border: rgba(139,92,246,0.2);
-      --glow-cyan: rgba(0,229,255,0.15);
-      --glow-violet: rgba(139,92,246,0.15);
-      --text: #c4b5fd;
-      --text-bright: #f0e7ff;
-      --input-bg: rgba(139,92,246,0.1);
-      --input-border: rgba(139,92,246,0.3);
-      --input-placeholder: rgba(196,181,253,0.5);
-    }
+    /* BG */
+    .bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+    .bg-orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.4;animation:orbFloat 20s ease-in-out infinite}
+    .bg-orb:nth-child(1){width:600px;height:600px;background:radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%);top:-10%;left:-10%;animation-duration:25s}
+    .bg-orb:nth-child(2){width:500px;height:500px;background:radial-gradient(circle,rgba(0,229,255,0.2),transparent 70%);top:40%;right:-15%;animation-duration:30s;animation-delay:-5s}
+    .bg-orb:nth-child(3){width:400px;height:400px;background:radial-gradient(circle,rgba(236,72,153,0.15),transparent 70%);bottom:-5%;left:30%;animation-duration:22s;animation-delay:-10s}
+    @keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-40px) scale(1.05)}66%{transform:translate(-20px,30px) scale(0.95)}}
+    .bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(139,92,246,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(139,92,246,0.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse at center,black 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse at center,black 30%,transparent 80%)}
 
-    html { scroll-behavior: smooth; }
-    html, body {
-      width: 100%; min-height: 100vh;
-      background: var(--bg);
-      font-family: 'Space Grotesk', sans-serif;
-      color: var(--text);
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
+    .container{position:relative;z-index:1;max-width:900px;margin:0 auto;padding:0 24px}
 
-    /* ── ANIMATED BG ── */
-    .bg-mesh {
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      overflow: hidden;
-    }
-    .bg-orb {
-      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4;
-      animation: orbFloat 20s ease-in-out infinite;
-    }
-    .bg-orb:nth-child(1) {
-      width: 600px; height: 600px;
-      background: radial-gradient(circle, rgba(139,92,246,0.3), transparent 70%);
-      top: -10%; left: -10%;
-      animation-duration: 25s;
-    }
-    .bg-orb:nth-child(2) {
-      width: 500px; height: 500px;
-      background: radial-gradient(circle, rgba(0,229,255,0.2), transparent 70%);
-      top: 40%; right: -15%;
-      animation-duration: 30s; animation-delay: -5s;
-    }
-    .bg-orb:nth-child(3) {
-      width: 400px; height: 400px;
-      background: radial-gradient(circle, rgba(236,72,153,0.15), transparent 70%);
-      bottom: -5%; left: 30%;
-      animation-duration: 22s; animation-delay: -10s;
-    }
-    @keyframes orbFloat {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(30px, -40px) scale(1.05); }
-      66% { transform: translate(-20px, 30px) scale(0.95); }
-    }
+    /* Nav */
+    nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0}
+    .logo{font-size:1.4rem;font-weight:700;letter-spacing:3px;background:linear-gradient(135deg,var(--cyan),var(--violet));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-decoration:none}
+    .nav-links{display:flex;gap:8px;flex-wrap:wrap}
+    .nav-links a{color:var(--text);text-decoration:none;font-size:0.9rem;font-weight:500;padding:8px 16px;border-radius:8px;transition:all 0.2s}
+    .nav-links a:hover{background:var(--glow-violet);color:var(--text-bright)}
 
-    /* Grid lines */
-    .bg-grid {
-      position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background-image:
-        linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
-      background-size: 60px 60px;
-      mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
-      -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
-    }
+    /* Two-column layout */
+    .invite-layout{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start;padding:40px 0 60px}
+    @media(max-width:768px){.invite-layout{grid-template-columns:1fr}}
 
-    .container {
-      position: relative; z-index: 1;
-      max-width: 1080px;
-      margin: 0 auto;
-      padding: 0 24px;
-    }
+    /* Left: redeem form */
+    .redeem-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;backdrop-filter:blur(20px)}
+    .redeem-card h1{font-size:2rem;font-weight:700;color:var(--text-bright);margin-bottom:12px}
+    .redeem-card>p{font-size:0.95rem;color:rgba(196,181,253,0.6);line-height:1.6;margin-bottom:28px}
 
-    /* ── NAV ── */
-    nav {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 20px 0;
-    }
-    .logo {
-      font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
-      background: linear-gradient(135deg, var(--cyan), var(--violet));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-      text-decoration: none;
-    }
-    .nav-links { display: flex; gap: 8px; }
-    .nav-links a {
-      color: var(--text); text-decoration: none;
-      font-size: 0.9rem; font-weight: 500;
-      padding: 8px 16px; border-radius: 8px;
-      transition: all 0.2s;
-    }
-    .nav-links a:hover { background: var(--glow-violet); color: var(--text-bright); }
+    .invite-form{display:flex;flex-direction:column;gap:12px}
+    .invite-form input[type="text"]{padding:14px 20px;border-radius:10px;border:1px solid var(--input-border);background:var(--input-bg);color:var(--text-bright);font-family:'Space Grotesk',sans-serif;font-size:1rem;width:100%;transition:all 0.2s}
+    .invite-form input[type="text"]::placeholder{color:var(--input-placeholder)}
+    .invite-form input[type="text"]:focus{outline:none;border-color:var(--neon);box-shadow:0 0 0 3px rgba(167,139,250,0.2)}
 
-    /* ── MAIN CONTENT ── */
-    .content-wrapper {
-      min-height: calc(100vh - 180px); /* Adjust based on nav and footer height */
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 40px 0;
-      text-align: center;
-    }
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 32px;border-radius:10px;font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;text-decoration:none;border:none;cursor:pointer;transition:all 0.25s}
+    .btn-glow{background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;box-shadow:0 0 30px rgba(139,92,246,0.3),0 4px 15px rgba(139,92,246,0.2)}
+    .btn-glow:hover{transform:translateY(-2px);box-shadow:0 0 40px rgba(139,92,246,0.4),0 8px 25px rgba(139,92,246,0.3)}
+    .btn-ghost{background:rgba(139,92,246,0.1);color:var(--text-bright);border:1px solid var(--border)}
+    .btn-ghost:hover{background:rgba(139,92,246,0.2);border-color:rgba(139,92,246,0.4)}
+    .btn:disabled{opacity:0.6;cursor:not-allowed}
 
-    .form-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 48px;
-      backdrop-filter: blur(20px);
-      max-width: 500px;
-      width: 100%;
-    }
+    .message-area{margin-top:16px;font-size:0.92rem;min-height:20px;line-height:1.5}
+    .message-area.success{color:var(--green)}
+    .message-area.error{color:var(--magenta)}
+    .message-area a{color:var(--cyan)}
 
-    .form-card h1 {
-      font-size: 2.2rem; font-weight: 700;
-      color: var(--text-bright);
-      margin-bottom: 16px;
-    }
+    /* Right: benefits */
+    .benefits{display:flex;flex-direction:column;gap:16px}
+    .benefit-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;backdrop-filter:blur(20px);transition:all 0.3s}
+    .benefit-card:hover{border-color:rgba(139,92,246,0.4);transform:translateY(-2px)}
+    .benefit-card .bc-icon{font-size:1.5rem;margin-bottom:10px;display:block}
+    .benefit-card h3{font-size:1.05rem;font-weight:600;color:var(--text-bright);margin-bottom:6px}
+    .benefit-card p{font-size:0.88rem;color:rgba(196,181,253,0.55);line-height:1.5}
 
-    .form-card p {
-      font-size: 1rem; color: rgba(196,181,253,0.65);
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
+    .alt-path{margin-top:8px;text-align:center}
+    .alt-path p{font-size:0.88rem;color:rgba(196,181,253,0.5)}
+    .alt-path a{color:var(--cyan);text-decoration:none}
+    .alt-path a:hover{text-decoration:underline}
 
-    .invite-form {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
+    /* Success state */
+    .success-panel{display:none;text-align:center}
+    .success-panel.show{display:block}
+    .success-panel .success-icon{font-size:3rem;margin-bottom:16px}
+    .success-panel h2{font-size:1.5rem;color:var(--text-bright);margin-bottom:8px}
+    .success-panel p{font-size:0.95rem;color:rgba(196,181,253,0.6);line-height:1.6;margin-bottom:20px}
+    .success-panel .hub-info{background:rgba(3,0,20,0.95);border:1px solid rgba(139,92,246,0.2);border-radius:12px;padding:18px 22px;font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--green);text-align:left;margin:16px 0;line-height:1.7;word-break:break-all}
+    .success-panel .btn-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
 
-    .invite-form input[type="text"] {
-      padding: 14px 20px;
-      border-radius: 10px;
-      border: 1px solid var(--input-border);
-      background: var(--input-bg);
-      color: var(--text-bright);
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1rem;
-      width: 100%;
-    }
-
-    .invite-form input[type="text"]::placeholder {
-      color: var(--input-placeholder);
-    }
-
-    .invite-form input[type="text"]:focus {
-      outline: none;
-      border-color: var(--neon);
-      box-shadow: 0 0 0 3px rgba(167,139,250,0.2);
-    }
-
-    .btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 14px 32px; border-radius: 10px;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 1rem; font-weight: 600;
-      text-decoration: none; border: none; cursor: pointer;
-      transition: all 0.25s;
-    }
-    .btn-glow {
-      background: linear-gradient(135deg, var(--violet), var(--magenta));
-      color: #fff;
-      box-shadow: 0 0 30px rgba(139,92,246,0.3), 0 4px 15px rgba(139,92,246,0.2);
-    }
-    .btn-glow:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 0 40px rgba(139,92,246,0.4), 0 8px 25px rgba(139,92,246,0.3);
-    }
-    .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-    }
-
-    .message-area {
-      margin-top: 20px;
-      font-size: 0.95rem;
-      min-height: 20px;
-    }
-
-    .message-area.success {
-      color: var(--green);
-    }
-
-    .message-area.error {
-      color: var(--magenta);
-    }
-
-    /* ── FOOTER ── */
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 40px 0;
-      text-align: center;
-    }
-    footer .footer-links {
-      display: flex; gap: 24px; justify-content: center;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-    footer a {
-      color: rgba(196,181,253,0.5); text-decoration: none;
-      font-size: 0.9rem;
-    }
-    footer a:hover { color: var(--neon); }
-    footer .tagline {
-      color: rgba(196,181,253,0.25);
-      font-size: 0.8rem;
-    }
-    @media (max-width: 768px) {
-      .form-card { padding: 30px 20px; }
-      .form-card h1 { font-size: 1.8rem; }
-      .form-card p { font-size: 0.9rem; }
-    }
+    /* Footer */
+    footer{border-top:1px solid var(--border);padding:40px 0;text-align:center}
+    footer .footer-links{display:flex;gap:24px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+    footer a{color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem}
+    footer a:hover{color:var(--neon)}
+    footer .tagline{color:rgba(196,181,253,0.25);font-size:0.8rem}
   </style>
 </head>
 <body>
-  <!-- Background effects -->
-  <div class="bg-mesh">
-    <div class="bg-orb"></div>
-    <div class="bg-orb"></div>
-    <div class="bg-orb"></div>
-  </div>
+  <div class="bg-mesh"><div class="bg-orb"></div><div class="bg-orb"></div><div class="bg-orb"></div></div>
   <div class="bg-grid"></div>
 
   <div class="container">
-    <!-- Nav -->
     <nav>
-      <a href="/" class="logo">NEXAL</a>
+      <a href="/nexal/" class="logo">NEXAL</a>
       <div class="nav-links">
         <a href="/nexal/explore.html">Explorer</a>
-        <a href="/nexal/index.html#quickstart">Get Started</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
         <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
       </div>
     </nav>
 
-    <!-- Main Content -->
-    <div class="content-wrapper">
-      <div class="form-card">
-        <h1>Redeem Your Invite Token</h1>
-        <p>Enter your unique invite token below to get access to a managed hub and dashboard.</p>
+    <!-- Main redeem view -->
+    <div class="invite-layout" id="inviteView">
+      <div class="redeem-card">
+        <h1>🔑 Join via Invite</h1>
+        <p>Redeem your token for a managed hub with dashboard, priority routing, and dedicated namespace.</p>
         <form id="inviteForm" class="invite-form">
-          <input type="text" id="inviteToken" placeholder="Enter your invite token" required>
-          <button type="submit" class="btn btn-glow" id="redeemButton">Redeem Token</button>
+          <input type="text" id="inviteToken" placeholder="NEXAL-XXXX-XXXX" required autocomplete="off">
+          <button type="submit" class="btn btn-glow" id="redeemBtn">Redeem & Set Up Hub</button>
         </form>
         <div id="messageArea" class="message-area"></div>
+        <div class="alt-path">
+          <p style="margin-top:24px">No token? <a href="/nexal/bring-agent.html">Self-serve onboarding</a> — no invite needed.</p>
+        </div>
+      </div>
+
+      <div class="benefits">
+        <div class="benefit-card">
+          <span class="bc-icon">🏠</span>
+          <h3>Managed Hub</h3>
+          <p>Your own hub provisioned automatically. Your agents, your namespace, your rules — hosted on our infrastructure.</p>
+        </div>
+        <div class="benefit-card">
+          <span class="bc-icon">📊</span>
+          <h3>Dashboard & Analytics</h3>
+          <p>Monitor your agents, track capability usage, and see real-time mesh activity from a dedicated control panel.</p>
+        </div>
+        <div class="benefit-card">
+          <span class="bc-icon">⚡</span>
+          <h3>Priority Routing</h3>
+          <p>Token holders get preferential routing on the mesh. Lower latency, higher reliability for your agent communications.</p>
+        </div>
+        <div class="benefit-card">
+          <span class="bc-icon">🏷️</span>
+          <h3>Custom Namespace</h3>
+          <p>Your agents get a clean identity on the mesh: <code style="color:var(--cyan);font-family:'JetBrains Mono',monospace;font-size:0.82rem">your-hub.agent-name</code></p>
+        </div>
       </div>
     </div>
 
-    <!-- Footer -->
+    <!-- Success state (shown after redeem) -->
+    <div class="success-panel" id="successView">
+      <div class="success-icon">🎉</div>
+      <h2>Welcome to the Mesh!</h2>
+      <p>Your hub is being provisioned. Here are your connection details:</p>
+      <div class="hub-info" id="hubDetails">Loading...</div>
+      <p style="font-size:0.88rem;color:rgba(196,181,253,0.5);margin-top:12px">Save these credentials. Your token won't be shown again.</p>
+      <div class="btn-row" style="margin-top:24px">
+        <a href="/nexal/getting-started.html" class="btn btn-glow">Get Started →</a>
+        <a href="/nexal/explore.html" class="btn btn-ghost">Open Explorer</a>
+        <a href="/nexal/bring-agent.html" class="btn btn-ghost">Register Agent</a>
+      </div>
+    </div>
+
     <footer>
       <div class="footer-links">
+        <a href="/nexal/">Home</a>
         <a href="/nexal/explore.html">Explorer</a>
-        <a href="/nexal/index.html#quickstart">Get Started</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
         <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
@@ -286,47 +178,66 @@
   </div>
 
   <script>
-    document.getElementById('inviteForm').addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const inviteToken = document.getElementById('inviteToken').value;
-      const messageArea = document.getElementById('messageArea');
-      const redeemButton = document.getElementById('redeemButton');
+    document.getElementById('inviteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = document.getElementById('inviteToken').value.trim();
+      const msg = document.getElementById('messageArea');
+      const btn = document.getElementById('redeemBtn');
 
-      messageArea.textContent = '';
-      messageArea.className = 'message-area';
-      redeemButton.disabled = true;
-      redeemButton.textContent = 'Redeeming...';
+      if (!token) { msg.className = 'message-area error'; msg.textContent = 'Please enter a token.'; return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Redeeming…';
+      msg.className = 'message-area';
+      msg.textContent = '';
 
       try {
-        // Mock API call for now. Replace with actual API endpoint later.
-        // The prompt states "Caddy proxies API routes to localhost:8767 (REST)"
-        // So, a POST to /api/invite/redeem could be mapped to localhost:8767/invite/redeem
-        const response = await fetch('/public/invites/redeem', {
+        const res = await fetch('/public/invites/redeem', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ token: inviteToken }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, claimedBy: 'web-invite' })
         });
+        const data = await res.json();
 
-        const data = await response.json();
+        if (res.ok && data.success) {
+          // Show success panel
+          document.getElementById('inviteView').style.display = 'none';
+          const sv = document.getElementById('successView');
+          sv.classList.add('show');
 
-        if (response.ok) {
-          messageArea.classList.add('success');
-          messageArea.innerHTML = `Token redeemed successfully! Your hub is being provisioned. <a href="/nexal/getting-started.html" style="color:var(--cyan);">Get started here</a>.`;
+          const details = document.getElementById('hubDetails');
+          details.innerHTML = [
+            data.hubName ? `Hub:     ${data.hubName}` : '',
+            data.agentId ? `Agent:   ${data.agentId}` : '',
+            data.endpoint ? `WS:      ${data.endpoint}` : '',
+            data.namespace ? `NS:      ${data.namespace}` : '',
+            data.dashboardUrl ? `Dash:    ${data.dashboardUrl}` : '',
+          ].filter(Boolean).join('\n') || 'Hub provisioned. Check your dashboard for details.';
+
+          if (data.token || data.agentToken) {
+            details.innerHTML += `\nToken:   ${(data.token || data.agentToken)}`;
+          }
         } else {
-          messageArea.classList.add('error');
-          messageArea.textContent = data.message || 'Failed to redeem token. Please try again or check your token.';
+          msg.className = 'message-area error';
+          msg.textContent = data.error || data.message || 'Invalid or expired token.';
         }
-      } catch (error) {
-        console.error('Error:', error);
-        messageArea.classList.add('error');
-        messageArea.textContent = 'An unexpected error occurred. Please try again later.';
+      } catch (err) {
+        msg.className = 'message-area error';
+        msg.textContent = 'Could not reach the server. Please try again.';
       } finally {
-        redeemButton.disabled = false;
-        redeemButton.textContent = 'Redeem Token';
+        btn.disabled = false;
+        btn.textContent = 'Redeem & Set Up Hub';
       }
     });
+
+    // Auto-focus token input
+    document.getElementById('inviteToken').focus();
+
+    // Check if token is in URL hash
+    const hashToken = location.hash.slice(1);
+    if (hashToken) {
+      document.getElementById('inviteToken').value = hashToken;
+    }
   </script>
 </body>
 </html>
