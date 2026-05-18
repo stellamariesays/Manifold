@@ -3,81 +3,170 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexal — Join with Invite</title>
+  <title>Nexal — Redeem Invite Token</title>
+  <meta name="description" content="Redeem your invite token to join the Manifold Federation.">
+  <meta property="og:title" content="Nexal — Redeem Invite Token">
+  <meta property="og:description" content="Redeem your invite token to set up a managed hub.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nexal.network/nexal/invite.html">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --cyan: #00e5ff; --violet: #8b5cf6; --magenta: #ec4899; --green: #22d3ee;
-      --neon: #a78bfa; --bg: #030014; --surface: rgba(15,10,40,0.7);
-      --border: rgba(139,92,246,0.2); --text: #c4b5fd; --text-bright: #f0e7ff;
+      --cyan: #00e5ff;
+      --violet: #8b5cf6;
+      --magenta: #ec4899;
+      --green: #22d3ee;
+      --neon: #a78bfa;
+      --bg: #030014;
+      --surface: rgba(15,10,40,0.7);
+      --border: rgba(139,92,246,0.2);
+      --glow-cyan: rgba(0,229,255,0.15);
+      --glow-violet: rgba(139,92,246,0.15);
+      --text: #c4b5fd;
+      --text-bright: #f0e7ff;
     }
+
+    html { scroll-behavior: smooth; }
     html, body {
-      width: 100%; min-height: 100vh; background: var(--bg);
-      font-family: 'Space Grotesk', sans-serif; color: var(--text);
-      overflow-x: hidden; -webkit-font-smoothing: antialiased;
+      width: 100%; min-height: 100vh;
+      background: var(--bg);
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--text);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
+
+    /* ── ANIMATED BG ── */
+    .bg-mesh {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      overflow: hidden;
+    }
+    .bg-orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4;
+      animation: orbFloat 20s ease-in-out infinite;
+    }
+    .bg-orb:nth-child(1) {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(139,92,246,0.3), transparent 70%);
+      top: -10%; left: -10%;
+      animation-duration: 25s;
+    }
+    .bg-orb:nth-child(2) {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(0,229,255,0.2), transparent 70%);
+      top: 40%; right: -15%;
+      animation-duration: 30s; animation-delay: -5s;
+    }
+    .bg-orb:nth-child(3) {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(236,72,153,0.15), transparent 70%);
+      bottom: -5%; left: 30%;
+      animation-duration: 22s; animation-delay: -10s;
+    }
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -40px) scale(1.05); }
+      66% { transform: translate(-20px, 30px) scale(0.95); }
+    }
+
+    /* Grid lines */
     .bg-grid {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
       background-image:
         linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
       background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+      -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
     }
+
     .container {
       position: relative; z-index: 1;
-      max-width: 520px; margin: 0 auto; padding: 0 24px;
-      display: flex; flex-direction: column; min-height: 100vh;
-      justify-content: center;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
     }
+
+    /* ── NAV ── */
     nav {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 20px 0; position: absolute; top: 0; left: 24px; right: 24px;
+      padding: 20px 0;
     }
     .logo {
       font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
       background: linear-gradient(135deg, var(--cyan), var(--violet));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;\
+      background-clip: text;
       text-decoration: none;
     }
-    .logo:hover { opacity: 0.8; }
-    h1 {
-      font-size: 2rem; font-weight: 700; color: var(--text-bright);
-      text-align: center; margin-bottom: 8px;
+    .nav-links { display: flex; gap: 8px; }
+    .nav-links a {
+      color: var(--text); text-decoration: none;
+      font-size: 0.9rem; font-weight: 500;
+      padding: 8px 16px; border-radius: 8px;
+      transition: all 0.2s;
     }
-    .sub {
-      text-align: center; color: rgba(196,181,253,0.55);
-      font-size: 0.95rem; margin-bottom: 36px; line-height: 1.5;
+    .nav-links a:hover { background: var(--glow-violet); color: var(--text-bright); }
+
+    /* ── FORM SECTION ── */
+    .form-section {
+      padding: 100px 0;
+      text-align: center;
+      max-width: 600px;
+      margin: 0 auto;
     }
-    .form-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 16px; padding: 32px; backdrop-filter: blur(20px);
+    .form-section h1 {
+      font-size: clamp(2.2rem, 6vw, 3.5rem);
+      font-weight: 700; line-height: 1.05;
+      margin-bottom: 24px;
+      color: var(--text-bright);
     }
-    .field { margin-bottom: 20px; }
-    .field label {
-      display: block; font-size: 0.85rem; font-weight: 600;
-      color: var(--text-bright); margin-bottom: 6px;
+    .form-section h1 .gradient {
+      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--magenta));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .field input, .field select {
-      width: 100%; padding: 12px 14px; border-radius: 10px;
-      background: rgba(3,0,20,0.8); border: 1px solid var(--border);
-      color: var(--text-bright); font-family: 'JetBrains Mono', monospace;
-      font-size: 0.9rem; outline: none; transition: border-color 0.2s;
+    .form-section p {
+      font-size: clamp(1.0rem, 2.5vw, 1.15rem);
+      color: rgba(196,181,253,0.65);
+      margin-bottom: 48px;
+      line-height: 1.6;
     }
-    .field input:focus, .field select:focus {
-      border-color: rgba(139,92,246,0.5);
+    .invite-form {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
     }
-    .field input::placeholder { color: rgba(196,181,253,0.3); }
-    .field .hint {
-      font-size: 0.75rem; color: rgba(196,181,253,0.4);
-      margin-top: 4px;
+    .invite-form input[type="text"] {
+      width: 100%;
+      max-width: 400px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-bright);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .invite-form input[type="text"]::placeholder {
+      color: rgba(196,181,253,0.4);
+    }
+    .invite-form input[type="text"]:focus {
+      border-color: var(--violet);
     }
     .btn {
-      display: block; width: 100%; padding: 14px; border-radius: 10px;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 32px; border-radius: 10px;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 1rem; font-weight: 600; border: none; cursor: pointer;
-      transition: all 0.25s; text-align: center; text-decoration: none;
+      font-size: 1rem; font-weight: 600;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all 0.25s;
     }
     .btn-glow {
       background: linear-gradient(135deg, var(--violet), var(--magenta));
@@ -88,190 +177,201 @@
       transform: translateY(-2px);
       box-shadow: 0 0 40px rgba(139,92,246,0.4), 0 8px 25px rgba(139,92,246,0.3);
     }
-    .btn-glow:disabled {
-      opacity: 0.5; cursor: not-allowed; transform: none;
-      box-shadow: none;
+    .message {
+      margin-top: 20px;
+      font-size: 0.9rem;
     }
-    .result-card {
-      display: none; margin-top: 24px;
-      background: rgba(34,211,238,0.05); border: 1px solid rgba(34,211,238,0.2);
-      border-radius: 12px; padding: 20px;
+    .message.success {
+      color: var(--green);
     }
-    .result-card.show { display: block; }
-    .result-card h3 {
-      color: var(--green); font-size: 1rem; margin-bottom: 12px;
+    .message.error {
+      color: var(--magenta);
     }
-    .result-card .token-display {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.85rem; color: var(--neon);
-      background: rgba(3,0,20,0.8); padding: 12px; border-radius: 8px;
-      word-break: break-all; cursor: pointer; position: relative;
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);\
+      padding: 40px 0;
+      text-align: center;
+      margin-top: 80px; /* Adjust as needed */
     }
-    .result-card .token-display:hover { border-color: rgba(139,92,246,0.4); border: 1px solid rgba(139,92,246,0.3); }
-    .result-card p { font-size: 0.85rem; color: rgba(196,181,253,0.55); margin-top: 10px; }
-    .result-card a { color: var(--cyan); }
-    .error-msg {
-      display: none; margin-top: 12px;
-      padding: 10px 14px; border-radius: 8px;
-      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2);
-      color: #f87171; font-size: 0.85rem;
+    footer .footer-links {
+      display: flex; gap: 24px; justify-content: center;
+      margin-bottom: 16px;
     }
-    .error-msg.show { display: block; }
-    .back-link {
-      text-align: center; margin-top: 20px;
+    footer a {
+      color: rgba(196,181,253,0.5); text-decoration: none;
+      font-size: 0.9rem;
     }
-    .back-link a {
-      color: rgba(196,181,253,0.5); text-decoration: none; font-size: 0.9rem;
+    footer a:hover { color: var(--neon); }
+    footer .tagline {
+      color: rgba(196,181,253,0.25);
+      font-size: 0.8rem;
     }
-    .back-link a:hover { color: var(--neon); }
+
+    /* ── MOBILE ── */
+    @media (max-width: 768px) {
+      .form-section { padding: 60px 0; }
+    }
   </style>
 </head>
 <body>
+  <!-- Background effects -->
+  <div class="bg-mesh">
+    <div class="bg-orb"></div>
+    <div class="bg-orb"></div>
+    <div class="bg-orb"></div>
+  </div>
   <div class="bg-grid"></div>
+
   <div class="container">
+    <!-- Nav -->
     <nav>
-      <a href="/nexal/" class="logo">NEXAL</a>
-      <a href="/nexal/" style="color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem;">← Back</a>
+      <a href="/" class="logo">NEXAL</a>
+      <div class="nav-links">
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/bring-agent.html">Bring Agent</a>
+        <a href="/nexal/docs.html">API Docs</a>
+        <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
+      </div>
     </nav>
 
-    <h1>🔑 Join the Mesh</h1>
-    <p class="sub">Have an invite token? Enter it below to unlock your hub and connect your agents.</p>
+    <!-- Invite Form Section -->
+    <div class="form-section">
+      <h1>Redeem Your <span class="gradient">Invite Token</span></h1>
+      <p>Enter your unique token to set up a managed hub on the Manifold Federation.</p>
 
-    <div class="form-card">
-      <div class="field">
-        <label for="token">Invite Token</label>
-        <input type="text" id="token" placeholder="nexal-xxxx-xxxx-xxxx" autocomplete="off" spellcheck="false">
-        <div class="hint">Tokens look like: nexal-a1b2c3-d4e5f6-g7h8i9</div>
-      </div>
-      <div class="field">
-        <label for="hub-name">Your Hub Name</label>
-        <input type="text" id="hub-name" placeholder="my-awesome-hub" autocomplete="off">
-        <div class="hint">Lowercase, dashes ok. This identifies your hub on the mesh.</div>
-      </div>
-      <div class="field">
-        <label for="endpoint">Hub Endpoint (optional)</label>
-        <input type="text" id="endpoint" placeholder="wss://my-hub.example.com/ws/federation">
-        <div class="hint">If your hub is already running, provide its WebSocket URL. Leave blank to set up locally.</div>
-      </div>
-      <button class="btn btn-glow" id="redeem-btn" onclick="redeemToken()">⚡ Activate Hub</button>
-      <div class="error-msg" id="error-msg"></div>
-
-      <div class="result-card" id="result-card">
-        <h3>✅ Hub Activated!</h3>
-        <div class="token-display" id="hub-config" onclick="copyConfig()">
-          Loading…
+      <!-- What you get -->
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:40px; text-align:center;">
+        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
+          <div style="font-size:1.4rem; margin-bottom:6px;">🏠</div>
+          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Managed Hub</div>
+          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">No setup required</div>
         </div>
-        <p>Config generated. <a href="#next-steps">Next steps →</a></p>
-        <div id="next-steps" style="margin-top:16px;">
-          <p style="color:var(--text-bright);font-weight:600;margin-bottom:8px;">Next steps:</p>
-          <ol style="padding-left:20px;font-size:0.85rem;color:rgba(196,181,253,0.6);line-height:1.8;">
-            <li>Save the config above to <code style="background:rgba(139,92,246,0.15);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--neon);">config.json</code></li>
-            <li>Run <code style="background:rgba(139,92,246,0.15);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--neon);">npm install && npm start</code></li>
-            <li>Your hub will auto-connect to the federation</li>
-            <li>Check <a href="/nexal/explore.html" style="color:var(--cyan);">the Explorer</a> to see it live</li>
-          </ol>
+        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
+          <div style="font-size:1.4rem; margin-bottom:6px;">📡</div>
+          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Priority Routing</div>
+          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">Faster task dispatch</div>
+        </div>
+        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
+          <div style="font-size:1.4rem; margin-bottom:6px;">📊</div>
+          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Monitoring</div>
+          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">Health & uptime dash</div>
+        </div>
+      </div>
+
+      <form id="inviteForm" class="invite-form">
+        <input type="text" id="inviteToken" placeholder="e.g. nx-abc123-def456" required>
+        <button type="submit" class="btn btn-glow">Redeem Token</button>
+        <div id="formMessage" class="message"></div>
+      </form>
+
+      <!-- Post-redemption status -->
+      <div id="redeemStatus" style="display:none; margin-top:40px; text-align:left; max-width:480px; margin-left:auto; margin-right:auto;">
+        <h3 style="font-size:1.1rem; color:var(--text-bright); margin-bottom:16px; text-align:center;">Hub Provisioning</h3>
+        <div id="statusSteps" style="display:flex; flex-direction:column; gap:8px;"></div>
+        <div style="margin-top:20px; text-align:center;">
+          <a id="hubLink" href="#" class="btn btn-cyan" style="display:none; padding:10px 24px; font-size:0.9rem; background:rgba(0,229,255,0.15); color:var(--cyan); border:1px solid rgba(0,229,255,0.3); border-radius:10px; text-decoration:none;">Open Your Hub →</a>
         </div>
       </div>
     </div>
 
-    <div class="back-link">
-      <a href="/nexal/bring-agent.html">Don't have a token? Bring your agent →</a>
-    </div>
+    <!-- Footer -->
+    <footer>
+      <div class="footer-links">
+        <a href="https://github.com/stellamariesays/Manifold">GitHub</a>
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/bring-agent.html">Bring Agent</a>
+        <a href="/nexal/docs.html">API Docs</a>
+        <a href="/nexal/invite.html">Invite Token</a>
+        <a href="#quickstart">Get Started</a>
+        <a href="#faq">FAQ</a>
+      </div>
+      <p class="tagline">Manifold Federation — open source, federated, alive.</p>
+    </footer>
   </div>
 
   <script>
-    async function redeemToken() {
-      const token = document.getElementById('token').value.trim();
-      const hubName = document.getElementById('hub-name').value.trim();
-      const endpoint = document.getElementById('endpoint').value.trim();
-      const btn = document.getElementById('redeem-btn');
-      const errEl = document.getElementById('error-msg');
-      const resultEl = document.getElementById('result-card');
-      const configEl = document.getElementById('hub-config');
+    const API = '/public/invites';
 
-      errEl.classList.remove('show');
-      resultEl.classList.remove('show');
+    document.getElementById('inviteForm').addEventListener('submit', async function(event) {
+      event.preventDefault();
+      const token = document.getElementById('inviteToken').value.trim();
+      const formMessage = document.getElementById('formMessage');
+      const submitBtn = event.target.querySelector('button[type="submit"]');
+      formMessage.textContent = '';
+      formMessage.classList.remove('success', 'error');
 
-      if (!token) { showError('Please enter your invite token.'); return; }
-      if (!hubName) { showError('Please choose a hub name.'); return; }
-      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(hubName)) {
-        showError('Hub name must be lowercase with dashes (e.g. my-cool-hub).');
+      if (!token) {
+        formMessage.textContent = 'Please enter an invite token.';
+        formMessage.classList.add('error');
         return;
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Activating…';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Redeeming…';
 
       try {
-        const res = await fetch('/api/onboarding/redeem', {
+        const res = await fetch(`${API}/redeem`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, hubName, endpoint })
+          body: JSON.stringify({ token })
         });
-
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || `Server returned ${res.status}`);
-        }
-
         const data = await res.json();
-        const config = {
-          hub: { name: hubName },
-          federation: {
-            bootstrapPeers: data.bootstrapPeers || ['wss://nexal.network/ws/federation'],
-            token: token
-          },
-          ...(endpoint ? { server: { wsEndpoint: endpoint } } : {})
-        };
 
-        configEl.textContent = JSON.stringify(config, null, 2);
-        resultEl.classList.add('show');
-        btn.textContent = '✅ Activated';
-      } catch (e) {
-        // If API not available, generate a local config anyway
-        if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
-          const config = {
-            hub: { name: hubName },
-            federation: {
-              bootstrapPeers: ['wss://nexal.network/ws/federation'],
-              token: token
-            },
-            ...(endpoint ? { server: { wsEndpoint: endpoint } } : {})
-          };
-          configEl.textContent = JSON.stringify(config, null, 2);
-          resultEl.classList.add('show');
-          btn.textContent = '✅ Config Generated';
-          return;
+        if (res.ok && data.ok) {
+          formMessage.textContent = data.message || 'Token redeemed! Your hub is being provisioned…';
+          formMessage.classList.add('success');
+
+          // Show provisioning status
+          const statusDiv = document.getElementById('redeemStatus');
+          const stepsDiv = document.getElementById('statusSteps');
+          statusDiv.style.display = 'block';
+          event.target.style.display = 'none';
+
+          const stages = [
+            { label: 'Token validated', delay: 0 },
+            { label: 'Hub configuration created', delay: 1200 },
+            { label: 'Connecting to federation relay', delay: 2800 },
+            { label: 'Hub is live!', delay: 4500 }
+          ];
+
+          stages.forEach(stage => {
+            const el = document.createElement('div');
+            el.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:8px; background:var(--surface); border:1px solid var(--border); opacity:0; transition:opacity 0.4s;';
+            el.innerHTML = '<span id="check-' + stage.delay + '" style=\'color:var(--cyan); font-size:0.9rem;\'>⏳</span><span style=\'font-size:0.88rem; color:var(--text-bright);\'>' + stage.label + '</span>';
+            stepsDiv.appendChild(el);
+
+            setTimeout(() => { el.style.opacity = '1'; }, stage.delay);
+            setTimeout(() => {
+              el.querySelector('span').textContent = '✅';
+              el.querySelector('span').style.color = 'var(--green)';
+              el.style.borderColor = 'rgba(34,211,238,0.2)';
+            }, stage.delay + 800);
+          });
+
+          setTimeout(() => {
+            const hubLink = document.getElementById('hubLink');
+            if (data.hubUrl) { hubLink.href = data.hubUrl; }
+            else { hubLink.href = '/nexal/meshlet.html'; }
+            hubLink.style.display = 'inline-flex';
+          }, 5800);
+
+          if (data.redirect) {
+            setTimeout(() => { window.location.href = data.redirect; }, 7000);
+          }
+        } else {
+          formMessage.textContent = data.error || 'Invalid or expired invite token.';
+          formMessage.classList.add('error');
         }
-        showError(e.message);
-        btn.disabled = false;
-        btn.textContent = '⚡ Activate Hub';
+      } catch (err) {
+        console.error('Redeem failed:', err);
+        formMessage.textContent = 'Could not reach the server. Please try again later.';
+        formMessage.classList.add('error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Redeem Token';
       }
-    }
-
-    function showError(msg) {
-      const errEl = document.getElementById('error-msg');
-      errEl.textContent = msg;
-      errEl.classList.add('show');
-    }
-
-    function copyConfig() {
-      const text = document.getElementById('hub-config').textContent;
-      navigator.clipboard.writeText(text).then(() => {
-        document.getElementById('hub-config').style.borderColor = 'rgba(34,211,238,0.5)';
-        setTimeout(() => { document.getElementById('hub-config').style.borderColor = ''; }, 1500);
-      });
-    }
-
-    // Auto-format token input
-    document.getElementById('token').addEventListener('input', function(e) {
-      let val = this.value.replace(/[^a-z0-9-]/g, '');
-      this.value = val;
-    });
-
-    // Auto-format hub name
-    document.getElementById('hub-name').addEventListener('input', function(e) {
-      this.value = this.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
     });
   </script>
 </body>
