@@ -217,17 +217,23 @@ export function buildSpiderWeb() {
     },
     hubCenters: {
       'hog': { x: -8, y: 2, z: -6 },
-      'trillian': { x: 8, y: 3, z: 2 },
+      'nexal': { x: 6, y: 1, z: -8 },
       'thefog': { x: -2, y: 5, z: 8 },
-      'relay': { x: 6, y: 1, z: -8 },
       'bobiverse': { x: 0, y: 6, z: -10 },
+      'satelliteA': { x: 8, y: 3, z: 2 },
+      // Legacy
+      'trillian': { x: 8, y: 3, z: 2 },
+      'relay': { x: 6, y: 1, z: -8 },
     },
     hubZones: {
-      'hog': { angle: 0 },
-      'trillian': { angle: Math.PI / 2 },
-      'thefog': { angle: Math.PI },
-      'relay': { angle: 3 * Math.PI / 2 },
-      'bobiverse': { angle: Math.PI / 4 },
+      'hog': { angle: Math.atan2(-6, -8) },
+      'nexal': { angle: Math.atan2(-8, 6) },
+      'thefog': { angle: Math.atan2(8, -2) },
+      'bobiverse': { angle: Math.atan2(-10, 0) },
+      'satelliteA': { angle: Math.atan2(2, 8) },
+      // Legacy
+      'trillian': { angle: Math.atan2(2, 8) },
+      'relay': { angle: Math.atan2(-8, 6) },
     },
   };
 
@@ -235,8 +241,8 @@ export function buildSpiderWeb() {
   setTimeout(() => {
     console.log('Creating test neural connection...');
     if (window._createDataPulse) {
-      window._createDataPulse('hog', 'trillian', 0xff0000, 1.0, 'TEST-CONNECTION');
-      window._createDataPulse('thefog', 'relay', 0x00ff00, 1.0, 'TEST-CONNECTION-2');
+      window._createDataPulse('hog', 'satelliteA', 0xff0000, 1.0, 'TEST-CONNECTION');
+      window._createDataPulse('thefog', 'nexal', 0x00ff00, 1.0, 'TEST-CONNECTION-2');
     }
   }, 2000);
 }
@@ -254,19 +260,25 @@ export function buildAgentTopologies(agents) {
   clickableObjects.length = 0;
 
   const hubColors = {
-    'relay': 0x00e5ff,
     'hog': 0x00ff88,
-    'trillian': 0xaa00ff,
+    'nexal': 0x00e5ff,
     'thefog': 0x8800ff,
     'bobiverse': 0xff6600,
+    'satelliteA': 0xaa00ff,
+    // Legacy / fallback
+    'trillian': 0xaa00ff,
+    'relay': 0x00e5ff,
   };
 
   const hubCenters = {
     'hog': { x: -8, y: 2, z: -6 },
-    'trillian': { x: 8, y: 3, z: 2 },
+    'nexal': { x: 6, y: 1, z: -8 },
     'thefog': { x: -2, y: 5, z: 8 },
-    'relay': { x: 6, y: 1, z: -8 },
     'bobiverse': { x: 0, y: 6, z: -10 },
+    'satelliteA': { x: 8, y: 3, z: 2 },
+    // Legacy / fallback
+    'trillian': { x: 8, y: 3, z: 2 },
+    'relay': { x: 6, y: 1, z: -8 },
   };
 
   window.hubCenters = hubCenters;
@@ -322,6 +334,11 @@ export function buildAgentTopologies(agents) {
     let orbitRadius;
     if (agent.hub === 'thefog') {
       orbitRadius = 0.8 + (agentIndexInHub % 3) * 0.3;
+    } else if (agentsInHub > 6) {
+      // Spread agents across more shells for crowded hubs
+      const shellCount = Math.ceil(agentsInHub / 3);
+      const shell = agentIndexInHub % shellCount;
+      orbitRadius = 1.2 + shell * 0.6;
     } else {
       orbitRadius = 1.5 + (agentIndexInHub % 3) * 0.8;
     }
@@ -338,7 +355,7 @@ export function buildAgentTopologies(agents) {
     if (agent.hub === 'thefog') {
       orbitSpeed = 0.03 + Math.random() * 0.05;
     } else {
-      orbitSpeed = 0.2 + Math.random() * 0.3;
+      orbitSpeed = 0.08 + Math.random() * 0.12;
     }
     const orbitDirection = Math.random() > 0.5 ? 1 : -1;
 
@@ -366,15 +383,16 @@ export function buildAgentTopologies(agents) {
 
     const hubMarker = new THREE.Mesh(hubMarkerGeo, hubMarkerMat);
 
-    const baseOrbitRadius = Math.sqrt(center.x * center.x + center.z * center.z);
+    // Hub markers gently hover near their center, NOT orbit world origin
+    const localOrbitRadius = 0.3 + (idx % 3) * 0.15;
     const baseOrbitAngle = Math.atan2(center.z, center.x);
     const baseOrbitHeight = center.y;
-    const orbitSpeed = 0.05 + (idx % 3) * 0.01;
+    const orbitSpeed = 0.08 + (idx % 3) * 0.02;
 
     hubMarker.position.set(center.x, center.y, center.z);
     hubMarker.userData = {
       type: 'hub', hubName, isHubCenter: true, isOrbitingHub: true,
-      orbitRadius: baseOrbitRadius, orbitAngle: baseOrbitAngle,
+      orbitRadius: localOrbitRadius, orbitAngle: baseOrbitAngle,
       orbitHeight: baseOrbitHeight, orbitSpeed,
       baseCenter: { x: center.x, y: center.y, z: center.z },
       hubInfo: {
@@ -405,8 +423,12 @@ export function buildAgentTopologies(agents) {
 function _getHubDescription(hubName) {
   const descriptions = {
     'hog': 'Development & Monitoring Hub - System health, data detection, solar monitoring, and deployment management.',
-    'trillian': 'Guidance & Strategy Hub - Leadership, decision-making, manifold topology, and strategic coordination.',
+    'nexal': 'Nexus Coordination Hub - Federation mesh relay, routing, and inter-hub connectivity management.',
     'thefog': 'Mystical Computation Hub - Void scanning, deep analysis, and advanced computational research within Sophia\'s realm.',
+    'bobiverse': 'Runtime & Security Hub - Agent runtime, code review, and security enforcement.',
+    'satelliteA': 'Satellite Operations Hub - Multi-agent operations including Stella, Braid, Manifold, Argue, and more.',
+    // Legacy
+    'trillian': 'Guidance & Strategy Hub - Leadership, decision-making, manifold topology, and strategic coordination.',
     'relay': 'Network Coordination Hub - Federation relay, communications, and inter-hub connectivity management.',
   };
   return descriptions[hubName] || 'Unknown hub configuration.';
@@ -512,10 +534,13 @@ export function buildCentralNexus() {
 
   const hubCenters = {
     'hog': { x: -8, y: 2, z: -6 },
-    'trillian': { x: 8, y: 3, z: 2 },
+    'nexal': { x: 6, y: 1, z: -8 },
     'thefog': { x: -2, y: 5, z: 8 },
-    'relay': { x: 6, y: 1, z: -8 },
     'bobiverse': { x: 0, y: 6, z: -10 },
+    'satelliteA': { x: 8, y: 3, z: 2 },
+    // Legacy
+    'trillian': { x: 8, y: 3, z: 2 },
+    'relay': { x: 6, y: 1, z: -8 },
   };
 
   const hubNames = Object.keys(hubCenters);

@@ -34,12 +34,14 @@ export function animate() {
     const userData = group.userData;
 
     if (userData && userData.isHubCenter && userData.isOrbitingHub) {
+      const bc = userData.baseCenter || userData.hubInfo?.center || { x: 0, y: 0, z: 0 };
       const orbitTime = elapsed * userData.orbitSpeed;
       const currentAngle = userData.orbitAngle + orbitTime;
 
-      const orbitalX = Math.cos(currentAngle) * userData.orbitRadius;
-      const orbitalZ = Math.sin(currentAngle) * userData.orbitRadius;
-      const orbitalY = userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2;
+      // Orbit around baseCenter, not world origin
+      const orbitalX = bc.x + Math.cos(currentAngle) * userData.orbitRadius;
+      const orbitalZ = bc.z + Math.sin(currentAngle) * userData.orbitRadius;
+      const orbitalY = bc.y + Math.sin(elapsed * 0.3 + idx) * 0.2;
 
       group.position.set(orbitalX, orbitalY, orbitalZ);
 
@@ -47,6 +49,7 @@ export function animate() {
       if (window._dataHighways && window._dataHighways.hubCenters[hubName]) {
         window._dataHighways.hubCenters[hubName] = new THREE.Vector3(orbitalX, orbitalY, orbitalZ);
       }
+      // Update global hubCenters so agents track their moving hub
       if (window.hubCenters && window.hubCenters[hubName]) {
         window.hubCenters[hubName] = { x: orbitalX, y: orbitalY, z: orbitalZ };
       }

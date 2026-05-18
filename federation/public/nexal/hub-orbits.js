@@ -244,6 +244,18 @@ setHubOrbitParams('trillian', {
   yBobFreq:      1,
 });
 
+setHubOrbitParams('satelliteA', {
+  type: 'ellipse',
+  semiMajor:     14,
+  semiMinor:     20,
+  inclination:   0.65,
+  ascendingNode: Math.PI * 0.6,
+  speed:         0.063,
+  phase:         Math.PI * 0.4,
+  yBob:          0.25,
+  yBobFreq:      1,
+});
+
 setHubOrbitParams('thefog', {
   type: 'ellipse',
   semiMajor:     22,
@@ -257,6 +269,18 @@ setHubOrbitParams('thefog', {
 });
 
 setHubOrbitParams('relay', {
+  type: 'ellipse',
+  semiMajor:     16,
+  semiMinor:     8,
+  inclination:   0.5,
+  ascendingNode: Math.PI * 0.3,
+  speed:         0.105,
+  phase:         Math.PI * 1.2,
+  yBob:          0.15,
+  yBobFreq:      2,
+});
+
+setHubOrbitParams('nexal', {
   type: 'ellipse',
   semiMajor:     16,
   semiMinor:     8,

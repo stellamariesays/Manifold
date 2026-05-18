@@ -69,6 +69,7 @@ export async function loadAgentsAndBuild(callbacks) {
 
 let _pollTimer = null;
 let _lastPollTime = 0;
+let _lastAgentSig = null;
 
 /**
  * Poll /mesh every 5 seconds, measure RTT, and update global state.
@@ -93,7 +94,12 @@ export function startMeshPolling(callbacks) {
         }
 
         const agents = meshData.agents;
-        callbacks.buildAgentTopologies(agents);
+        // Only rebuild topology if agent list actually changed
+        const newSig = agents.map(a => `${a.id || a.name}@${a.hub}`).sort().join('|');
+        if (newSig !== _lastAgentSig) {
+          _lastAgentSig = newSig;
+          callbacks.buildAgentTopologies(agents);
+        }
         bridge.emit('mesh-updated', { agents, rtt });
       }
     } catch (e) {

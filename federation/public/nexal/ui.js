@@ -9,10 +9,13 @@ export function updateAgentsList(agents) {
 
   const hubColors = {
     'hog': '#00ff88',
-    'trillian': '#aa00ff',
+    'nexal': '#00e5ff',
     'thefog': '#8800ff',
-    'relay': '#00e5ff',
     'bobiverse': '#ff6600',
+    'satelliteA': '#aa00ff',
+    // Legacy
+    'trillian': '#aa00ff',
+    'relay': '#00e5ff',
   };
 
   agents.forEach(agent => {
