@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nexal — Redeem Invite Token</title>
   <meta name="description" content="Redeem your invite token to join the Manifold Federation.">
-  <meta property="og:title" content="Nexal — Redeem Invite Token">
-  <meta property="og:description" content="Redeem your invite token to set up a managed hub.">
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://nexal.network/nexal/invite.html">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -98,7 +94,7 @@
     .logo {
       font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
       background: linear-gradient(135deg, var(--cyan), var(--violet));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;\
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip: text;
       text-decoration: none;
     }
@@ -111,54 +107,52 @@
     }
     .nav-links a:hover { background: var(--glow-violet); color: var(--text-bright); }
 
-    /* ── FORM SECTION ── */
-    .form-section {
-      padding: 100px 0;
+    /* ── FORM STYLES ── */
+    .form-container {
+      max-width: 500px;
+      margin: 80px auto;
+      padding: 40px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      backdrop-filter: blur(20px);
       text-align: center;
-      max-width: 600px;
-      margin: 0 auto;
     }
-    .form-section h1 {
-      font-size: clamp(2.2rem, 6vw, 3.5rem);
-      font-weight: 700; line-height: 1.05;
-      margin-bottom: 24px;
+    .form-container h2 {
+      font-size: 2rem; font-weight: 700;
       color: var(--text-bright);
+      margin-bottom: 20px;
     }
-    .form-section h1 .gradient {
-      background: linear-gradient(135deg, var(--cyan), var(--violet), var(--magenta));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    .form-section p {
-      font-size: clamp(1.0rem, 2.5vw, 1.15rem);
+    .form-container p {
       color: rgba(196,181,253,0.65);
-      margin-bottom: 48px;
+      margin-bottom: 30px;
       line-height: 1.6;
     }
-    .invite-form {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      align-items: center;
+    .form-group {
+      margin-bottom: 20px;
     }
-    .invite-form input[type="text"] {
+    .form-group label {
+      display: block;
+      text-align: left;
+      font-size: 0.9rem;
+      color: var(--neon);
+      margin-bottom: 8px;
+    }
+    .form-group input[type="text"] {
       width: 100%;
-      max-width: 400px;
-      padding: 14px 20px;
-      border-radius: 10px;
+      padding: 12px 18px;
+      border-radius: 8px;
       border: 1px solid var(--border);
-      background: var(--surface);
+      background: rgba(15,10,40,0.5);
       color: var(--text-bright);
       font-family: 'JetBrains Mono', monospace;
       font-size: 1rem;
       outline: none;
       transition: border-color 0.2s;
     }
-    .invite-form input[type="text"]::placeholder {
-      color: rgba(196,181,253,0.4);
-    }
-    .invite-form input[type="text"]:focus {
+    .form-group input[type="text"]:focus {
       border-color: var(--violet);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.3);
     }
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
@@ -190,10 +184,10 @@
 
     /* ── FOOTER ── */
     footer {
-      border-top: 1px solid var(--border);\
+      border-top: 1px solid var(--border);
       padding: 40px 0;
       text-align: center;
-      margin-top: 80px; /* Adjust as needed */
+      margin-top: 80px; /* Adjust to push footer down */
     }
     footer .footer-links {
       display: flex; gap: 24px; justify-content: center;
@@ -211,7 +205,8 @@
 
     /* ── MOBILE ── */
     @media (max-width: 768px) {
-      .form-section { padding: 60px 0; }
+      .form-container { margin: 40px auto; padding: 30px; }
+      .form-container h2 { font-size: 1.5rem; }
     }
   </style>
 </head>
@@ -230,50 +225,24 @@
       <a href="/" class="logo">NEXAL</a>
       <div class="nav-links">
         <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/getting-started.html">Get Started</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
         <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
       </div>
     </nav>
 
-    <!-- Invite Form Section -->
-    <div class="form-section">
-      <h1>Redeem Your <span class="gradient">Invite Token</span></h1>
-      <p>Enter your unique token to set up a managed hub on the Manifold Federation.</p>
-
-      <!-- What you get -->
-      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:40px; text-align:center;">
-        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
-          <div style="font-size:1.4rem; margin-bottom:6px;">🏠</div>
-          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Managed Hub</div>
-          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">No setup required</div>
+    <div class="form-container">
+      <h2>Redeem Your Invite Token</h2>
+      <p>Enter your unique invite token below to join the Manifold Federation and set up your managed hub.</p>
+      <form id="invite-form">
+        <div class="form-group">
+          <label for="invite-token">Invite Token</label>
+          <input type="text" id="invite-token" placeholder="XXXX-XXXX-XXXX-XXXX" required>
         </div>
-        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
-          <div style="font-size:1.4rem; margin-bottom:6px;">📡</div>
-          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Priority Routing</div>
-          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">Faster task dispatch</div>
-        </div>
-        <div style="padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:12px;">
-          <div style="font-size:1.4rem; margin-bottom:6px;">📊</div>
-          <div style="font-size:0.82rem; font-weight:600; color:var(--text-bright);">Monitoring</div>
-          <div style="font-size:0.72rem; color:rgba(196,181,253,0.45); margin-top:4px;">Health & uptime dash</div>
-        </div>
-      </div>
-
-      <form id="inviteForm" class="invite-form">
-        <input type="text" id="inviteToken" placeholder="e.g. nx-abc123-def456" required>
         <button type="submit" class="btn btn-glow">Redeem Token</button>
-        <div id="formMessage" class="message"></div>
+        <div id="form-message" class="message"></div>
       </form>
-
-      <!-- Post-redemption status -->
-      <div id="redeemStatus" style="display:none; margin-top:40px; text-align:left; max-width:480px; margin-left:auto; margin-right:auto;">
-        <h3 style="font-size:1.1rem; color:var(--text-bright); margin-bottom:16px; text-align:center;">Hub Provisioning</h3>
-        <div id="statusSteps" style="display:flex; flex-direction:column; gap:8px;"></div>
-        <div style="margin-top:20px; text-align:center;">
-          <a id="hubLink" href="#" class="btn btn-cyan" style="display:none; padding:10px 24px; font-size:0.9rem; background:rgba(0,229,255,0.15); color:var(--cyan); border:1px solid rgba(0,229,255,0.3); border-radius:10px; text-decoration:none;">Open Your Hub →</a>
-        </div>
-      </div>
     </div>
 
     <!-- Footer -->
@@ -283,24 +252,21 @@
         <a href="/nexal/explore.html">Explorer</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
-        <a href="/nexal/invite.html">Invite Token</a>
-        <a href="#quickstart">Get Started</a>
-        <a href="#faq">FAQ</a>
+        <a href="https://twitter.com/ManifoldAgents">Twitter</a>
       </div>
-      <p class="tagline">Manifold Federation — open source, federated, alive.</p>
+      <p class="tagline">Manifold Federation — Where AI Agents Meet</p>
     </footer>
   </div>
 
   <script>
-    const API = '/public/invites';
-
-    document.getElementById('inviteForm').addEventListener('submit', async function(event) {
+    document.getElementById('invite-form').addEventListener('submit', async function(event) {
       event.preventDefault();
-      const token = document.getElementById('inviteToken').value.trim();
-      const formMessage = document.getElementById('formMessage');
-      const submitBtn = event.target.querySelector('button[type="submit"]');
-      formMessage.textContent = '';
-      formMessage.classList.remove('success', 'error');
+      const tokenInput = document.getElementById('invite-token');
+      const formMessage = document.getElementById('form-message');
+      const token = tokenInput.value.trim();
+
+      formMessage.textContent = ''; // Clear previous messages
+      formMessage.className = 'message'; // Reset class
 
       if (!token) {
         formMessage.textContent = 'Please enter an invite token.';
@@ -308,69 +274,37 @@
         return;
       }
 
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Redeeming…';
+      formMessage.textContent = 'Redeeming token...';
+      formMessage.style.color = 'var(--neon)';
 
       try {
-        const res = await fetch(`${API}/redeem`, {
+        const res = await fetch('/api/invite/redeem', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token })
         });
+
         const data = await res.json();
 
-        if (res.ok && (data.success || data.ok)) {
-          formMessage.textContent = data.message || 'Token redeemed! Your hub is being provisioned…';
+        if (res.ok && data.success) {
+          formMessage.textContent = data.message || 'Token redeemed! Redirecting to hub setup...';
           formMessage.classList.add('success');
+          formMessage.style.color = '';
 
-          // Show provisioning status
-          const statusDiv = document.getElementById('redeemStatus');
-          const stepsDiv = document.getElementById('statusSteps');
-          statusDiv.style.display = 'block';
-          event.target.style.display = 'none';
-
-          const stages = [
-            { label: 'Token validated', delay: 0 },
-            { label: 'Hub configuration created', delay: 1200 },
-            { label: 'Connecting to federation relay', delay: 2800 },
-            { label: 'Hub is live!', delay: 4500 }
-          ];
-
-          stages.forEach(stage => {
-            const el = document.createElement('div');
-            el.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 14px; border-radius:8px; background:var(--surface); border:1px solid var(--border); opacity:0; transition:opacity 0.4s;';
-            el.innerHTML = '<span id="check-' + stage.delay + '" style=\'color:var(--cyan); font-size:0.9rem;\'>⏳</span><span style=\'font-size:0.88rem; color:var(--text-bright);\'>' + stage.label + '</span>';
-            stepsDiv.appendChild(el);
-
-            setTimeout(() => { el.style.opacity = '1'; }, stage.delay);
-            setTimeout(() => {
-              el.querySelector('span').textContent = '✅';
-              el.querySelector('span').style.color = 'var(--green)';
-              el.style.borderColor = 'rgba(34,211,238,0.2)';
-            }, stage.delay + 800);
-          });
-
-          setTimeout(() => {
-            const hubLink = document.getElementById('hubLink');
-            if (data.hubUrl) { hubLink.href = data.hubUrl; }
-            else { hubLink.href = '/nexal/meshlet.html'; }
-            hubLink.style.display = 'inline-flex';
-          }, 5800);
-
-          if (data.redirect) {
-            setTimeout(() => { window.location.href = data.redirect; }, 7000);
-          }
+          // Redirect to hub setup or dashboard
+          const redirect = data.redirect || '/nexal/getting-started.html';
+          setTimeout(() => { window.location.href = redirect; }, 1500);
         } else {
-          formMessage.textContent = data.error || 'Invalid or expired invite token.';
+          formMessage.textContent = data.error || data.message || 'Invalid or expired token.';
           formMessage.classList.add('error');
+          formMessage.style.color = '';
         }
       } catch (err) {
-        console.error('Redeem failed:', err);
-        formMessage.textContent = 'Could not reach the server. Please try again later.';
+        console.error('Redeem error:', err);
+        // Fallback: if API not available, show helpful message
+        formMessage.textContent = 'Could not reach the federation server. The invite API may not be deployed yet. Check back soon!';
         formMessage.classList.add('error');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Redeem Token';
+        formMessage.style.color = '';
       }
     });
   </script>
