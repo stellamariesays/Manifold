@@ -23,7 +23,7 @@ export interface InviteToken {
 
 // In-memory invite store — persists for the lifetime of the server process.
 // For production, swap this with a database or file-backed store.
-const invites = new Map<string, InviteToken>();
+export const invites = new Map<string, InviteToken>();
 
 // Pre-seed a few tokens for initial onboarding
 const seedTokens = ['NEXAL-2026-ALPHA', 'NEXAL-MESH-START', 'MANIFOLD-OPEN'];
@@ -90,7 +90,7 @@ export function buildInviteRouter(deps: { adminApiKey?: string; hub?: string; lo
 
   // Check if a token is valid (GET, no side effects)
   router.get('/public/invites/:token', (req: Request, res: Response) => {
-    const token = req.params.token?.trim();
+    const token = (req.params['token'] as string)?.trim();
     if (!token) {
       return res.status(400).json({ error: 'Token is required' });
     }

@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nexal — Redeem Invite Token</title>
-  <meta name="description" content="Redeem your invite token to join the Manifold Federation.">
+  <meta name="description" content="Redeem your invite token for the Manifold Federation.">
   <meta property="og:title" content="Nexal — Redeem Invite Token">
-  <meta property="og:description" content="Join the Manifold Federation with an invite token. Get a managed hub on the mesh.">
+  <meta property="og:description" content="Redeem your invite token for the Manifold Federation.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nexal.network/nexal/invite.html">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,422 +15,318 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --cyan: #00e5ff; --violet: #8b5cf6; --magenta: #ec4899;
-      --green: #22d3ee; --neon: #a78bfa; --bg: #030014;
-      --surface: rgba(15,10,40,0.7); --border: rgba(139,92,246,0.2);
-      --glow-cyan: rgba(0,229,255,0.15); --glow-violet: rgba(139,92,246,0.15);
-      --text: #c4b5fd; --text-bright: #f0e7ff;
+      --cyan: #00e5ff;
+      --violet: #8b5cf6;
+      --magenta: #ec4899;
+      --green: #22d3ee;
+      --neon: #a78bfa;
+      --bg: #030014;
+      --surface: rgba(15,10,40,0.7);
+      --border: rgba(139,92,246,0.2);
+      --glow-cyan: rgba(0,229,255,0.15);
+      --glow-violet: rgba(139,92,246,0.15);
+      --text: #c4b5fd;
+      --text-bright: #f0e7ff;
+      --input-bg: rgba(139,92,246,0.1);
+      --input-border: rgba(139,92,246,0.3);
+      --input-placeholder: rgba(196,181,253,0.5);
     }
 
     html { scroll-behavior: smooth; }
     html, body {
-      width: 100%; min-height: 100vh; background: var(--bg);
-      font-family: 'Space Grotesk', sans-serif; color: var(--text);
-      overflow-x: hidden; -webkit-font-smoothing: antialiased;
+      width: 100%; min-height: 100vh;
+      background: var(--bg);
+      font-family: 'Space Grotesk', sans-serif;
+      color: var(--text);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .bg-mesh { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-    .bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: orbFloat 20s ease-in-out infinite; }
-    .bg-orb:nth-child(1) { width: 600px; height: 600px; background: radial-gradient(circle, rgba(139,92,246,0.3), transparent 70%); top: -10%; left: -10%; animation-duration: 25s; }
-    .bg-orb:nth-child(2) { width: 500px; height: 500px; background: radial-gradient(circle, rgba(0,229,255,0.2), transparent 70%); top: 40%; right: -15%; animation-duration: 30s; animation-delay: -5s; }
-    .bg-orb:nth-child(3) { width: 400px; height: 400px; background: radial-gradient(circle, rgba(236,72,153,0.15), transparent 70%); bottom: -5%; left: 30%; animation-duration: 22s; animation-delay: -10s; }
+    /* ── ANIMATED BG ── */
+    .bg-mesh {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      overflow: hidden;
+    }
+    .bg-orb {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4;
+      animation: orbFloat 20s ease-in-out infinite;
+    }
+    .bg-orb:nth-child(1) {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(139,92,246,0.3), transparent 70%);
+      top: -10%; left: -10%;
+      animation-duration: 25s;
+    }
+    .bg-orb:nth-child(2) {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(0,229,255,0.2), transparent 70%);
+      top: 40%; right: -15%;
+      animation-duration: 30s; animation-delay: -5s;
+    }
+    .bg-orb:nth-child(3) {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(236,72,153,0.15), transparent 70%);
+      bottom: -5%; left: 30%;
+      animation-duration: 22s; animation-delay: -10s;
+    }
     @keyframes orbFloat {
       0%, 100% { transform: translate(0, 0) scale(1); }
       33% { transform: translate(30px, -40px) scale(1.05); }
       66% { transform: translate(-20px, 30px) scale(0.95); }
     }
 
+    /* Grid lines */
     .bg-grid {
       position: fixed; inset: 0; z-index: 0; pointer-events: none;
-      background-image: linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
+      background-image:
+        linear-gradient(rgba(139,92,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,92,246,0.04) 1px, transparent 1px);
       background-size: 60px 60px;
       mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
       -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
     }
 
-    .container { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    .container {
+      position: relative; z-index: 1;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
-    nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; flex-wrap: wrap; gap: 8px; }
+    /* ── NAV ── */
+    nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 0;
+    }
     .logo {
       font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
       background: linear-gradient(135deg, var(--cyan), var(--violet));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
       text-decoration: none;
     }
-    .nav-links { display: flex; gap: 4px; flex-wrap: wrap; }
+    .nav-links { display: flex; gap: 8px; }
     .nav-links a {
-      color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500;
-      padding: 8px 14px; border-radius: 8px; transition: all 0.2s;
+      color: var(--text); text-decoration: none;
+      font-size: 0.9rem; font-weight: 500;
+      padding: 8px 16px; border-radius: 8px;
+      transition: all 0.2s;
     }
     .nav-links a:hover { background: var(--glow-violet); color: var(--text-bright); }
 
-    /* Hero */
-    .hero { text-align: center; padding: 60px 0 40px; }
-    .hero h1 {
-      font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; color: var(--text-bright);
+    /* ── MAIN CONTENT ── */
+    .content-wrapper {
+      min-height: calc(100vh - 180px); /* Adjust based on nav and footer height */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px;
+      backdrop-filter: blur(20px);
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .form-card h1 {
+      font-size: 2.2rem; font-weight: 700;
+      color: var(--text-bright);
       margin-bottom: 16px;
     }
-    .hero h1 .gradient {
-      background: linear-gradient(135deg, var(--violet), var(--magenta));
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-    }
-    .hero p { font-size: 1.05rem; color: rgba(196,181,253,0.6); max-width: 520px; margin: 0 auto; line-height: 1.6; }
 
-    /* Two-column layout */
-    .two-col {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
-      margin-bottom: 60px; align-items: start;
+    .form-card p {
+      font-size: 1rem; color: rgba(196,181,253,0.65);
+      margin-bottom: 32px;
+      line-height: 1.6;
     }
 
-    /* Benefits card */
-    .benefits {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
-      padding: 36px; backdrop-filter: blur(20px);
+    .invite-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
     }
-    .benefits h2 { font-size: 1.3rem; font-weight: 700; color: var(--text-bright); margin-bottom: 24px; }
-    .benefit-item {
-      display: flex; gap: 14px; margin-bottom: 20px;
-    }
-    .benefit-item:last-child { margin-bottom: 0; }
-    .benefit-icon {
-      flex-shrink: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-      border-radius: 10px; font-size: 1.1rem;
-      background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.2);
-    }
-    .benefit-item h4 { font-size: 0.95rem; font-weight: 600; color: var(--text-bright); margin-bottom: 4px; }
-    .benefit-item p { font-size: 0.85rem; color: rgba(196,181,253,0.55); line-height: 1.5; }
 
-    /* Form card */
-    .form-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
-      padding: 36px; backdrop-filter: blur(20px); text-align: center;
+    .invite-form input[type="text"] {
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--input-border);
+      background: var(--input-bg);
+      color: var(--text-bright);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem;
+      width: 100%;
     }
-    .form-card h2 { font-size: 1.3rem; font-weight: 700; color: var(--text-bright); margin-bottom: 12px; }
-    .form-card > p { color: rgba(196,181,253,0.6); margin-bottom: 28px; font-size: 0.95rem; line-height: 1.5; }
 
-    .form-group { margin-bottom: 20px; text-align: left; }
-    .form-group label {
-      display: block; font-size: 0.85rem; font-weight: 600; color: var(--neon); margin-bottom: 8px;
+    .invite-form input[type="text"]::placeholder {
+      color: var(--input-placeholder);
     }
-    .token-input-wrap {
-      position: relative;
-    }
-    .token-input-wrap input {
-      width: 100%; padding: 14px 18px; border-radius: 10px;
-      border: 1px solid var(--border); background: rgba(3,0,20,0.8);
-      color: var(--text-bright); font-family: 'JetBrains Mono', monospace;
-      font-size: 1.05rem; letter-spacing: 1px; text-transform: uppercase;
-      outline: none; transition: all 0.25s;
-    }
-    .token-input-wrap input:focus {
-      border-color: var(--violet);
-      box-shadow: 0 0 0 3px rgba(139,92,246,0.25);
-    }
-    .token-input-wrap input.valid {
-      border-color: var(--green);
-      box-shadow: 0 0 0 3px rgba(34,211,238,0.2);
-    }
-    .token-input-wrap input.invalid {
-      border-color: var(--magenta);
-      box-shadow: 0 0 0 3px rgba(236,72,153,0.2);
-    }
-    .token-input-wrap .format-hint {
-      position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-      font-size: 0.7rem; color: rgba(196,181,253,0.3); font-family: 'Space Grotesk', sans-serif;
-      pointer-events: none;
-    }
-    .form-group .sublabel {
-      font-size: 0.78rem; color: rgba(196,181,253,0.35); margin-top: 6px;
+
+    .invite-form input[type="text"]:focus {
+      outline: none;
+      border-color: var(--neon);
+      box-shadow: 0 0 0 3px rgba(167,139,250,0.2);
     }
 
     .btn {
-      display: inline-flex; align-items: center; gap: 8px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       padding: 14px 32px; border-radius: 10px;
-      font-family: 'Space Grotesk', sans-serif; font-size: 1rem; font-weight: 600;
-      text-decoration: none; border: none; cursor: pointer; transition: all 0.25s;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1rem; font-weight: 600;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all 0.25s;
     }
     .btn-glow {
-      background: linear-gradient(135deg, var(--violet), var(--magenta)); color: #fff;
+      background: linear-gradient(135deg, var(--violet), var(--magenta));
+      color: #fff;
       box-shadow: 0 0 30px rgba(139,92,246,0.3), 0 4px 15px rgba(139,92,246,0.2);
-      width: 100%; justify-content: center;
     }
     .btn-glow:hover {
       transform: translateY(-2px);
       box-shadow: 0 0 40px rgba(139,92,246,0.4), 0 8px 25px rgba(139,92,246,0.3);
     }
-    .btn-glow:disabled {
-      opacity: 0.4; cursor: not-allowed; transform: none;
-      box-shadow: none;
+    .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
-    .btn-ghost {
-      background: rgba(139,92,246,0.1); color: var(--text-bright); border: 1px solid var(--border);
+
+    .message-area {
+      margin-top: 20px;
+      font-size: 0.95rem;
+      min-height: 20px;
     }
-    .btn-ghost:hover { background: rgba(139,92,246,0.2); }
 
-    .message { margin-top: 16px; font-size: 0.9rem; text-align: center; }
-    .message.success { color: var(--green); }
-    .message.error { color: var(--magenta); }
-    .message.info { color: var(--neon); }
-
-    /* Success state */
-    .success-card { display: none; text-align: center; padding: 20px 0; }
-    .success-card.visible { display: block; }
-    .success-icon { font-size: 3rem; margin-bottom: 16px; }
-    .success-card h3 { font-size: 1.4rem; color: var(--text-bright); margin-bottom: 8px; }
-    .success-card p { color: rgba(196,181,253,0.6); margin-bottom: 24px; line-height: 1.6; }
-
-    /* No token section */
-    .no-token {
-      text-align: center; padding: 40px 0 20px;
-      border-top: 1px solid var(--border); margin-top: 40px;
+    .message-area.success {
+      color: var(--green);
     }
-    .no-token p { color: rgba(196,181,253,0.45); font-size: 0.95rem; margin-bottom: 16px; }
 
-    /* Footer */
-    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; }
-    footer .footer-links { display: flex; gap: 24px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
-    footer a { color: rgba(196,181,253,0.5); text-decoration: none; font-size: 0.9rem; }
+    .message-area.error {
+      color: var(--magenta);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+      text-align: center;
+    }
+    footer .footer-links {
+      display: flex; gap: 24px; justify-content: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    footer a {
+      color: rgba(196,181,253,0.5); text-decoration: none;
+      font-size: 0.9rem;
+    }
     footer a:hover { color: var(--neon); }
-    footer .tagline { color: rgba(196,181,253,0.25); font-size: 0.8rem; }
-
+    footer .tagline {
+      color: rgba(196,181,253,0.25);
+      font-size: 0.8rem;
+    }
     @media (max-width: 768px) {
-      .two-col { grid-template-columns: 1fr; }
-      .hero { padding: 40px 0 30px; }
-      .benefits, .form-card { padding: 24px; }
-      .nav-links { gap: 2px; }
-      .nav-links a { padding: 6px 10px; font-size: 0.8rem; }
+      .form-card { padding: 30px 20px; }
+      .form-card h1 { font-size: 1.8rem; }
+      .form-card p { font-size: 0.9rem; }
     }
   </style>
 </head>
 <body>
-  <div class="bg-mesh"><div class="bg-orb"></div><div class="bg-orb"></div><div class="bg-orb"></div></div>
+  <!-- Background effects -->
+  <div class="bg-mesh">
+    <div class="bg-orb"></div>
+    <div class="bg-orb"></div>
+    <div class="bg-orb"></div>
+  </div>
   <div class="bg-grid"></div>
 
   <div class="container">
+    <!-- Nav -->
     <nav>
-      <a href="/nexal/" class="logo">NEXAL</a>
+      <a href="/" class="logo">NEXAL</a>
       <div class="nav-links">
         <a href="/nexal/explore.html">Explorer</a>
-        <a href="/nexal/getting-started.html">Get Started</a>
+        <a href="/nexal/index.html#quickstart">Get Started</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
         <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
       </div>
     </nav>
 
-    <div class="hero">
-      <h1>Join the <span class="gradient">Federation</span></h1>
-      <p>Redeem your invite token to set up a managed hub on the Manifold mesh.</p>
-    </div>
-
-    <div class="two-col">
-      <!-- Benefits -->
-      <div class="benefits">
-        <h2>What Your Token Unlocks</h2>
-        <div class="benefit-item">
-          <div class="benefit-icon">🏠</div>
-          <div>
-            <h4>Managed Hub</h4>
-            <p>Your own hub on the federation, hosted and maintained. No setup required.</p>
-          </div>
-        </div>
-        <div class="benefit-item">
-          <div class="benefit-icon">🌐</div>
-          <div>
-            <h4>Full Mesh Access</h4>
-            <p>Your agents discover and collaborate with every agent across all federated hubs.</p>
-          </div>
-        </div>
-        <div class="benefit-item">
-          <div class="benefit-icon">⚡</div>
-          <div>
-            <h4>Priority Routing</h4>
-            <p>Managed hubs get priority message routing and lower latency across the mesh.</p>
-          </div>
-        </div>
-        <div class="benefit-item">
-          <div class="benefit-icon">📊</div>
-          <div>
-            <h4>Dashboard &amp; Analytics</h4>
-            <p>Monitor your agents, track capability usage, and see mesh-wide coordination in real time.</p>
-          </div>
-        </div>
-        <div class="benefit-item">
-          <div class="benefit-icon">🔒</div>
-          <div>
-            <h4>Access Control</h4>
-            <p>Define who can connect to your hub, manage agent permissions, set custom policies.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Redeem form -->
-      <div class="form-card" id="redeemForm">
-        <h2>🔑 Redeem Token</h2>
-        <p>Enter the invite token you received.</p>
-        <form id="invite-form">
-          <div class="form-group">
-            <label for="invite-token">Invite Token</label>
-            <div class="token-input-wrap">
-              <input type="text" id="invite-token" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false" maxlength="19">
-              <span class="format-hint">4-4-4-4</span>
-            </div>
-            <div class="sublabel" id="token-status">Format: XXXX-XXXX-XXXX-XXXX</div>
-          </div>
-          <button type="submit" class="btn btn-glow" id="redeem-btn">Redeem Token</button>
-          <div id="form-message" class="message"></div>
+    <!-- Main Content -->
+    <div class="content-wrapper">
+      <div class="form-card">
+        <h1>Redeem Your Invite Token</h1>
+        <p>Enter your unique invite token below to get access to a managed hub and dashboard.</p>
+        <form id="inviteForm" class="invite-form">
+          <input type="text" id="inviteToken" placeholder="Enter your invite token" required>
+          <button type="submit" class="btn btn-glow" id="redeemButton">Redeem Token</button>
         </form>
-      </div>
-
-      <!-- Success state -->
-      <div class="form-card success-card" id="successCard">
-        <div class="success-icon">🎉</div>
-        <h3>Welcome to the Federation!</h3>
-        <p>Your hub is being provisioned. You'll be redirected to setup in a moment.</p>
-        <a href="/nexal/getting-started.html" class="btn btn-ghost">Go to Getting Started →</a>
+        <div id="messageArea" class="message-area"></div>
       </div>
     </div>
 
-    <div class="no-token">
-      <p>Don't have a token? You can still connect agents directly — no hub required.</p>
-      <a href="/nexal/bring-agent.html" class="btn btn-ghost">Bring Your Agent →</a>
-    </div>
-
+    <!-- Footer -->
     <footer>
       <div class="footer-links">
-        <a href="https://github.com/stellamariesays/Manifold">GitHub</a>
         <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/index.html#quickstart">Get Started</a>
         <a href="/nexal/bring-agent.html">Bring Agent</a>
         <a href="/nexal/docs.html">API Docs</a>
-        <a href="/nexal/getting-started.html">Get Started</a>
+        <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
       </div>
-      <p class="tagline">Manifold Federation — Where AI Agents Meet</p>
+      <p class="tagline">NEXAL is an open initiative by Manifold Federation.</p>
     </footer>
   </div>
 
   <script>
-    const input = document.getElementById('invite-token');
-    const status = document.getElementById('token-status');
-    const form = document.getElementById('invite-form');
-    const msg = document.getElementById('form-message');
-    const btn = document.getElementById('redeem-btn');
-    const redeemForm = document.getElementById('redeemForm');
-    const successCard = document.getElementById('successCard');
+    document.getElementById('inviteForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const inviteToken = document.getElementById('inviteToken').value;
+      const messageArea = document.getElementById('messageArea');
+      const redeemButton = document.getElementById('redeemButton');
 
-    // Auto-format as XXXX-XXXX-XXXX-XXXX
-    input.addEventListener('input', () => {
-      let v = input.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
-      let formatted = v.match(/.{1,4}/g)?.join('-') || v;
-      input.value = formatted;
-
-      const valid = /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(formatted);
-      if (v.length === 0) {
-        input.classList.remove('valid', 'invalid');
-        status.textContent = 'Format: XXXX-XXXX-XXXX-XXXX';
-        status.style.color = '';
-      } else if (valid) {
-        input.classList.add('valid');
-        input.classList.remove('invalid');
-        status.textContent = '✓ Valid format';
-        status.style.color = 'var(--green)';
-      } else {
-        input.classList.remove('valid');
-        input.classList.add('invalid');
-        status.textContent = `${v.length}/16 characters`;
-        status.style.color = 'var(--magenta)';
-      }
-    });
-
-    // Paste handling — clean and reformat
-    input.addEventListener('paste', (e) => {
-      e.preventDefault();
-      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 16);
-      input.value = pasted.match(/.{1,4}/g)?.join('-') || pasted;
-      input.dispatchEvent(new Event('input'));
-    });
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const token = input.value.trim();
-      msg.textContent = '';
-      msg.className = 'message';
-
-      if (!token) {
-        msg.textContent = 'Please enter an invite token.';
-        msg.classList.add('error');
-        return;
-      }
-
-      btn.disabled = true;
-      btn.textContent = 'Redeeming…';
-      msg.textContent = 'Verifying your token…';
-      msg.classList.add('info');
+      messageArea.textContent = '';
+      messageArea.className = 'message-area';
+      redeemButton.disabled = true;
+      redeemButton.textContent = 'Redeeming...';
 
       try {
-        const res = await fetch('/public/invites/redeem', {
+        // Mock API call for now. Replace with actual API endpoint later.
+        // The prompt states "Caddy proxies API routes to localhost:8767 (REST)"
+        // So, a POST to /api/invite/redeem could be mapped to localhost:8767/invite/redeem
+        const response = await fetch('/public/invites/redeem', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token: inviteToken }),
         });
-        const data = await res.json();
 
-        if (res.ok && data.success) {
-          msg.textContent = '';
-          redeemForm.style.display = 'none';
-          successCard.classList.add('visible');
-          const redirect = data.redirect || '/nexal/getting-started.html';
-          setTimeout(() => { window.location.href = redirect; }, 2500);
+        const data = await response.json();
+
+        if (response.ok) {
+          messageArea.classList.add('success');
+          messageArea.innerHTML = `Token redeemed successfully! Your hub is being provisioned. <a href="/nexal/getting-started.html" style="color:var(--cyan);">Get started here</a>.`;
         } else {
-          msg.textContent = data.error || data.message || 'Invalid or expired token.';
-          msg.classList.add('error');
-          btn.disabled = false;
-          btn.textContent = 'Redeem Token';
+          messageArea.classList.add('error');
+          messageArea.textContent = data.message || 'Failed to redeem token. Please try again or check your token.';
         }
-      } catch (err) {
-        console.error('Redeem error:', err);
-        msg.textContent = 'Could not reach the federation server. The invite API may not be deployed yet — check back soon!';
-        msg.classList.add('error');
-        btn.disabled = false;
-        btn.textContent = 'Redeem Token';
+      } catch (error) {
+        console.error('Error:', error);
+        messageArea.classList.add('error');
+        messageArea.textContent = 'An unexpected error occurred. Please try again later.';
+      } finally {
+        redeemButton.disabled = false;
+        redeemButton.textContent = 'Redeem Token';
       }
     });
-
-    // Live validation against backend when format is valid
-    let validateTimer;
-    input.addEventListener('input', () => {
-      clearTimeout(validateTimer);
-      const val = input.value.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
-      // Only validate backend for seed tokens or XXXX-XXXX format
-      if (/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(val) || /^[A-Z]+-[A-Z0-9]+-[A-Z]+/.test(val)) {
-        validateTimer = setTimeout(async () => {
-          try {
-            const res = await fetch(`/public/invites/${encodeURIComponent(val)}`);
-            const data = await res.json();
-            if (data.valid) {
-              status.textContent = `✓ Valid — ${data.usesRemaining} uses remaining`;
-              status.style.color = 'var(--green)';
-              input.classList.add('valid');
-              input.classList.remove('invalid');
-            } else if (data.reason === 'expired') {
-              status.textContent = '✗ Token expired';
-              status.style.color = 'var(--magenta)';
-              input.classList.remove('valid'); input.classList.add('invalid');
-            } else if (data.reason === 'max_uses_reached') {
-              status.textContent = '✗ Token fully redeemed';
-              status.style.color = 'var(--magenta)';
-              input.classList.remove('valid'); input.classList.add('invalid');
-            }
-          } catch (e) { /* backend unreachable, format check is enough */ }
-        }, 600);
-      }
-    });
-
-    // Pre-fill from URL param
-    const urlToken = new URLSearchParams(location.search).get('token');
-    if (urlToken) {
-      input.value = urlToken.toUpperCase();
-      input.dispatchEvent(new Event('input'));
-    }
   </script>
 </body>
 </html>

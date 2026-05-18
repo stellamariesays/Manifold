@@ -31,7 +31,8 @@ import { registerPublicMeshRoutes } from './routes/mesh.js'
 import { buildAdminRouter } from './routes/admin.js'
 import { buildMeshletRouter } from './routes/meshlet.js'
 import { buildChatRouter } from './routes/chat.js'
-import { buildInviteRouter } from './routes/invites.js'
+import { buildInviteRouter, invites as inviteStore } from './routes/invites.js'
+import { buildPublicRegisterRouter } from './routes/public-register.js'
 import type { MeshletManager } from './meshlet-manager.js'
 
 export interface RestApiOptions {
@@ -210,6 +211,20 @@ export class RestApi {
       log: self.log.bind(self),
     })
     this.app.use('/', inviteRouter)
+
+    // Public agent registration (invite-token gated)
+    const publicRegisterRouter = buildPublicRegisterRouter({
+      hub: self.hub,
+      log: self.log.bind(self),
+      validateToken: (token: string) => {
+        const inv = inviteStore.get(token)
+        if (!inv) return { valid: false, reason: 'not_found' }
+        if (inv.expiresAt && Date.now() > inv.expiresAt) return { valid: false, reason: 'expired' }
+        if (inv.uses >= inv.maxUses) return { valid: false, reason: 'max_uses_reached' }
+        return { valid: true }
+      },
+    })
+    this.app.use('/', publicRegisterRouter)
 
     this.app.use('/', router)
   }

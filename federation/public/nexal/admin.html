@@ -3,60 +3,468 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nexal — Access Code Admin</title>
+  <title>Nexal — Admin Panel</title>
+  <meta name="description" content="Manifold Federation admin panel. Manage invite tokens and access codes.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 2rem; background: #0d1117; color: #e6edf3; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    .auth { margin-bottom: 1.5rem; }
-    input { padding: 0.4rem 0.6rem; border-radius: 4px; border: 1px solid #30363d; background: #161b22; color: #e6edf3; }
-    button { padding: 0.4rem 1rem; border-radius: 4px; border: 1px solid #30363d; background: #238636; color: #fff; cursor: pointer; }
-    button:hover { background: #2ea043; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cyan: #00e5ff; --violet: #8b5cf6; --magenta: #ec4899;
+      --green: #22d3ee; --neon: #a78bfa; --bg: #030014;
+      --surface: rgba(15,10,40,0.7); --border: rgba(139,92,246,0.2);
+      --glow-violet: rgba(139,92,246,0.15); --text: #c4b5fd;
+      --text-bright: #f0e7ff;
+    }
+    html, body {
+      width: 100%; min-height: 100vh; background: var(--bg);
+      font-family: 'Space Grotesk', sans-serif; color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    .bg-mesh { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+    .bg-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: orbFloat 20s ease-in-out infinite; }
+    .bg-orb:nth-child(1) { width: 500px; height: 500px; background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 70%); top: -10%; right: -10%; animation-duration: 25s; }
+    .bg-orb:nth-child(2) { width: 400px; height: 400px; background: radial-gradient(circle, rgba(0,229,255,0.15), transparent 70%); bottom: -10%; left: -10%; animation-duration: 30s; animation-delay: -5s; }
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -40px) scale(1.05); }
+      66% { transform: translate(-20px, 30px) scale(0.95); }
+    }
+    .container { position: relative; z-index: 1; max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; flex-wrap: wrap; gap: 8px; }
+    .logo {
+      font-size: 1.4rem; font-weight: 700; letter-spacing: 3px;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      text-decoration: none;
+    }
+    .nav-links { display: flex; gap: 4px; flex-wrap: wrap; }
+    .nav-links a {
+      color: var(--text); text-decoration: none; font-size: 0.85rem; font-weight: 500;
+      padding: 8px 14px; border-radius: 8px; transition: all 0.2s;
+    }
+    .nav-links a:hover { background: var(--glow-violet); color: var(--text-bright); }
+
+    /* Auth gate */
+    .auth-gate { text-align: center; padding: 100px 0; }
+    .auth-gate h1 { font-size: 2rem; color: var(--text-bright); margin-bottom: 12px; }
+    .auth-gate p { color: rgba(196,181,253,0.5); margin-bottom: 32px; }
+    .auth-box {
+      display: inline-flex; gap: 8px;
+    }
+    .auth-box input {
+      padding: 12px 18px; border-radius: 10px; border: 1px solid var(--border);
+      background: rgba(3,0,20,0.8); color: var(--text-bright);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; outline: none;
+      transition: border-color 0.2s; min-width: 280px;
+    }
+    .auth-box input:focus { border-color: var(--violet); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif; font-size: 0.95rem; font-weight: 600;
+      text-decoration: none; border: none; cursor: pointer; transition: all 0.25s;
+    }
+    .btn-glow {
+      background: linear-gradient(135deg, var(--violet), var(--magenta)); color: #fff;
+      box-shadow: 0 0 20px rgba(139,92,246,0.2);
+    }
+    .btn-glow:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(139,92,246,0.3); }
+    .btn-cyan {
+      background: rgba(0,229,255,0.12); color: var(--cyan); border: 1px solid rgba(0,229,255,0.25);
+    }
+    .btn-cyan:hover { background: rgba(0,229,255,0.2); }
+    .btn-ghost {
+      background: rgba(139,92,246,0.1); color: var(--text-bright); border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { background: rgba(139,92,246,0.2); }
+    .btn-sm { padding: 8px 16px; font-size: 0.85rem; }
+    .btn-danger {
+      background: rgba(236,72,153,0.1); color: var(--magenta); border: 1px solid rgba(236,72,153,0.25);
+    }
+    .btn-danger:hover { background: rgba(236,72,153,0.2); }
+
+    /* Dashboard */
+    .dashboard { display: none; }
+    .dashboard.visible { display: block; }
+    .dash-header {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 12px;
+    }
+    .dash-header h1 { font-size: 1.8rem; color: var(--text-bright); }
+
+    .stats-row {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; text-align: center; backdrop-filter: blur(20px);
+    }
+    .stat-card .num {
+      font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+      background: linear-gradient(135deg, var(--cyan), var(--neon));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .stat-card .label {
+      font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px;
+      color: rgba(196,181,253,0.4); margin-top: 4px;
+    }
+
+    /* Generate section */
+    .gen-section {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 28px; margin-bottom: 32px; backdrop-filter: blur(20px);
+    }
+    .gen-section h3 { font-size: 1.1rem; color: var(--text-bright); margin-bottom: 16px; }
+    .gen-row {
+      display: flex; gap: 12px; align-items: end; flex-wrap: wrap;
+    }
+    .gen-field { flex: 1; min-width: 200px; }
+    .gen-field label {
+      display: block; font-size: 0.8rem; font-weight: 600; color: var(--neon); margin-bottom: 6px;
+    }
+    .gen-field input, .gen-field select {
+      width: 100%; padding: 10px 14px; border-radius: 8px;
+      border: 1px solid var(--border); background: rgba(3,0,20,0.8);
+      color: var(--text-bright); font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem; outline: none;
+    }
+    .gen-field input:focus, .gen-field select:focus { border-color: var(--violet); }
+    .gen-field select { font-family: 'Space Grotesk', sans-serif; cursor: pointer; }
+    .gen-field select option { background: var(--bg); }
+    .gen-result {
+      margin-top: 16px; display: none;
+    }
+    .gen-result.visible { display: block; }
+    .gen-result .token-display {
+      background: rgba(3,0,20,0.95); border: 1px solid rgba(139,92,246,0.3);
+      border-radius: 10px; padding: 14px 18px;
+      font-family: 'JetBrains Mono', monospace; font-size: 1.1rem;
+      color: var(--green); text-align: center; letter-spacing: 2px;
+      cursor: pointer; transition: border-color 0.2s;
+    }
+    .gen-result .token-display:hover { border-color: var(--violet); }
+    .gen-result .hint {
+      text-align: center; font-size: 0.78rem; color: rgba(196,181,253,0.35); margin-top: 8px;
+    }
+
+    /* Table */
+    .table-section {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 0; backdrop-filter: blur(20px); overflow: hidden;
+    }
+    .table-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .table-header h3 { font-size: 1.1rem; color: var(--text-bright); }
     table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #21262d; font-size: 0.85rem; }
-    th { background: #161b22; position: sticky; top: 0; }
-    .status-unused { color: #3fb950; }
-    .status-used { color: #f85149; }
-    .stats { margin-bottom: 1rem; color: #8b949e; }
-    .container { max-width: 960px; margin: 0 auto; }
+    th {
+      padding: 12px 16px; text-align: left; font-size: 0.75rem;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      color: rgba(196,181,253,0.4); background: rgba(15,10,40,0.5);
+      font-weight: 600;
+    }
+    td {
+      padding: 12px 16px; font-size: 0.85rem; border-top: 1px solid rgba(139,92,246,0.08);
+      color: var(--text);
+    }
+    tr:hover td { background: rgba(139,92,246,0.05); }
+    code {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.82rem;
+      color: var(--green); background: rgba(34,211,238,0.08);
+      padding: 2px 8px; border-radius: 4px;
+    }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 99px;
+      font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge-unused { background: rgba(34,211,238,0.1); color: var(--green); border: 1px solid rgba(34,211,238,0.2); }
+    .badge-used { background: rgba(139,92,246,0.1); color: var(--neon); border: 1px solid rgba(139,92,246,0.2); }
+    .badge-expired { background: rgba(236,72,153,0.1); color: var(--magenta); border: 1px solid rgba(236,72,153,0.2); }
+    .empty-state {
+      text-align: center; padding: 40px; color: rgba(196,181,253,0.35);
+    }
+
+    .message { font-size: 0.9rem; padding: 8px 0; }
+    .message.error { color: var(--magenta); }
+    .message.success { color: var(--green); }
+
+    footer { border-top: 1px solid var(--border); padding: 40px 0; text-align: center; margin-top: 60px; }
+    footer .tagline { color: rgba(196,181,253,0.25); font-size: 0.8rem; }
+
+    @media (max-width: 768px) {
+      .gen-row { flex-direction: column; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      table { font-size: 0.8rem; }
+      th, td { padding: 8px 10px; }
+    }
   </style>
 </head>
 <body>
+  <div class="bg-mesh"><div class="bg-orb"></div><div class="bg-orb"></div></div>
+
   <div class="container">
-    <h1>🔑 Nexal Access Code Admin</h1>
-    <div class="auth">
-      <input type="password" id="apiKey" placeholder="Admin API Key" />
-      <button onclick="loadCodes()">Load Codes</button>
+    <nav>
+      <a href="/nexal/" class="logo">NEXAL</a>
+      <div class="nav-links">
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/docs.html">API Docs</a>
+        <a href="/nexal/admin.html">Admin</a>
+        <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
+      </div>
+    </nav>
+
+    <!-- Auth gate -->
+    <div class="auth-gate" id="authGate">
+      <h1>🔑 Admin Panel</h1>
+      <p>Enter your admin API key to continue.</p>
+      <div class="auth-box">
+        <input type="password" id="apiKey" placeholder="Admin API Key" autofocus>
+        <button class="btn btn-glow" onclick="authenticate()">Unlock</button>
+      </div>
+      <div id="authMsg" class="message"></div>
     </div>
-    <div class="stats" id="stats"></div>
-    <table id="codesTable" style="display:none;">
-      <thead>
-        <tr><th>Code</th><th>Username</th><th>Created</th><th>Used</th><th>Status</th></tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard">
+      <div class="dash-header">
+        <h1>Admin Panel</h1>
+        <button class="btn btn-ghost btn-sm" onclick="lock()">🔒 Lock</button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row" id="statsRow">
+        <div class="stat-card"><div class="num" id="s-total">—</div><div class="label">Total Tokens</div></div>
+        <div class="stat-card"><div class="num" id="s-unused">—</div><div class="label">Unused</div></div>
+        <div class="stat-card"><div class="num" id="s-used">—</div><div class="label">Redeemed</div></div>
+        <div class="stat-card"><div class="num" id="s-expired">—</div><div class="label">Expired</div></div>
+      </div>
+
+      <!-- Generate tokens -->
+      <div class="gen-section">
+        <h3>Generate Invite Token</h3>
+        <div class="gen-row">
+          <div class="gen-field">
+            <label>Note / Recipient</label>
+            <input type="text" id="genNote" placeholder="e.g. for @alice">
+          </div>
+          <div class="gen-field">
+            <label>TTL</label>
+            <select id="genTtl">
+              <option value="0">Never expires</option>
+              <option value="86400">24 hours</option>
+              <option value="604800">7 days</option>
+              <option value="2592000">30 days</option>
+            </select>
+          </div>
+          <div class="gen-field">
+            <label>Count</label>
+            <select id="genCount">
+              <option value="1">1 token</option>
+              <option value="5">5 tokens</option>
+              <option value="10">10 tokens</option>
+              <option value="25">25 tokens</option>
+            </select>
+          </div>
+          <button class="btn btn-cyan" onclick="generateTokens()">Generate</button>
+        </div>
+        <div id="genMsg" class="message"></div>
+        <div class="gen-result" id="genResult">
+          <div class="token-display" id="genTokenDisplay" onclick="copyGenerated()"></div>
+          <div class="hint">Click to copy · Share link: <span id="genLink"></span></div>
+        </div>
+      </div>
+
+      <!-- Token table -->
+      <div class="table-section">
+        <div class="table-header">
+          <h3>All Tokens</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadTokens()">↻ Refresh</button>
+        </div>
+        <div id="tableWrap">
+          <table>
+            <thead>
+              <tr><th>Token</th><th>Note</th><th>Created</th><th>Status</th><th>Redeemed By</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState" style="display:none;">No tokens yet. Generate one above.</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p class="tagline">Manifold Federation — Admin</p>
+    </footer>
   </div>
+
   <script>
-    async function loadCodes() {
-      const key = document.getElementById('apiKey').value;
-      const res = await fetch('/admin/codes', { headers: { 'x-api-key': key } });
-      if (!res.ok) { alert('Failed: ' + (await res.json()).error); return; }
-      const { codes, count } = await res.json();
-      const used = codes.filter(c => c.usedAt).length;
-      document.getElementById('stats').textContent = `${count} total · ${used} used · ${count - used} unused`;
-      const tbody = document.getElementById('tbody');
-      tbody.innerHTML = '';
-      for (const c of codes) {
-        const status = c.usedAt ? 'used' : 'unused';
-        tbody.innerHTML += `<tr>
-          <td><code>${c.code}</code></td>
-          <td>${c.username ?? '—'}</td>
-          <td>${c.createdAt ? new Date(c.createdAt).toLocaleString() : '—'}</td>
-          <td>${c.usedAt ? new Date(c.usedAt).toLocaleString() : '—'}</td>
-          <td class="status-${status}">${status}</td>
-        </tr>`;
+    let adminKey = '';
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    async function authenticate() {
+      adminKey = document.getElementById('apiKey').value.trim();
+      if (!adminKey) return;
+      const msg = document.getElementById('authMsg');
+      try {
+        const res = await fetch('/admin/codes', { headers: { 'x-api-key': adminKey } });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          msg.textContent = data.error || 'Authentication failed.';
+          msg.className = 'message error';
+          return;
+        }
+        document.getElementById('authGate').style.display = 'none';
+        document.getElementById('dashboard').classList.add('visible');
+        await loadTokens();
+      } catch (e) {
+        msg.textContent = 'Cannot reach server.';
+        msg.className = 'message error';
       }
-      document.getElementById('codesTable').style.display = 'table';
     }
+
+    function lock() {
+      adminKey = '';
+      document.getElementById('apiKey').value = '';
+      document.getElementById('authGate').style.display = '';
+      document.getElementById('dashboard').classList.remove('visible');
+    }
+
+    async function loadTokens() {
+      try {
+        const res = await fetch('/admin/codes', { headers: { 'x-api-key': adminKey } });
+        if (!res.ok) return;
+        const { codes, count } = await res.json();
+
+        const unused = codes.filter(c => !c.usedAt && !c.expired).length;
+        const used = codes.filter(c => c.usedAt).length;
+        const expired = codes.filter(c => c.expired && !c.usedAt).length;
+
+        document.getElementById('s-total').textContent = count;
+        document.getElementById('s-unused').textContent = unused;
+        document.getElementById('s-used').textContent = used;
+        document.getElementById('s-expired').textContent = expired;
+
+        const tbody = document.getElementById('tbody');
+        const empty = document.getElementById('emptyState');
+
+        if (!codes.length) {
+          tbody.innerHTML = '';
+          empty.style.display = '';
+          return;
+        }
+        empty.style.display = 'none';
+
+        // Sort: unused first, then by creation date desc
+        const sorted = [...codes].sort((a, b) => {
+          if (a.usedAt && !b.usedAt) return 1;
+          if (!a.usedAt && b.usedAt) return -1;
+          return (new Date(b.createdAt) - new Date(a.createdAt));
+        });
+
+        tbody.innerHTML = sorted.map(c => {
+          let statusBadge;
+          if (c.usedAt) statusBadge = '<span class="badge badge-used">Redeemed</span>';
+          else if (c.expired) statusBadge = '<span class="badge badge-expired">Expired</span>';
+          else statusBadge = '<span class="badge badge-unused">Active</span>';
+
+          const redeemedBy = c.username ? esc(c.username) : '—';
+          const created = c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—';
+          const note = c.note ? esc(c.note) : '—';
+
+          return `<tr>
+            <td><code>${esc(c.code)}</code></td>
+            <td>${note}</td>
+            <td>${created}</td>
+            <td>${statusBadge}</td>
+            <td>${redeemedBy}</td>
+            <td>${!c.usedAt ? `<button class="btn btn-danger btn-sm" onclick="revokeToken('${esc(c.code)}')">Revoke</button>` : ''}</td>
+          </tr>`;
+        }).join('');
+      } catch (e) {
+        console.error('Load tokens error:', e);
+      }
+    }
+
+    async function generateTokens() {
+      const note = document.getElementById('genNote').value.trim();
+      const ttl = parseInt(document.getElementById('genTtl').value);
+      const count = parseInt(document.getElementById('genCount').value);
+      const msg = document.getElementById('genMsg');
+      const result = document.getElementById('genResult');
+
+      msg.textContent = '';
+
+      try {
+        const res = await fetch('/admin/codes/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': adminKey },
+          body: JSON.stringify({ count, ttl, note })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          msg.textContent = data.error || 'Generation failed.';
+          msg.className = 'message error';
+          return;
+        }
+
+        const tokens = data.codes || data.tokens || [data.code];
+        msg.textContent = `Generated ${tokens.length} token${tokens.length > 1 ? 's' : ''}.`;
+        msg.className = 'message success';
+
+        // Show first token prominently
+        const first = tokens[0];
+        document.getElementById('genTokenDisplay').textContent = first;
+        document.getElementById('genLink').textContent = `https://nexal.network/nexal/invite.html?token=${first}`;
+        result.classList.add('visible');
+
+        if (tokens.length > 1) {
+          // Store all tokens for copy
+          result.dataset.tokens = tokens.join('\n');
+        } else {
+          result.dataset.tokens = first;
+        }
+
+        await loadTokens();
+      } catch (e) {
+        msg.textContent = 'Cannot reach server. The admin API may not be deployed yet.';
+        msg.className = 'message error';
+      }
+    }
+
+    function copyGenerated() {
+      const tokens = document.getElementById('genResult').dataset.tokens || document.getElementById('genTokenDisplay').textContent;
+      navigator.clipboard.writeText(tokens).then(() => {
+        const display = document.getElementById('genTokenDisplay');
+        const orig = display.textContent;
+        display.textContent = 'Copied!';
+        setTimeout(() => { display.textContent = orig; }, 1500);
+      });
+    }
+
+    async function revokeToken(code) {
+      if (!confirm(`Revoke token ${code}? This cannot be undone.`)) return;
+      try {
+        const res = await fetch(`/admin/codes/${code}/revoke`, {
+          method: 'POST',
+          headers: { 'x-api-key': adminKey }
+        });
+        if (res.ok) await loadTokens();
+        else alert('Revoke failed.');
+      } catch (e) {
+        alert('Cannot reach server.');
+      }
+    }
+
+    // Enter key on auth
+    document.getElementById('apiKey').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') authenticate();
+    });
   </script>
 </body>
 </html>
