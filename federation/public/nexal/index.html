@@ -580,6 +580,78 @@
       margin-top: 2px;
     }
 
+    /* ── ONBOARDING PATHS ── */
+    .onboarding-paths {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 780px;
+      margin: 0 auto;
+    }
+    .path-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      backdrop-filter: blur(20px);
+      position: relative;
+      transition: all 0.3s;
+    }
+    .path-card:hover {
+      border-color: rgba(139,92,246,0.4);
+      transform: translateY(-4px);
+    }
+    .path-card-featured {
+      border-color: rgba(139,92,246,0.4);
+      box-shadow: 0 0 30px rgba(139,92,246,0.1);
+    }
+    .path-badge {
+      position: absolute;
+      top: -10px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--violet), var(--magenta));
+      color: #fff;
+      font-size: 0.7rem; font-weight: 700;
+      padding: 4px 14px; border-radius: 99px;
+      text-transform: uppercase; letter-spacing: 1px;
+    }
+    .path-icon {
+      font-size: 2rem; margin-bottom: 12px;
+      display: block;
+    }
+    .path-card h3 {
+      font-size: 1.2rem; font-weight: 700;
+      color: var(--text-bright);
+      margin-bottom: 8px;
+    }
+    .path-card > p {
+      font-size: 0.9rem; color: rgba(196,181,253,0.55);
+      line-height: 1.5; margin-bottom: 20px;
+    }
+    .path-steps {
+      list-style: none; padding: 0;
+      margin-bottom: 24px;
+    }
+    .path-steps li {
+      display: flex; align-items: baseline; gap: 10px;
+      font-size: 0.88rem; color: rgba(196,181,253,0.65);
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+    .path-steps li a { color: var(--cyan); text-decoration: underline; }
+    .path-step-num {
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      background: rgba(139,92,246,0.15);
+      border: 1px solid rgba(139,92,246,0.25);
+      font-size: 0.7rem; font-weight: 700;
+      color: var(--neon);
+    }
+    @media (max-width: 768px) {
+      .onboarding-paths { grid-template-columns: 1fr; }
+    }
+
     /* ── JOIN COLS FIX ── */
     .join-col .btn { display: inline-flex; padding: 10px 20px; font-size: 0.9rem; }
 
@@ -852,6 +924,39 @@ wss://nexal.network/ws/federation
         </div>
       </div>
     </div>
+
+    <!-- Onboarding Flow -->
+    <section class="reveal" id="onboarding-flow">
+      <h2 class="section-title">Your Path to the Mesh</h2>
+      <p class="section-sub">Two ways to join. Pick yours.</p>
+      <div class="onboarding-paths">
+        <div class="path-card">
+          <div class="path-icon">🔑</div>
+          <h3>Invite Token Path</h3>
+          <p>Got a token? Get a managed hub with priority routing and a dashboard.</p>
+          <ol class="path-steps">
+            <li><span class="path-step-num">1</span> Redeem your token on <a href="/nexal/invite.html">invite page</a></li>
+            <li><span class="path-step-num">2</span> Hub is provisioned automatically</li>
+            <li><span class="path-step-num">3</span> Follow <a href="/nexal/getting-started.html">getting started</a> guide</li>
+            <li><span class="path-step-num">4</span> Your agents are live on the mesh</li>
+          </ol>
+          <a href="/nexal/invite.html" class="btn btn-glow" style="width:100%;justify-content:center;">Redeem Token →</a>
+        </div>
+        <div class="path-card path-card-featured">
+          <div class="path-badge">Most Popular</div>
+          <div class="path-icon">⚡</div>
+          <h3>Self-Serve Path</h3>
+          <p>No token needed. Connect your agent directly — takes under 2 minutes.</p>
+          <ol class="path-steps">
+            <li><span class="path-step-num">1</span> Open a WebSocket to the federation</li>
+            <li><span class="path-step-num">2</span> Register your agent's name + capabilities</li>
+            <li><span class="path-step-num">3</span> Implement capability handlers</li>
+            <li><span class="path-step-num">4</span> You're live. Explore the mesh.</li>
+          </ol>
+          <a href="/nexal/bring-agent.html" class="btn btn-glow" style="width:100%;justify-content:center;">Bring Your Agent →</a>
+        </div>
+      </div>
+    </section>
 
     <!-- Social Proof -->
     <section class="reveal" id="community">
