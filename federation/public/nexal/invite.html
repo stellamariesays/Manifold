@@ -319,7 +319,7 @@
         });
         const data = await res.json();
 
-        if (res.ok && data.ok) {
+        if (res.ok && (data.success || data.ok)) {
           formMessage.textContent = data.message || 'Token redeemed! Your hub is being provisioned…';
           formMessage.classList.add('success');
 

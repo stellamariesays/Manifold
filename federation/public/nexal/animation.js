@@ -4,10 +4,6 @@
  *
  * Exports: animate, animateDataHighways, createDataPulse
  *
- * Imports fog-behaviors.js for the pluggable fog behavior system.
- * Use registerFogBehavior() / unregisterFogBehavior() from fog-behaviors.js
- * to add new fog motion behaviors without touching this file.
- *
  * Reads scene state via proper exports from scene.js (getScene, getCamera,
  * getRenderer) — no window._renderer / window._camera / window._scene globals.
  *
@@ -18,8 +14,6 @@
  */
 import * as THREE from 'three';
 import { CONSTRAINT_CONFIG, agentGroups, getScene, getCamera, getRenderer } from './scene.js';
-import { runFogBehaviors } from './fog-behaviors.js';
-import { getHubOrbitPosition, getHubOrbitParams } from './hub-orbits.js';
 
 // Global frame counter (read by animateDataHighways)
 let animationFrame = 0;
@@ -28,34 +22,28 @@ export function animate() {
   requestAnimationFrame(animate);
   animationFrame++;
 
+  const scene = getScene();
+  const camera = getCamera();
+  const renderer = getRenderer();
   const elapsed = performance.now() / 1000;
+
+  if (!scene || !camera || !renderer) return;
 
   // Animate agents and hub centers
   agentGroups.forEach((group, idx) => {
     const userData = group.userData;
 
     if (userData && userData.isHubCenter && userData.isOrbitingHub) {
-      const hubName = userData.hubName;
+      const orbitTime = elapsed * userData.orbitSpeed;
+      const currentAngle = userData.orbitAngle + orbitTime;
 
-      // Use polymorphic orbit if params registered, else fall back to legacy circle
-      const orbitPos = getHubOrbitParams(hubName)
-        ? getHubOrbitPosition(hubName, elapsed)
-        : (() => {
-            const orbitTime = elapsed * userData.orbitSpeed;
-            const currentAngle = userData.orbitAngle + orbitTime;
-            return new THREE.Vector3(
-              Math.cos(currentAngle) * userData.orbitRadius,
-              userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2,
-              Math.sin(currentAngle) * userData.orbitRadius,
-            );
-          })();
-
-      const orbitalX = orbitPos.x;
-      const orbitalY = orbitPos.y;
-      const orbitalZ = orbitPos.z;
+      const orbitalX = Math.cos(currentAngle) * userData.orbitRadius;
+      const orbitalZ = Math.sin(currentAngle) * userData.orbitRadius;
+      const orbitalY = userData.orbitHeight + Math.sin(elapsed * 0.3 + idx) * 0.2;
 
       group.position.set(orbitalX, orbitalY, orbitalZ);
 
+      const hubName = userData.hubName;
       if (window._dataHighways && window._dataHighways.hubCenters[hubName]) {
         window._dataHighways.hubCenters[hubName] = new THREE.Vector3(orbitalX, orbitalY, orbitalZ);
       }
@@ -93,6 +81,17 @@ export function animate() {
     window._centralSphere.rotation.y += 0.003;
     window._centralSphere.rotation.x += 0.001;
   }
+
+  // Animate pulsing hub rings
+  scene.traverse((child) => {
+    if (child.userData && child.userData.type === 'hub-ring') {
+      const phase = child.userData.pulsePhase || 0;
+      const pulseFactor = 0.8 + Math.sin(elapsed * 1.5 + phase) * 0.4;
+      child.scale.setScalar(pulseFactor);
+      child.material.opacity = 0.15 + Math.sin(elapsed * 1.5 + phase) * 0.25;
+      child.lookAt(camera.position);
+    }
+  });
 
   // Animate constraint network physics
   if (window._constraintSystem) {
@@ -165,21 +164,6 @@ export function animate() {
       system.group.scale.setScalar(system.currentScale);
     }
 
-    // Sync hubPositions from live orbiting hub meshes each frame
-    {
-      const liveHubs = agentGroups.filter(g => g.userData && g.userData.isOrbitingHub);
-      if (liveHubs.length > 0) {
-        system.hubPositions.forEach(hp => {
-          const live = liveHubs.find(g => g.userData.hubName === hp.name);
-          if (live) {
-            const worldPos = new THREE.Vector3();
-            live.getWorldPosition(worldPos);
-            hp.position.copy(worldPos);
-          }
-        });
-      }
-    }
-
     // Particle emission
     if (CONSTRAINT_CONFIG.particleEmissions && system.hubPositions.length > 0 && !system.introAnimation) {
       const currentTime = performance.now();
@@ -211,39 +195,6 @@ export function animate() {
           const particleMesh = new THREE.Mesh(particleGeometry, particleMaterial);
           particleMesh.position.copy(system.group.position);
 
-          // Streamer trail
-          const TRAIL_LENGTH = 24;
-          const trailPositions = new Float32Array(TRAIL_LENGTH * 3);
-          const trailOpacities = new Float32Array(TRAIL_LENGTH);
-          const trailGeo = new THREE.BufferGeometry();
-          trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-          // Per-vertex color for fade: encode alpha via vertex colors (r=1,g=1,b=1, a via material opacity hack)
-          // We use a simple LineBasicMaterial and update opacity per-segment by rebuilding as short segments
-          // Simpler: use a single Line with vertexColors to fade tip → tail
-          const trailColors = new Float32Array(TRAIL_LENGTH * 3);
-          trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
-          const trailMat = new THREE.LineBasicMaterial({
-            vertexColors: true,
-            transparent: true,
-            opacity: 0.7,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-          });
-          const trailLine = new THREE.Line(trailGeo, trailMat);
-          // Seed all trail points at start position
-          const sp = system.group.position;
-          for (let ti = 0; ti < TRAIL_LENGTH; ti++) {
-            trailPositions[ti * 3]     = sp.x;
-            trailPositions[ti * 3 + 1] = sp.y;
-            trailPositions[ti * 3 + 2] = sp.z;
-          }
-          trailGeo.attributes.position.needsUpdate = true;
-
-          // Decode color to RGB floats for trail
-          const tr = ((particleColor >> 16) & 0xff) / 255;
-          const tg = ((particleColor >>  8) & 0xff) / 255;
-          const tb = ( particleColor        & 0xff) / 255;
-
           const particle = {
             mesh: particleMesh,
             startPos: system.group.position.clone(),
@@ -252,19 +203,10 @@ export function animate() {
             speed: CONSTRAINT_CONFIG.particleSpeed,
             targetHubIndex,
             isThefog: targetHub.isThefog,
-            // Trail state
-            trailLine,
-            trailGeo,
-            trailPositions,
-            trailColors,
-            trailLength: TRAIL_LENGTH,
-            trailR: tr, trailG: tg, trailB: tb,
-            trailHead: 0,   // ring-buffer head index
           };
 
           system.particles.push(particle);
           system.particleGroup.add(particleMesh);
-          system.particleGroup.add(trailLine);
         }
 
         // Stretch effects
@@ -302,45 +244,9 @@ export function animate() {
         particle.progress += particle.speed;
         if (particle.progress >= 1.0) {
           system.particleGroup.remove(particle.mesh);
-          if (particle.trailLine) system.particleGroup.remove(particle.trailLine);
           return false;
         }
         particle.mesh.position.lerpVectors(particle.startPos, particle.targetPos, particle.progress);
-
-        // Update ring-buffer trail
-        if (particle.trailLine) {
-          const N   = particle.trailLength;
-          const pos = particle.trailPositions;
-          const col = particle.trailColors;
-          const cur = particle.mesh.position;
-          const head = particle.trailHead;
-
-          // Write current position at head
-          pos[head * 3]     = cur.x;
-          pos[head * 3 + 1] = cur.y;
-          pos[head * 3 + 2] = cur.z;
-          particle.trailHead = (head + 1) % N;
-
-          // Rebuild line in order: newest → oldest
-          const orderedPos = new Float32Array(N * 3);
-          const orderedCol = new Float32Array(N * 3);
-          for (let i = 0; i < N; i++) {
-            const src = ((particle.trailHead - 1 - i + N) % N);
-            orderedPos[i * 3]     = pos[src * 3];
-            orderedPos[i * 3 + 1] = pos[src * 3 + 1];
-            orderedPos[i * 3 + 2] = pos[src * 3 + 2];
-            // Fade: index 0 (head/brightest) → index N-1 (tail/gone)
-            const fade = Math.pow(1 - i / N, 1.8);
-            orderedCol[i * 3]     = particle.trailR * fade;
-            orderedCol[i * 3 + 1] = particle.trailG * fade;
-            orderedCol[i * 3 + 2] = particle.trailB * fade;
-          }
-          particle.trailGeo.attributes.position.array.set(orderedPos);
-          particle.trailGeo.attributes.color.array.set(orderedCol);
-          particle.trailGeo.attributes.position.needsUpdate = true;
-          particle.trailGeo.attributes.color.needsUpdate = true;
-        }
-
         return true;
       });
     }
@@ -487,10 +393,6 @@ export function animate() {
     }
   }
 
-  // Run polymorphic fog behaviors (e.g. follow-hub-centroid)
-  // Must run after hub positions are updated above.
-  runFogBehaviors(elapsed);
-
   animateDataHighways(elapsed);
 
   // Spider web waves
@@ -519,9 +421,6 @@ export function animate() {
 
   if (window.cameraControls) window.cameraControls.update();
 
-  const renderer = getRenderer();
-  const camera = getCamera();
-  const scene = getScene();
   renderer.render(scene, camera);
 }
 
@@ -533,7 +432,7 @@ export function animateDataHighways(elapsed) {
 
   const currentTime = performance.now();
 
-  if (currentTime - highways.lastPulseTime > 6000) {
+  if (currentTime - highways.lastPulseTime > 2000) {
     highways.lastPulseTime = currentTime;
 
     const highPressureCapabilities = window._meshData.darkCircles
@@ -545,11 +444,10 @@ export function animateDataHighways(elapsed) {
       const color = highways.capabilityColors[capType] || highways.capabilityColors.default;
       const hubPressures = Object.entries(capability.byHub).sort((a, b) => b[1] - a[1]);
       if (hubPressures.length >= 2) {
-        // Randomly flip direction so pulses travel both ways
-        const [hubA, hubB] = Math.random() < 0.5
-          ? [hubPressures[0][0], hubPressures[1][0]]
-          : [hubPressures[1][0], hubPressures[0][0]];
-        createDataPulse(hubA, hubB, color, capability.pressure, capability.name);
+        const sourceHub = hubPressures[0][0];
+        const destHub = hubPressures[1][0];
+        console.log(`Data highway: Creating pulse ${capability.name} (${capability.pressure.toFixed(2)}) ${sourceHub} → ${destHub}`);
+        createDataPulse(sourceHub, destHub, color, capability.pressure, capability.name);
       }
     });
   }
@@ -610,36 +508,6 @@ export function animateDataHighways(elapsed) {
           }
         }
 
-        // Update streamer trail
-        if (connection.trailLine) {
-          const N    = connection.trailN;
-          const pos  = connection.trailPos;
-          const col  = connection.trailCol;
-          const head = connection.trailHead;
-
-          pos[head * 3]     = currentPos.x;
-          pos[head * 3 + 1] = currentPos.y;
-          pos[head * 3 + 2] = currentPos.z;
-          connection.trailHead = (head + 1) % N;
-
-          const ordered = new Float32Array(N * 3);
-          const ordCol  = new Float32Array(N * 3);
-          for (let i = 0; i < N; i++) {
-            const src = ((connection.trailHead - 1 - i + N) % N);
-            ordered[i * 3]     = pos[src * 3];
-            ordered[i * 3 + 1] = pos[src * 3 + 1];
-            ordered[i * 3 + 2] = pos[src * 3 + 2];
-            const fade = Math.pow(1 - i / N, 1.8);
-            ordCol[i * 3]     = connection.trailR * fade;
-            ordCol[i * 3 + 1] = connection.trailG * fade;
-            ordCol[i * 3 + 2] = connection.trailB * fade;
-          }
-          connection.trailGeo.attributes.position.array.set(ordered);
-          connection.trailGeo.attributes.color.array.set(ordCol);
-          connection.trailGeo.attributes.position.needsUpdate = true;
-          connection.trailGeo.attributes.color.needsUpdate    = true;
-        }
-
         if (Math.abs(currentPos.y + 2.5) < 1.0) {
           _lightUpWebSegments(currentPos, connection.color, connection.intensity);
         }
@@ -649,18 +517,12 @@ export function animateDataHighways(elapsed) {
         if (connection.pulseSphere && connection.pulseSphere.parent) {
           connection.pulseSphere.parent.remove(connection.pulseSphere);
         }
-        if (connection.trailLine && connection.trailLine.parent) {
-          connection.trailLine.parent.remove(connection.trailLine);
-        }
         return false;
       }
       return true;
     } else {
       if (connection.pulseSphere && connection.pulseSphere.parent) {
         connection.pulseSphere.parent.remove(connection.pulseSphere);
-      }
-      if (connection.trailLine && connection.trailLine.parent) {
-        connection.trailLine.parent.remove(connection.trailLine);
       }
       return false;
     }
@@ -749,7 +611,7 @@ export function createDataPulse(sourceHub, destHub, color, pressure, capabilityN
   }
 
   const pulseGeometry = new THREE.SphereGeometry(0.3, 8, 6);
-  const pulseMaterial = new THREE.MeshPhongMaterial({
+  const pulseMaterial = new THREE.MeshBasicMaterial({
     color, transparent: true, opacity: 0.95,
     emissive: new THREE.Color(color),
     emissiveIntensity: 0.8 * (window.mobileBrightnessBoost || 1.0),
@@ -758,29 +620,9 @@ export function createDataPulse(sourceHub, destHub, color, pressure, capabilityN
   const pulseSphere = new THREE.Mesh(pulseGeometry, pulseMaterial);
   getScene().add(pulseSphere);
 
-  // Streamer trail for this pulse
-  const TRAIL_N = 30;
-  const trailPos = new Float32Array(TRAIL_N * 3);
-  const trailCol = new Float32Array(TRAIL_N * 3);
-  const trailGeo = new THREE.BufferGeometry();
-  trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
-  trailGeo.setAttribute('color',    new THREE.BufferAttribute(trailCol, 3));
-  const trailMat = new THREE.LineBasicMaterial({
-    vertexColors: true, transparent: true, opacity: 0.6,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const trailLine = new THREE.Line(trailGeo, trailMat);
-  getScene().add(trailLine);
-
-  // Decode color to floats
-  const tc = new THREE.Color(color);
-
   highways.connections.push({
     line: null,
     pulseSphere,
-    trailLine, trailGeo, trailPos, trailCol,
-    trailN: TRAIL_N, trailHead: 0,
-    trailR: tc.r, trailG: tc.g, trailB: tc.b,
     webPath,
     pathPoints,
     progress: 0.0,
