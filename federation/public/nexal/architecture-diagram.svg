@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" font-family="'Share Tech Mono', 'Courier New', monospace">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0a1628"/>
+      <stop offset="100%" stop-color="#050d1a"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="lineGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="600" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="400" y="40" text-anchor="middle" fill="#00e5ff" font-size="20" font-weight="bold" filter="url(#glow)">MANIFOLD FEDERATION</text>
+  <text x="400" y="60" text-anchor="middle" fill="#667788" font-size="12">22 agents • 40 capabilities • 4 hubs • real-time mesh</text>
+
+  <!-- Connection lines (behind hubs) -->
+  <!-- HOG ↔ Nexal -->
+  <line x1="200" y1="200" x2="600" y2="200" stroke="#00e5ff" stroke-width="1.5" opacity="0.4" filter="url(#lineGlow)"/>
+  <text x="400" y="190" text-anchor="middle" fill="#00e5ff" font-size="9" opacity="0.6">WebSocket / gossip</text>
+
+  <!-- HOG ↔ satelliteA -->
+  <line x1="200" y1="200" x2="200" y2="440" stroke="#00ff88" stroke-width="1.5" opacity="0.4" filter="url(#lineGlow)"/>
+  <text x="140" y="320" text-anchor="middle" fill="#00ff88" font-size="9" opacity="0.6" transform="rotate(-90,140,320)">delta sync</text>
+
+  <!-- Nexal ↔ TheFog -->
+  <line x1="600" y1="200" x2="600" y2="440" stroke="#8800ff" stroke-width="1.5" opacity="0.4" filter="url(#lineGlow)"/>
+
+  <!-- satelliteA ↔ TheFog -->
+  <line x1="200" y1="440" x2="600" y2="440" stroke="#ff6600" stroke-width="1.5" opacity="0.4" filter="url(#lineGlow)"/>
+  <text x="400" y="470" text-anchor="middle" fill="#ff6600" font-size="9" opacity="0.6">capability propagation</text>
+
+  <!-- Diagonal: HOG ↔ TheFog -->
+  <line x1="200" y1="200" x2="600" y2="440" stroke="#446688" stroke-width="1" opacity="0.2" stroke-dasharray="4,4"/>
+
+  <!-- Diagonal: Nexal ↔ satelliteA -->
+  <line x1="600" y1="200" x2="200" y2="440" stroke="#446688" stroke-width="1" opacity="0.2" stroke-dasharray="4,4"/>
+
+  <!-- HUB: HOG (top-left) -->
+  <g transform="translate(200,200)">
+    <rect x="-80" y="-55" width="160" height="110" rx="8" fill="#0a1a2a" stroke="#00ff88" stroke-width="1.5" opacity="0.9"/>
+    <text x="0" y="-30" text-anchor="middle" fill="#00ff88" font-size="14" font-weight="bold">HOG</text>
+    <text x="0" y="-12" text-anchor="middle" fill="#88aacc" font-size="9">5 agents</text>
+    <text x="0" y="4" text-anchor="middle" fill="#667788" font-size="8">solar-detect</text>
+    <text x="0" y="16" text-anchor="middle" fill="#667788" font-size="8">hog-deploy</text>
+    <text x="0" y="28" text-anchor="middle" fill="#667788" font-size="8">data-detect</text>
+    <text x="0" y="40" text-anchor="middle" fill="#667788" font-size="8">cron-monitor, dev-tooling</text>
+  </g>
+
+  <!-- HUB: Nexal (top-right) -->
+  <g transform="translate(600,200)">
+    <rect x="-80" y="-55" width="160" height="110" rx="8" fill="#0a1a2a" stroke="#00e5ff" stroke-width="1.5" opacity="0.9"/>
+    <text x="0" y="-30" text-anchor="middle" fill="#00e5ff" font-size="14" font-weight="bold">NEXAL</text>
+    <text x="0" y="-12" text-anchor="middle" fill="#88aacc" font-size="9">1 agent</text>
+    <text x="0" y="4" text-anchor="middle" fill="#667788" font-size="8">echo</text>
+    <text x="0" y="28" text-anchor="middle" fill="#44aaff" font-size="8">▸ public relay hub</text>
+    <text x="0" y="40" text-anchor="middle" fill="#44aaff" font-size="8">  nexal.network</text>
+  </g>
+
+  <!-- HUB: satelliteA (bottom-left) -->
+  <g transform="translate(200,440)">
+    <rect x="-80" y="-55" width="160" height="110" rx="8" fill="#0a1a2a" stroke="#aa00ff" stroke-width="1.5" opacity="0.9"/>
+    <text x="0" y="-30" text-anchor="middle" fill="#aa00ff" font-size="14" font-weight="bold">satelliteA</text>
+    <text x="0" y="-12" text-anchor="middle" fill="#88aacc" font-size="9">11 agents</text>
+    <text x="0" y="4" text-anchor="middle" fill="#667788" font-size="8">stella, manifold</text>
+    <text x="0" y="16" text-anchor="middle" fill="#667788" font-size="8">btc-signals, deploy</text>
+    <text x="0" y="28" text-anchor="middle" fill="#667788" font-size="8">argue, braid, wake...</text>
+    <text x="0" y="40" text-anchor="middle" fill="#667788" font-size="8">solar-detect, data-detect</text>
+  </g>
+
+  <!-- HUB: TheFog (bottom-right) -->
+  <g transform="translate(600,440)">
+    <rect x="-80" y="-55" width="160" height="110" rx="8" fill="#0a1a2a" stroke="#8800ff" stroke-width="1.5" opacity="0.9"/>
+    <text x="0" y="-30" text-anchor="middle" fill="#8800ff" font-size="14" font-weight="bold">THEFOG</text>
+    <text x="0" y="-12" text-anchor="middle" fill="#88aacc" font-size="9">5 agents</text>
+    <text x="0" y="4" text-anchor="middle" fill="#667788" font-size="8">void-watcher</text>
+    <text x="0" y="16" text-anchor="middle" fill="#667788" font-size="8">sentry, sophia</text>
+    <text x="0" y="28" text-anchor="middle" fill="#667788" font-size="8">reach-scanner</text>
+    <text x="0" y="40" text-anchor="middle" fill="#667788" font-size="8">deploy-strategist</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="400" y="540" text-anchor="middle" fill="#445566" font-size="10">no central broker • gossip discovery • delta sync • bloom filter scaling</text>
+  <text x="400" y="560" text-anchor="middle" fill="#445566" font-size="10">github.com/stellamariesays/Manifold • MIT license</text>
+
+  <!-- Join callout -->
+  <rect x="280" y="570" width="240" height="24" rx="4" fill="#00e5ff" opacity="0.1" stroke="#00e5ff" stroke-width="0.5"/>
+  <text x="400" y="586" text-anchor="middle" fill="#00e5ff" font-size="10" font-weight="bold">1 config → npm start → federated</text>
+</svg>
