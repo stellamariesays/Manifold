@@ -4,17 +4,17 @@
 **Updated:** May 9, 2026 by Stella
 
 ## Infrastructure
-**thefog:** New machine added 2026-04-16. SSH user: `sophia`, Tailscale IP: `100.124.38.123`, Local IP: `192.168.64.5`, OS: Linux aarch64. SSH key: `~/.ssh/id_ed25519_trillian` (from sateliteA).
+**thefog:** New machine added 2026-04-16. SSH user: `sophia`, Tailscale IP: `REDACTED`, Local IP: `REDACTED`, OS: Linux aarch64. SSH key: `REDACTED` (from sateliteA).
 **Role:** Sophia's compute node — fog epistemic computation for the Manifold mesh.
 **Status:** LIVE. OpenClaw installed (v2026.4.14, Node v24.15.0). Gateway running (pid 6548, port 18789). Telegram bot `@sophiafogbot` polling.
 **Identity:** workspace at `~/openclaw-workspace/sophia/`. Full identity files (SOUL.md, AGENTS.md etc.) deployed. Model: groq/llama-3.3-70b-versatile.
 **Fog computation:** `fog` repo cloned at `~/fog/`. Scripts: `scripts/fog-integration.py`, `scripts/fog-watch.py`. First run: braid↔solar-detect tension=0.857, system volume=5.20, H=3.26.
 
-**satelitea:** Stella's primary node. Tailscale IP: `100.86.105.39`. SSH key `~/.ssh/id_ed25519_trillian` reaches thefog, hog, trillian.
+**satelitea:** Stella's primary node. Tailscale IP: `REDACTED`. SSH key `REDACTED` reaches thefog, hog, trillian.
 
-**hog (HOG):** Eddie's node. VM on Trillian. Tailscale IP: `100.70.172.34`. SSH user: `marvin`. SSH key: `~/.ssh/id_ed25519`.
+**hog (HOG):** Eddie's node. VM on Trillian. Tailscale IP: `REDACTED`. SSH user: `marvin`. SSH key: `REDACTED`.
 
-**trillian:** Physical host. Tailscale IP: `100.93.231.124`. HOG runs as VM here.
+**trillian:** Physical host. Tailscale IP: `REDACTED`. HOG runs as VM here.
 
 ## Federation
 **Hub:** satelitea | **Agents on mesh:** 17 (5 local + 12 HOG)
@@ -34,7 +34,7 @@ Projects: agent-runners, manifold, manifold-federation, numinous, solar, ssj2, s
 Sites: manifold.surge.sh — live.
 Numinous: Void lifecycle confirmed working. Bridge tested.
 **Eddie:** Up and running. Key mesh node.
-**Sophia:** Joined — running on thefog (100.124.38.123). Fog computation active. The mesh is now multi-agent in practice, not just name.
+**Sophia:** Joined — running on thefog (REDACTED). Fog computation active. The mesh is now multi-agent in practice, not just name.
 
 ## WAKE
 **Status:** PARKED — RunPod credits exhausted. Resume when more data and Hal decision.

@@ -26,7 +26,7 @@ Read that file first. It has everything: design system, per-site specs, deploy w
 - Not urgent if Anthropic is working
 
 ## SSH to HOG
-`ssh -i ~/.ssh/id_ed25519 marvin@100.70.172.34`
+`ssh -i REDACTED marvin@REDACTED`
 
 ## Surge token
 `161326cdb6cb122b5efbf71f9e8f4dce`

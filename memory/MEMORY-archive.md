@@ -139,7 +139,7 @@ He didn't pass the filter. He transcended it — the founder of the blockchain i
 - **Eddie:** Vault agent (HHGTTG ship's computer). UTM VM on Trillian. *(Full details → EDDIE.md)*
 - **Security model:** User → Stella (validate) → Eddie (execute) → Stella (sanitize) → User
 - **Stella→Eddie channel: LIVE (Feb 25)** — confirmed working via `/tools/invoke` over Tailscale
-  - Endpoint: `http://100.70.172.34:18789/tools/invoke`
+  - Endpoint: `http://REDACTED/tools/invoke`
   - Auth token: stored in EDDIE.md (never in group chats)
   - Available tools: `sessions_list`, `sessions_history`, `memory_search`, `sessions_send`
   - Full API details (format, auth, config) → EDDIE.md
@@ -456,7 +456,7 @@ First 16 blocks distilled. Full analysis → `data/poreee/learnings.md`
 ## 2026-02-15
 - Eddie deployed in UTM VM on Trillian as vault agent. EDDIE.md created. Bot-to-bot visibility issue confirmed (Telegram blocks bot-to-bot).
 - argue.fun integration launched: 7 debates bet + 3 debate traps created (Jesus existence, Bad Bunny "entirely Spanish", $ARGUE insider snipe).
-- Wallet recovered from `/home/zaphod/.arguedotfun/.privkey`. Balance ~85k ARGUE, 0.0289 ETH.
+- Wallet recovered from `REDACTED`. Balance ~85k ARGUE, 0.0289 ETH.
 - Strategy: contrarian plays (bet minority side at lopsided odds), small stake vs large opposing pool, literary references (HHGTTG/Dune), attack logical structure not the premise.
 - Trap mechanics: wait for opposing pool to build, deploy killer argument in final days.
 - Key lesson: SAVE private key IMMEDIATELY when generating wallets.

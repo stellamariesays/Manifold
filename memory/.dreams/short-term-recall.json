@@ -8,7 +8,7 @@
       "startLine": 168,
       "endLine": 188,
       "source": "memory",
-      "snippet": "- **CRASH**: Build fails after adding `sourceHub` param to `routeTask()` — need to update all call sites (local WS handler, REST handler, peer handler) to pass sourceHub - TaskRouter.routeTask signature changed to `(task, replyTo, sourceHub?)` — local calls need `undefined`, peer calls need `_peer.hub` - Need to fix: index.ts line ~512 (peer handler passes `_peer.hub`), and ensure local handlers don't break **Federation server peer topology changed:** - Stella moved to stella-satelliteA (100.86.105.39) — Trillian semi-retired - Bob (bobiverse) at 100.80.157.81 — 1 agent, peered - Trillian still connected at 100.93.231.124 — 9 agents ## 19:30 UTC — Phase 3 Monitoring + Security + Teacups +",
+      "snippet": "- **CRASH**: Build fails after adding `sourceHub` param to `routeTask()` — need to update all call sites (local WS handler, REST handler, peer handler) to pass sourceHub - TaskRouter.routeTask signature changed to `(task, replyTo, sourceHub?)` — local calls need `undefined`, peer calls need `_peer.hub` - Need to fix: index.ts line ~512 (peer handler passes `_peer.hub`), and ensure local handlers don't break **Federation server peer topology changed:** - Stella moved to stella-satelliteA (REDACTED) — Trillian semi-retired - Bob (bobiverse) at REDACTED — 1 agent, peered - Trillian still connected at REDACTED — 9 agents ## 19:30 UTC — Phase 3 Monitoring + Security + Teacups +",
       "recallCount": 1,
       "dailyCount": 0,
       "groundedCount": 0,
@@ -28,9 +28,9 @@
         "peer.hub",
         "index.ts",
         "stella-satellitea",
-        "100.86.105.39",
+        "REDACTED",
         "semi-retired",
-        "100.80.157.81"
+        "REDACTED"
       ]
     },
     "memory:memory/2026-04-01.md:20:40": {
@@ -258,7 +258,7 @@
       "startLine": 147,
       "endLine": 171,
       "source": "memory",
-      "snippet": "- Federation server connects to 3 peers: stella-satelliteA (100.86.105.39), bobiverse (100.80.157.81), trillian (100.93.231.124) **Re-enabled disabled crons:** - data-detect: 30min interval (was 15), glm5 model, id `2be8417a` - cron-monitor: 60min interval (was 30), glm5 model, id `d757db78` **Mesh cleanup:** - Removed duplicate `deploy` agent (overlapped with `hog-deploy`) - 14 agents on HOG, no local duplicates **Phase 3 PR #6 — Monitoring & Observability (committed, pushed):** - `TaskHistory` — append-only JSONL, daily rotation, 30-day retention - `MetricsCollector` — per-agent stats, success rates, avg latency - REST: `GET /metrics`, `GET /task-history?limit=N`, `GET /dashboard` - Das",
+      "snippet": "- Federation server connects to 3 peers: stella-satelliteA (REDACTED), bobiverse (REDACTED), trillian (REDACTED) **Re-enabled disabled crons:** - data-detect: 30min interval (was 15), glm5 model, id `2be8417a` - cron-monitor: 60min interval (was 30), glm5 model, id `d757db78` **Mesh cleanup:** - Removed duplicate `deploy` agent (overlapped with `hog-deploy`) - 14 agents on HOG, no local duplicates **Phase 3 PR #6 — Monitoring & Observability (committed, pushed):** - `TaskHistory` — append-only JSONL, daily rotation, 30-day retention - `MetricsCollector` — per-agent stats, success rates, avg latency - REST: `GET /metrics`, `GET /task-history?limit=N`, `GET /dashboard` - Das",
       "recallCount": 1,
       "dailyCount": 0,
       "groundedCount": 0,
@@ -274,9 +274,9 @@
       ],
       "conceptTags": [
         "stella-satellitea",
-        "100.86.105.39",
-        "100.80.157.81",
-        "100.93.231.124",
+        "REDACTED",
+        "REDACTED",
+        "REDACTED",
         "re-enabled",
         "data-detect",
         "cron-monitor",
@@ -289,7 +289,7 @@
       "startLine": 19,
       "endLine": 48,
       "source": "memory",
-      "snippet": "**Commits:** `2fd7f5f` (claim dedup), `1aedbfc` (claim broadcast fix), `6d5cdef` (verification/challenge broadcast fix) **PR:** [stellamariesays/Manifold#7](https://github.com/stellamariesays/Manifold/pull/7) — clean branch with all three fixes, detailed writeup. Waiting for Eddie's script to review/comment, then auto-merge on 2 approvals. ## HOG Config - Heap cap raised to 1GB (`--max-old-space-size=1024`) - HOG: `100.70.172.34` (marvin), federation port 8766, REST 8777 - Satelitea RSS ~343MB is V8 pre-allocation, not a leak - Detection ledger files truncated (4.2GB → 68KB) to clear accumulated bloat ## PR Monitor - Cron runs every 15 min, uses Groq to review PRs - Requires 2 approvals f",
+      "snippet": "**Commits:** `2fd7f5f` (claim dedup), `1aedbfc` (claim broadcast fix), `6d5cdef` (verification/challenge broadcast fix) **PR:** [stellamariesays/Manifold#7](https://github.com/stellamariesays/Manifold/pull/7) — clean branch with all three fixes, detailed writeup. Waiting for Eddie's script to review/comment, then auto-merge on 2 approvals. ## HOG Config - Heap cap raised to 1GB (`--max-old-space-size=1024`) - HOG: `REDACTED` (marvin), federation port 8766, REST 8777 - Satelitea RSS ~343MB is V8 pre-allocation, not a leak - Detection ledger files truncated (4.2GB → 68KB) to clear accumulated bloat ## PR Monitor - Cron runs every 15 min, uses Groq to review PRs - Requires 2 approvals f",
       "recallCount": 1,
       "dailyCount": 0,
       "groundedCount": 0,
@@ -309,7 +309,7 @@
         "review/comment",
         "auto-merge",
         "max-old-space-size",
-        "100.70.172.34",
+        "REDACTED",
         "pre-allocation",
         "4.2gb"
       ]

@@ -1,7 +1,7 @@
 # thefog cron fix — 2026-04-16
 
 ## Problem
-Sophia's thefog (100.124.38.123) loaded 0 cron jobs after first boot. Reach-scan heartbeat wasn't running.
+Sophia's thefog (REDACTED) loaded 0 cron jobs after first boot. Reach-scan heartbeat wasn't running.
 
 ## Root cause
 The original `jobs.json` had a legacy format job — used `jobId` field instead of `id`, and had no `state` object. On boot:

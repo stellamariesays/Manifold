@@ -32,3 +32,12 @@ Thumbs.db
 *.pyo
 *.pyd
 .Python
+
+# Security — never commit these
+**/.env*
+**/.netrc
+**/*token*
+**/*secret*
+**/*privkey*
+**/*credential*
+**/.ssh/
