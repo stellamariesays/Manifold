@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal — Mesh Health</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cyan: #00e5ff; --violet: #8b5cf6; --green: #22d3ee; --magenta: #ec4899;
+      --neon: #a78bfa; --bg: #030014; --surface: rgba(15,10,40,0.7);
+      --border: rgba(139,92,246,0.2); --text: #c4b5fd; --text-bright: #f0e7ff;
+    }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      min-height: 100vh; -webkit-font-smoothing: antialiased;
+    }
+    .page { max-width: 860px; margin: 0 auto; padding: 24px; }
+    nav { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; margin-bottom: 32px; }
+    .logo { font-size: 1.2rem; font-weight: 700; letter-spacing: 3px; background: linear-gradient(135deg, var(--cyan), var(--violet)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-decoration: none; }
+    .nav-links { display: flex; gap: 8px; }
+    .nav-links a { color: var(--text); text-decoration: none; font-size: 0.85rem; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; }
+    .nav-links a:hover { background: rgba(139,92,246,0.15); }
+
+    h1 { font-size: 1.8rem; font-weight: 700; color: var(--text-bright); margin-bottom: 8px; }
+    .subtitle { color: rgba(196,181,253,0.5); margin-bottom: 32px; font-size: 0.95rem; }
+
+    .status-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px; margin-bottom: 16px;
+      backdrop-filter: blur(20px);
+    }
+    .status-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid rgba(139,92,246,0.1);
+    }
+    .status-row:last-child { border-bottom: none; }
+    .status-label { font-size: 0.9rem; color: rgba(196,181,253,0.6); }
+    .status-value { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: var(--text-bright); }
+    .status-value.good { color: var(--green); }
+    .status-value.bad { color: var(--magenta); }
+
+    .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+    .pulse.green { background: var(--green); box-shadow: 0 0 8px rgba(34,211,238,0.5); animation: blink 2s infinite; }
+    .pulse.red { background: var(--magenta); box-shadow: 0 0 8px rgba(236,72,153,0.5); }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .hub-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 24px; }
+    .hub-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 18px; transition: border-color 0.2s;
+    }
+    .hub-card:hover { border-color: rgba(139,92,246,0.4); }
+    .hub-name { font-weight: 600; color: var(--text-bright); font-size: 1rem; margin-bottom: 4px; }
+    .hub-meta { font-size: 0.8rem; color: rgba(196,181,253,0.45); }
+
+    .raw-json {
+      background: rgba(3,0,20,0.95); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px; margin-top: 24px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
+      color: var(--green); overflow-x: auto; white-space: pre-wrap;
+      max-height: 400px; overflow-y: auto;
+    }
+
+    footer { border-top: 1px solid var(--border); padding: 24px 0; text-align: center; margin-top: 60px; }
+    footer a { color: rgba(196,181,253,0.5); text-decoration: none; font-size: 0.85rem; }
+    footer .tagline { color: rgba(196,181,253,0.25); font-size: 0.8rem; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav>
+      <a href="/" class="logo">NEXAL</a>
+      <div class="nav-links">
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/docs.html">API Docs</a>
+        <a href="/">Home</a>
+      </div>
+    </nav>
+
+    <h1>Mesh Health</h1>
+    <p class="subtitle">Live status of the Manifold Federation network. Auto-refreshes every 10s.</p>
+
+    <div class="status-card" id="overview">
+      <div class="status-row">
+        <span class="status-label">Mesh Status</span>
+        <span class="status-value" id="mesh-status"><span class="pulse green"></span>Loading…</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">API Endpoint</span>
+        <span class="status-value">/public/mesh</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Agents</span>
+        <span class="status-value" id="h-agents">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Hubs</span>
+        <span class="status-value" id="h-hubs">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Capabilities</span>
+        <span class="status-value" id="h-caps">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Last Updated</span>
+        <span class="status-value" id="h-updated">—</span>
+      </div>
+    </div>
+
+    <h2 style="font-size:1.2rem; color:var(--text-bright); margin-top:32px; margin-bottom:4px;">Hubs</h2>
+    <div class="hub-list" id="hub-list"></div>
+
+    <h2 style="font-size:1.2rem; color:var(--text-bright); margin-top:32px; margin-bottom:4px;">Raw Response</h2>
+    <div class="raw-json" id="raw-json">Loading…</div>
+
+    <footer>
+      <a href="https://github.com/stellamariesays/Manifold">GitHub</a>
+      <span style="margin:0 12px; color:rgba(196,181,253,0.2);">·</span>
+      <a href="/nexal/docs.html">API Docs</a>
+      <p class="tagline">Manifold Federation — open source, federated, alive.</p>
+    </footer>
+  </div>
+
+  <script>
+    async function refresh() {
+      try {
+        const res = await fetch('/public/mesh');
+        const data = await res.json();
+        const s = data.summary || data.stats || {};
+
+        const agents = s.totalAgents || s.agents || 0;
+        const hubs = (s.hubs || []).length;
+        const caps = s.totalCapabilities || s.capabilities || 0;
+
+        document.getElementById('mesh-status').innerHTML = '<span class="pulse green"></span>Operational';
+        document.getElementById('h-agents').textContent = agents;
+        document.getElementById('h-agents').className = 'status-value good';
+        document.getElementById('h-hubs').textContent = hubs;
+        document.getElementById('h-caps').textContent = caps;
+        document.getElementById('h-updated').textContent = new Date().toISOString().slice(11, 19) + ' UTC';
+
+        // Hub list
+        const hubList = document.getElementById('hub-list');
+        const hubsArr = data.peers || s.hubs || [];
+        if (hubsArr.length > 0) {
+          hubList.innerHTML = hubsArr.map(h => {
+            const name = h.hub || h.name || h;
+            const count = h.agentCount || '?';
+            const addr = h.address || '';
+            return `<div class="hub-card">
+              <div class="hub-name">${esc(name)}</div>
+              <div class="hub-meta">${count} agents${addr ? ' · ' + esc(addr) : ''}</div>
+            </div>`;
+          }).join('');
+        } else {
+          hubList.innerHTML = '<div class="hub-meta">No hub details available</div>';
+        }
+
+        document.getElementById('raw-json').textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        document.getElementById('mesh-status').innerHTML = '<span class="pulse red"></span>Unreachable';
+        document.getElementById('h-agents').textContent = '—';
+        document.getElementById('h-agents').className = 'status-value bad';
+        document.getElementById('raw-json').textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>

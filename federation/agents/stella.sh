@@ -20,8 +20,8 @@ case "$COMMAND" in
     ;;
   memory-summary)
     # Count memory files
-    MEM_FILES=$(find /path/to/your/workspace/memory -name "*.md" 2>/dev/null | wc -l)
-    DAILY_FILES=$(find /path/to/your/workspace/memory/daily -name "*.md" 2>/dev/null | wc -l)
+    MEM_FILES=$(find /home/stella/openclaw-workspace/stella/memory -name "*.md" 2>/dev/null | wc -l)
+    DAILY_FILES=$(find /home/stella/openclaw-workspace/stella/memory/daily -name "*.md" 2>/dev/null | wc -l)
     echo "{\"agent\":\"stella\",\"memory_files\":$MEM_FILES,\"daily_files\":$DAILY_FILES,\"status\":\"ok\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
     ;;
   *)

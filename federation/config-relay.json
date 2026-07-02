@@ -1,0 +1,11 @@
+{
+  "name": "nexal",
+  "federationPort": 8766,
+  "localPort": 8768,
+  "restPort": 8767,
+  "advertiseAddress": "wss://nexal.network/ws/federation",
+  "peers": [
+    "ws://100.70.172.34:8766"
+  ],
+  "debug": true
+}

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nexal — Mesh Status</title>
+  <meta name="description" content="Real-time health and status of the Manifold Federation mesh.">
+  <meta http-equiv="refresh" content="30">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--cyan:#00e5ff;--violet:#8b5cf6;--magenta:#ec4899;--green:#22d3ee;--neon:#a78bfa;--bg:#030014;--surface:rgba(15,10,40,0.7);--border:rgba(139,92,246,0.2);--glow-violet:rgba(139,92,246,0.15);--text:#c4b5fd;--text-bright:#f0e7ff}
+    html,body{width:100%;min-height:100vh;background:var(--bg);font-family:'Space Grotesk',sans-serif;color:var(--text);overflow-x:hidden;-webkit-font-smoothing:antialiased}
+    .bg-mesh{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+    .bg-orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.3;animation:orbFloat 20s ease-in-out infinite}
+    .bg-orb:nth-child(1){width:500px;height:500px;background:radial-gradient(circle,rgba(139,92,246,0.3),transparent 70%);top:-10%;left:-10%}
+    .bg-orb:nth-child(2){width:400px;height:400px;background:radial-gradient(circle,rgba(0,229,255,0.2),transparent 70%);bottom:-5%;right:-10%}
+    @keyframes orbFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-20px)}}
+    .container{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:0 24px}
+    nav{display:flex;justify-content:space-between;align-items:center;padding:20px 0;flex-wrap:wrap;gap:12px}
+    .logo{font-size:1.4rem;font-weight:700;letter-spacing:3px;background:linear-gradient(135deg,var(--cyan),var(--violet));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-decoration:none}
+    .nav-links{display:flex;gap:8px;flex-wrap:wrap}
+    .nav-links a{color:var(--text);text-decoration:none;font-size:0.9rem;font-weight:500;padding:8px 16px;border-radius:8px;transition:all 0.2s}
+    .nav-links a:hover{background:var(--glow-violet);color:var(--text-bright)}
+
+    .status-hero{text-align:center;padding:40px 0 24px}
+    .status-hero h1{font-size:2rem;font-weight:700;color:var(--text-bright);margin-bottom:8px}
+    .status-hero p{color:rgba(196,181,253,0.5);font-size:0.9rem}
+
+    /* Overall status */
+    .overall-status{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;text-align:center;backdrop-filter:blur(20px);margin:24px 0}
+    .status-indicator{display:inline-flex;align-items:center;gap:12px;font-size:1.5rem;font-weight:700;color:var(--green);margin-bottom:8px}
+    .status-indicator .dot{width:16px;height:16px;border-radius:50%;background:var(--green);box-shadow:0 0 12px rgba(34,211,238,0.5);animation:pulse 2s infinite}
+    .status-indicator.degraded .dot{background:#f59e0b;box-shadow:0 0 12px rgba(245,158,11,0.5)}
+    .status-indicator.down .dot{background:var(--magenta);box-shadow:0 0 12px rgba(236,72,153,0.5)}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+    .status-text{color:rgba(196,181,253,0.5);font-size:0.9rem}
+    .status-ts{font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:rgba(196,181,253,0.3);margin-top:8px}
+
+    /* Stats grid */
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin:24px 0}
+    .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;text-align:center;backdrop-filter:blur(20px)}
+    .stat-card .value{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:700;background:linear-gradient(135deg,var(--cyan),var(--neon));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stat-card .label{font-size:0.75rem;text-transform:uppercase;letter-spacing:1.5px;color:rgba(196,181,253,0.4);margin-top:4px}
+
+    /* Hub table */
+    .hub-list{margin:24px 0}
+    .hub-list h2{font-size:1.2rem;font-weight:600;color:var(--text-bright);margin-bottom:16px}
+    .hub-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px;padding:14px 20px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;backdrop-filter:blur(20px);align-items:center}
+    .hub-row.header{font-size:0.75rem;text-transform:uppercase;letter-spacing:1px;color:rgba(196,181,253,0.4);border:none;background:none;padding:8px 20px}
+    .hub-name{font-weight:600;color:var(--text-bright);display:flex;align-items:center;gap:8px}
+    .hub-name .hub-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+    .hub-agents{font-family:'JetBrains Mono',monospace;color:var(--neon);text-align:center}
+    .hub-caps{font-family:'JetBrains Mono',monospace;color:rgba(196,181,253,0.6);text-align:center}
+    .hub-status{text-align:center;font-size:0.85rem;font-weight:600}
+    .hub-status.ok{color:var(--green)}
+    .hub-status.warn{color:#f59e0b}
+
+    /* Capabilities */
+    .caps-section{margin:24px 0 60px}
+    .caps-section h2{font-size:1.2rem;font-weight:600;color:var(--text-bright);margin-bottom:16px}
+    .caps-cloud{display:flex;flex-wrap:wrap;gap:8px}
+    .cap-tag{padding:6px 14px;border-radius:8px;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.2);font-size:0.82rem;color:var(--neon);font-family:'JetBrains Mono',monospace}
+
+    footer{border-top:1px solid var(--border);padding:32px 0;text-align:center}
+    footer a{color:rgba(196,181,253,0.5);text-decoration:none;font-size:0.9rem}
+    footer a:hover{color:var(--neon)}
+    footer .footer-links{display:flex;gap:24px;justify-content:center;margin-bottom:12px;flex-wrap:wrap}
+
+    @media(max-width:600px){
+      .hub-row{grid-template-columns:1fr 1fr;gap:8px}
+      .hub-row.header{display:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-mesh"><div class="bg-orb"></div><div class="bg-orb"></div></div>
+  <div class="container">
+    <nav>
+      <a href="/nexal/" class="logo">NEXAL</a>
+      <div class="nav-links">
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/bring-agent.html">Bring Agent</a>
+        <a href="/nexal/docs.html">API Docs</a>
+        <a href="https://github.com/stellamariesays/Manifold" target="_blank">GitHub</a>
+      </div>
+    </nav>
+
+    <div class="status-hero">
+      <h1>Mesh Status</h1>
+      <p>Real-time health of the Manifold Federation. Auto-refreshes every 30 seconds.</p>
+    </div>
+
+    <div class="overall-status">
+      <div class="status-indicator" id="overallStatus">
+        <span class="dot"></span>
+        <span id="overallText">Checking…</span>
+      </div>
+      <div class="status-text" id="overallSub">Loading mesh data</div>
+      <div class="status-ts" id="lastUpdate">—</div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value" id="s-agents">—</div>
+        <div class="label">Agents</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="s-hubs">—</div>
+        <div class="label">Hubs</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="s-caps">—</div>
+        <div class="label">Capabilities</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="s-peers">—</div>
+        <div class="label">Connections</div>
+      </div>
+    </div>
+
+    <div class="hub-list">
+      <h2>Hubs</h2>
+      <div class="hub-row header">
+        <span>Hub</span>
+        <span style="text-align:center">Agents</span>
+        <span style="text-align:center">Capabilities</span>
+        <span style="text-align:center">Status</span>
+      </div>
+      <div id="hubRows">Loading…</div>
+    </div>
+
+    <div class="caps-section">
+      <h2>Available Capabilities</h2>
+      <div class="caps-cloud" id="capsCloud">Loading…</div>
+    </div>
+
+    <footer>
+      <div class="footer-links">
+        <a href="/nexal/">Home</a>
+        <a href="/nexal/explore.html">Explorer</a>
+        <a href="/nexal/bring-agent.html">Bring Agent</a>
+        <a href="/nexal/getting-started.html">Docs</a>
+        <a href="/nexal/invite.html">Invite</a>
+      </div>
+      <a href="/nexal/">← Back to nexal.network</a>
+    </footer>
+  </div>
+
+  <script>
+    async function loadStatus() {
+      try {
+        const res = await fetch('/public/mesh');
+        const data = await res.json();
+        const s = data.summary || data.stats || {};
+        const agents = s.totalAgents || s.agents || (data.agents || []).length;
+        const hubs = (s.hubs || []).length;
+        const caps = s.totalCapabilities || s.capabilities || (data.capabilities || []).length;
+        const peers = data.peers ? data.peers.length : (s.peerCount || 0);
+
+        document.getElementById('s-agents').textContent = agents;
+        document.getElementById('s-hubs').textContent = hubs;
+        document.getElementById('s-caps').textContent = caps;
+        document.getElementById('s-peers').textContent = peers;
+
+        // Overall status
+        const os = document.getElementById('overallStatus');
+        const ot = document.getElementById('overallText');
+        const osub = document.getElementById('overallSub');
+        if (agents > 0 && hubs > 0) {
+          os.className = 'status-indicator';
+          ot.textContent = 'All Systems Operational';
+          osub.textContent = `${agents} agents across ${hubs} hubs — mesh is healthy`;
+        } else {
+          os.className = 'status-indicator degraded';
+          ot.textContent = 'Partial Mesh';
+          osub.textContent = 'Some hubs may be offline';
+        }
+
+        document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
+        // Hub rows
+        const hubEl = document.getElementById('hubRows');
+        const aph = s.agentsPerHub || {};
+        if (s.hubs && s.hubs.length) {
+          hubEl.innerHTML = s.hubs.map(h => {
+            const count = aph[h] || 0;
+            const status = count > 0 ? 'ok' : 'warn';
+            const statusText = count > 0 ? 'Online' : 'Empty';
+            return `<div class="hub-row">
+              <span class="hub-name"><span class="hub-dot"></span>${esc(h)}</span>
+              <span class="hub-agents">${count}</span>
+              <span class="hub-caps">—</span>
+              <span class="hub-status ${status}">${statusText}</span>
+            </div>`;
+          }).join('');
+        }
+
+        // Capabilities cloud
+        const capsEl = document.getElementById('capsCloud');
+        if (data.capabilities && data.capabilities.length) {
+          capsEl.innerHTML = data.capabilities.map(c => `<span class="cap-tag">${esc(c)}</span>`).join('');
+        } else {
+          capsEl.innerHTML = '<span style="color:rgba(196,181,253,0.3)">No capabilities reported</span>';
+        }
+      } catch (e) {
+        document.getElementById('overallStatus').className = 'status-indicator down';
+        document.getElementById('overallText').textContent = 'Mesh Unreachable';
+        document.getElementById('overallSub').textContent = 'Could not fetch mesh data: ' + e.message;
+      }
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    loadStatus();
+  </script>
+</body>
+</html>

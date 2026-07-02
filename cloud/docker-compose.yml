@@ -1,0 +1,143 @@
+# Manifold Cloud — Local Development Stack
+#
+# ┌──────────────┐     ┌──────────────────┐     ┌─────────┐
+# │   gateway    │────▶│  federation-hub  │     │  redis  │
+# │   :3000      │     │     :8767        │     │  :6379  │
+# └──────────────┘     └──────────────────┘     └─────────┘
+#        │                                               │
+#        └────────────── usage tracking ─────────────────┘
+#
+
+services:
+  # ── API Gateway (Manifold Cloud) ───────────────────────────────
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - FEDERATION_API_URL=http://federation-hub:8767
+      - FEDERATION_HUB_NAME=trillian
+      - REDIS_URL=redis://redis:6379
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO:-}
+      - STRIPE_PRICE_ENTERPRISE=${STRIPE_PRICE_ENTERPRISE:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - LOCAL_MODEL_URL=${LOCAL_MODEL_URL:-}
+      - HUB_AUTO_SCALE=true
+      - HUB_MAX_INSTANCES=5
+    depends_on:
+      federation-hub:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Federation Hub (existing Manifold federation) ──────────────
+  # In production, this would be the existing federation server.
+  # For local dev, we run a minimal instance.
+  federation-hub:
+    image: node:22-slim
+    working_dir: /app
+    command: >
+      sh -c "
+        npm install express ws uuid &&
+        node -e \"
+        const express = require('express');
+        const app = express();
+        app.use(express.json());
+        app.use((_, res, next) => {
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+          next();
+        });
+
+        const agents = new Map();
+        const tasks = [];
+        const peers = [{ hub: 'trillian', address: 'ws://federation-hub:8766', agents: 0 }];
+
+        app.get('/status', (_, res) => res.json({ hub: 'trillian', uptime: process.uptime(), agents: agents.size, tasks: tasks.length }));
+        app.get('/peers', (_, res) => res.json({ peers }));
+        app.get('/agents', (_, res) => res.json({ agents: Array.from(agents.values()) }));
+        app.get('/agents/:name', (req, res) => {
+          const a = agents.get(req.params.name);
+          if (!a) return res.status(404).json({ error: 'Not found' });
+          res.json(a);
+        });
+        app.post('/agents/register', (req, res) => {
+          const { name, capabilities = [] } = req.body;
+          const agent = { name, capabilities, hub: 'trillian', registeredAt: Date.now() };
+          agents.set(name, agent);
+          res.status(201).json(agent);
+        });
+        app.get('/capabilities', (_, res) => {
+          const caps = {};
+          for (const a of agents.values()) for (const c of a.capabilities || []) {
+            caps[c] = (caps[c] || 0) + 1;
+          }
+          res.json({ capabilities: caps });
+        });
+        app.get('/mesh', (_, res) => res.json({ hubs: [{ name: 'trillian', agents: agents.size }] }));
+        app.post('/task', (req, res) => {
+          const task = { id: 'task_' + Date.now(), ...req.body, status: 'queued', createdAt: Date.now() };
+          tasks.push(task);
+          res.status(202).json(task);
+        });
+        app.get('/task/:id', (req, res) => {
+          const t = tasks.find(t => t.id === req.params.id);
+          res.json(t || { error: 'Not found' });
+        });
+        app.get('/tasks', (_, res) => res.json({ tasks }));
+        app.post('/query', (req, res) => res.json({ answer: 'placeholder', query: req.body }));
+        app.post('/route', (req, res) => res.json({ route: 'placeholder', ...req.body }));
+        app.get('/metrics', (_, res) => res.json({
+          requestsTotal: tasks.length,
+          agentsActive: agents.size,
+          hub: 'trillian',
+        }));
+        app.get('/trust', (_, res) => res.json({ scores: {} }));
+        app.get('/gossip', (_, res) => res.json({ messages: [] }));
+
+        const port = process.env.REST_PORT || 8767;
+        app.listen(port, () => console.log('Mock federation hub on :' + port));
+        \"
+      "
+    ports:
+      - "8767:8767"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8767/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis (usage tracking, rate limiting) ──────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data:

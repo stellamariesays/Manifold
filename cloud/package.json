@@ -1,0 +1,32 @@
+{
+  "name": "manifold-cloud",
+  "version": "1.0.0",
+  "description": "Manifold Cloud — Federated AI Agent Infrastructure",
+  "type": "module",
+  "main": "dist/gateway.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/gateway.js",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "ioredis": "^5.4.1",
+    "stripe": "^17.0.0",
+    "uuid": "^14.0.0",
+    "ws": "^8.20.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

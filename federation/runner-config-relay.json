@@ -1,0 +1,8 @@
+{
+  "hub": "nexal",
+  "wsUrl": "ws://localhost:8768",
+  "defaultTimeoutMs": 15000,
+  "agents": [
+    { "name": "echo", "script": "./agents/echo.sh", "maxConcurrency": 3 }
+  ]
+}
