@@ -19,6 +19,7 @@ from .glossolalia import GlossolaliaReading, GlossolaliaProbe
 from .topology import *
 from .transition import *
 from .semantic import *
+from .semantic_router import SemanticRegistry, SemanticAgentRef
 from .store import *
 from .persist import *
 
@@ -31,4 +32,5 @@ __all__ = [
     "Teacup", "TeacupStore",
     "FogMap", "FogDelta", "FogSeam", "Gap", "GapKind",
     "GlossolaliaReading", "GlossolaliaProbe",
+    "SemanticRegistry", "SemanticAgentRef",
 ]
