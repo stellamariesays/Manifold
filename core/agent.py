@@ -94,7 +94,13 @@ class Agent:
         self._transport_uri = transport
         self._transport: Transport = _transport_from_uri(transport)
         self._capabilities: list[str] = []
-        self._registry = CapabilityRegistry(semantic=semantic)
+        # Derive embedding cache path from persist_to (e.g. manifold.db → manifold.embeddings.json)
+        _embedding_cache: str | None = None
+        if persist_to and semantic is not False:
+            import os
+            base = os.path.splitext(persist_to)[0]
+            _embedding_cache = base + ".embeddings.json"
+        self._registry = CapabilityRegistry(semantic=semantic, cache_path=_embedding_cache)
         self._topology = TopologyManager(name)
         self._joined = False
         self._store: PersistentStore | None = (

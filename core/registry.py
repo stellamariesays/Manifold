@@ -85,9 +85,12 @@ class CapabilityRegistry:
         semantic: Enable semantic cosine routing. Pass True for auto-detection,
                   or a string ("ollama", "openai", "tfidf") to force a backend.
                   Defaults to False (Jaccard gap-score routing).
+        cache_path: Path to JSON file for embedding persistence. When set,
+                    agent embeddings are saved on register and restored on
+                    cold-start. Only active when semantic routing is enabled.
     """
 
-    def __init__(self, semantic: bool | str = False) -> None:
+    def __init__(self, semantic: bool | str = False, cache_path: str | None = None) -> None:
         self._records: dict[str, _AgentRecord] = {}
         self._semantic_router = None
 
@@ -95,7 +98,7 @@ class CapabilityRegistry:
             try:
                 from .semantic_router import SemanticRegistry
                 embedder = "auto" if semantic is True else str(semantic)
-                self._semantic_router = SemanticRegistry(embedder=embedder)
+                self._semantic_router = SemanticRegistry(embedder=embedder, cache_path=cache_path)
                 logger.debug(
                     "CapabilityRegistry: semantic routing enabled (%s)",
                     self._semantic_router,

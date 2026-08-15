@@ -35,6 +35,7 @@ import math
 import json
 import re
 import time
+from pathlib import Path
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -301,6 +302,7 @@ class SemanticRegistry:
         embedder: str | Any = "auto",
         ollama_model: str = "nomic-embed-text",
         openai_model: str = "text-embedding-3-small",
+        cache_path: str | Path | None = None,
     ) -> None:
         if embedder == "auto":
             self._embedder = _auto_embedder()
@@ -314,6 +316,9 @@ class SemanticRegistry:
             self._embedder = embedder  # custom duck-typed embedder
 
         self._records: dict[str, _AgentRecord] = {}
+        self._cache_path: Path | None = Path(cache_path) if cache_path else None
+        if self._cache_path:
+            self._load_cache()
 
     @property
     def embedder_name(self) -> str:
@@ -355,7 +360,80 @@ class SemanticRegistry:
         )
         self._records[name] = record
         logger.debug(f"Registered agent {name!r} with {len(capabilities)} capabilities")
+        if self._cache_path:
+            self._save_cache()
         return record
+
+    # ─── Embedding cache ────────────────────────────────────────────────────
+
+    def _save_cache(self) -> None:
+        """Persist all agent records and embedder vocab to JSON cache."""
+        if not self._cache_path:
+            return
+        payload: dict = {
+            "embedder": self._embedder.name,
+            "agents": [
+                {
+                    "name": r.name,
+                    "capabilities": r.capabilities,
+                    "address": r.address,
+                    "embedding": r.embedding,
+                    "registered_at": r.registered_at,
+                }
+                for r in self._records.values()
+            ],
+        }
+        # For TF-IDF, also persist vocab so restored embeddings stay valid
+        if hasattr(self._embedder, "_vocab"):
+            payload["tfidf_vocab"] = self._embedder._vocab
+            payload["tfidf_doc_freq"] = self._embedder._doc_freq
+            payload["tfidf_n_docs"] = self._embedder._n_docs
+
+        tmp = self._cache_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2))
+        tmp.replace(self._cache_path)
+        logger.debug(f"SemanticRegistry: cache saved ({len(self._records)} agents)")
+
+    def _load_cache(self) -> None:
+        """Restore agent records from JSON cache (if present and compatible)."""
+        if not self._cache_path or not self._cache_path.exists():
+            return
+        try:
+            payload = json.loads(self._cache_path.read_text())
+        except Exception as exc:
+            logger.warning(f"SemanticRegistry: cache load failed ({exc}), starting fresh")
+            return
+
+        cached_embedder = payload.get("embedder", "")
+        if cached_embedder != self._embedder.name:
+            logger.warning(
+                f"SemanticRegistry: cache embedder mismatch "                f"(cached={cached_embedder!r}, current={self._embedder.name!r}) — ignoring cache"
+            )
+            return
+
+        # Restore TF-IDF vocab so restored embeddings stay dimension-consistent
+        if "tfidf_vocab" in payload and hasattr(self._embedder, "_vocab"):
+            self._embedder._vocab = payload["tfidf_vocab"]
+            self._embedder._doc_freq = payload["tfidf_doc_freq"]
+            self._embedder._n_docs = payload["tfidf_n_docs"]
+
+        for agent in payload.get("agents", []):
+            record = _AgentRecord(
+                name=agent["name"],
+                capabilities=agent["capabilities"],
+                address=agent.get("address", ""),
+                embedding=agent["embedding"],
+                registered_at=agent.get("registered_at", 0.0),
+            )
+            self._records[record.name] = record
+
+        logger.info(f"SemanticRegistry: restored {len(self._records)} agents from cache")
+
+    def clear_cache(self) -> None:
+        """Delete the on-disk cache file."""
+        if self._cache_path and self._cache_path.exists():
+            self._cache_path.unlink()
+            logger.info("SemanticRegistry: cache cleared")
 
     def unregister(self, name: str) -> None:
         """Remove an agent from the registry."""
