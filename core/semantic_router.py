@@ -407,6 +407,15 @@ class SemanticRegistry:
             return []
 
         q_vec = self._embedder.embed_query(query)
+
+        # TF-IDF vocab may have grown when the query was embedded.
+        # Re-embed any stored record whose vector is shorter than the
+        # current vocab so cosine_similarity operates on matched dimensions.
+        current_dim = len(q_vec)
+        for rec in self._records.values():
+            if len(rec.embedding) < current_dim:
+                rec.embedding = self._embedder.embed(rec.capabilities)
+
         results: list[SemanticAgentRef] = []
 
         for record in self._records.values():

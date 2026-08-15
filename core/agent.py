@@ -72,6 +72,7 @@ class Agent:
         name: str,
         transport: str = "memory://local",
         persist_to: str | None = None,
+        semantic: bool | str = True,
     ) -> None:
         """
         Create a Manifold agent.
@@ -84,12 +85,16 @@ class Agent:
                         If given, prior mesh state is restored on join()
                         and all updates are written through to disk.
                         Example: persist_to="manifold.db"
+            semantic:   Enable semantic cosine routing. True (default) auto-selects
+                        the best available embedder (ollama → OpenAI → TF-IDF).
+                        Pass False for legacy Jaccard gap-score routing.
+                        Pass a string ("ollama", "openai", "tfidf") to force a backend.
         """
         self._name = name
         self._transport_uri = transport
         self._transport: Transport = _transport_from_uri(transport)
         self._capabilities: list[str] = []
-        self._registry = CapabilityRegistry()
+        self._registry = CapabilityRegistry(semantic=semantic)
         self._topology = TopologyManager(name)
         self._joined = False
         self._store: PersistentStore | None = (
